@@ -28,3 +28,7 @@ class AgentModel(Protocol):
     async def summarize(
         self, incident: IncidentRequest, observation: HealthObservation
     ) -> IncidentResult: ...
+
+
+class AgentExecutor(Protocol):
+    async def run(self, incident: IncidentRequest) -> IncidentResult: ...

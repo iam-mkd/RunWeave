@@ -20,7 +20,7 @@ async def liveness() -> HealthResponse:
 @router.get("/ready")
 async def readiness(request: Request) -> HealthResponse:
     runtime = cast(Runtime | None, getattr(request.app.state, "runtime", None))
-    if runtime is None or runtime.client.is_closed:
+    if runtime is None or runtime.client.is_closed or not runtime.scheduler.ready:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Application is not ready"
         )

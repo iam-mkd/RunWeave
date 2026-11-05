@@ -1,9 +1,12 @@
+import asyncio
+
 import httpx
 
 from runweave.tools.contracts import HealthObservation, HealthQuery
 
 
-def fake_health_response(request: httpx.Request) -> httpx.Response:
+async def fake_health_response(request: httpx.Request) -> httpx.Response:
+    await asyncio.sleep(0.01)
     if (
         request.method != "GET"
         or request.url.host != "mock-tools.invalid"

@@ -32,10 +32,11 @@ async def test_readiness_tracks_lifespan_and_client_is_closed_on_shutdown() -> N
 @pytest.mark.asyncio
 async def test_client_is_closed_when_lifespan_exits_with_an_error() -> None:
     app = create_app(Settings())
-    with pytest.raises(RuntimeError, match="test failure"):
+    with pytest.raises(ExceptionGroup) as caught:
         async with app.router.lifespan_context(app):
             runtime = cast(Runtime, app.state.runtime)
             raise RuntimeError("test failure")
 
+    assert caught.value.subgroup(RuntimeError) is not None
     assert runtime.client.is_closed
     assert app.state.runtime is None

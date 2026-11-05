@@ -1,8 +1,8 @@
 # RunWeave: build plan
 
 Status: accepted roadmap, confirmed by the user on 2026-11-05.
-Milestone 1 implementation is in progress; foundation code and the dependency
-lockfile are present, with runtime verification pending environment access.
+Milestones 1 and 2 are implemented in source, with native async runtime
+verification pending environment access. Acceptance checklists remain unchecked.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -135,6 +135,26 @@ Implement admission, queue, workers, state registry, polling, cancellation,
 retention cleanup, and tracked tasks.
 Done when 100+ mock runs overlap, queue overflow is rejected predictably, and
 observed active executions never exceed the configured limit.
+
+Implementation notes (2026-11-05):
+- Added `/v1/runs` submission, status, and cancellation routes; submission returns
+  202 only after successful queue admission, with Location and status_url.
+- Added a single-event-loop registry with immutable snapshots, atomic state
+  transitions, first-terminal-state-wins behavior, terminal TTL, and history cap.
+- Added 128 configurable supervised workers, a 1,000-entry bounded queue, tracked
+  execution tasks, sanitized run errors, and a supervised history cleanup task.
+- Queue saturation produces 503/Retry-After without failing readiness. Scheduler
+  failures fail readiness and propagate through the lifespan TaskGroup.
+- Shutdown immediately marks unfinished work CANCELLED, cancels workers, balances
+  queue accounting, and awaits execution cleanup before closing the shared client.
+  Graceful draining and deadlines remain milestone 3 work.
+- Added deterministic async tests for 128 overlapping runs out of 180 submitted,
+  saturation, queued/running cancellation, late results, failed-run isolation,
+  task cleanup, supervisor failure, history cleanup, and HTTP contracts.
+- All 17 synchronous validation/state tests, Ruff, and strict mypy pass. The native
+  Windows asyncio probe still hangs in socketpair creation before app code runs.
+  The async suite remains unverified; run the README commands on a normal local
+  terminal before checking off this milestone or claiming concurrency evidence.
 
 ### 3. Recovery and lifecycle
 Add deadlines, classified retries with jitter, cancellation-safe cleanup,
