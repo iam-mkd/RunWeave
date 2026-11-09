@@ -1,8 +1,9 @@
 # RunWeave: build plan
 
 Status: accepted roadmap, confirmed by the user on 2026-11-05.
-Milestones 1 and 2 are implemented in source, with native async runtime
-verification pending environment access. Acceptance checklists remain unchecked.
+Milestones 1 through 3 are implemented. The in-process test suite passes with
+wakeup sockets disabled in the test harness. Native Windows verification remains
+pending, so the acceptance checklist remains open.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -161,6 +162,20 @@ Add deadlines, classified retries with jitter, cancellation-safe cleanup,
 worker supervision, and graceful shutdown.
 Done when a failure matrix proves job isolation, no retries after cancellation
 or deadline expiry, terminal-state correctness, and bounded shutdown time.
+
+Implementation notes (2026-11-09):
+- Runs have a monotonic deadline from admission. Queued work can time out before
+  any model or tool call. Each agent step also has a wall-clock limit, and retry
+  attempts and delays share both budgets.
+- The read-only health tool retries classified transient HTTP and transport errors.
+  Backoff uses jitter and honors Retry-After when the wait fits within the delay
+  cap and remaining budget.
+- Lifespan shutdown stops admission, drains for the configured grace period,
+  cancels remaining runs, and awaits worker cleanup before closing the client.
+- All 53 tests passed using a temporary socket-free Windows event-loop harness,
+  including the earlier 128-run overlap test and the recovery matrix. Ruff,
+  strict mypy, and the lockfile check pass. Native event-loop startup still hangs
+  in the sandbox, leaving normal pytest and Uvicorn smoke verification open.
 
 ### 4. Agent behavior and tool safety
 Add the incident-triage workflow, structured model decisions, typed tool registry,

@@ -1,9 +1,10 @@
 import asyncio
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
+from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.registry import RunRegistry
 
@@ -23,14 +24,21 @@ class Scheduler:
         worker_count: int,
         queue_capacity: int,
         cleanup_interval: float,
+        run_timeout: float = 30.0,
+        shutdown_grace: float = 5.0,
     ) -> None:
         if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0:
             raise ValueError("Scheduler limits must be positive")
+        if run_timeout <= 0 or shutdown_grace < 0:
+            raise ValueError("Run timeout must be positive and shutdown grace nonnegative")
         self._executor = executor
         self._registry = registry
         self._worker_count = worker_count
         self._cleanup_interval = cleanup_interval
+        self._run_timeout = run_timeout
+        self._shutdown_grace = shutdown_grace
         self._queue: asyncio.Queue[UUID] = asyncio.Queue(maxsize=queue_capacity)
+        self._queued_deadlines: dict[UUID, asyncio.TimerHandle] = {}
         self._active: dict[UUID, asyncio.Task[None]] = {}
         self._accepting = False
         self._closing = False
@@ -45,9 +53,14 @@ class Scheduler:
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
         if self._queue.full():
             raise AdmissionRejected("QUEUE_FULL")
+        loop = asyncio.get_running_loop()
+        deadline = loop.time() + self._run_timeout
         # No await between capacity check, record creation, and enqueue.
         snapshot = self._registry.create(incident)
         self._queue.put_nowait(snapshot.id)
+        self._queued_deadlines[snapshot.id] = loop.call_at(
+            deadline, self._expire_queued, snapshot.id
+        )
         return snapshot
 
     def get(self, run_id: UUID) -> RunSnapshot | None:
@@ -58,6 +71,9 @@ class Scheduler:
         if snapshot is None or snapshot.status.terminal:
             return snapshot
         cancelled = self._registry.finish(run_id, RunStatus.CANCELLED)
+        timer = self._queued_deadlines.pop(run_id, None)
+        if timer is not None:
+            timer.cancel()
         task = self._active.get(run_id)
         if task is not None:
             task.cancel()
@@ -80,33 +96,70 @@ class Scheduler:
             self._accepting = True
             try:
                 yield
+                can_drain = self._accepting
+                self._accepting = False
+                if can_drain and self._shutdown_grace > 0:
+                    with suppress(TimeoutError):
+                        async with asyncio.timeout(self._shutdown_grace):
+                            await self.join()
             finally:
                 self._accepting = False
                 self._closing = True
                 self._registry.cancel_unfinished()
+                for timer in self._queued_deadlines.values():
+                    timer.cancel()
+                self._queued_deadlines.clear()
                 for task in [*workers, cleaner]:
-                    task.cancel()
+                    if not task.cancelling():
+                        task.cancel()
                 while not self._queue.empty():
                     self._queue.get_nowait()
                     self._queue.task_done()
 
+    def _expire_queued(self, run_id: UUID) -> None:
+        self._queued_deadlines.pop(run_id, None)
+        try:
+            self._finish_timeout(run_id, RUN_DEADLINE)
+        except Exception:
+            self._accepting = False
+            raise
+
+    def _finish_timeout(self, run_id: UUID, code: str) -> None:
+        self._registry.finish(
+            run_id,
+            RunStatus.TIMED_OUT,
+            error=RunError(code=code, message="Execution deadline exceeded"),
+        )
+
     async def _worker(self) -> None:
         try:
-            while True:
+            while not self._closing:
                 run_id = await self._queue.get()
                 try:
+                    timer = self._queued_deadlines.pop(run_id, None)
+                    if timer is None:
+                        continue
+                    timer.cancel()
+                    deadline = timer.when()
+                    if asyncio.get_running_loop().time() >= deadline:
+                        self._finish_timeout(run_id, RUN_DEADLINE)
+                        continue
                     incident = self._registry.claim(run_id)
                     if incident is None:
                         continue
                     task = asyncio.create_task(
-                        self._execute(run_id, incident), name=f"runweave-run-{run_id}"
+                        self._execute(run_id, incident, deadline), name=f"runweave-run-{run_id}"
                     )
                     self._active[run_id] = task
                     try:
-                        await task
+                        await asyncio.shield(task)
                     except asyncio.CancelledError:
                         worker = asyncio.current_task()
                         if worker is not None and worker.cancelling():
+                            if not task.done() and not task.cancelling():
+                                task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await task
                             raise
                     finally:
                         self._active.pop(run_id, None)
@@ -116,9 +169,12 @@ class Scheduler:
             if not self._closing:
                 self._accepting = False
 
-    async def _execute(self, run_id: UUID, incident: IncidentRequest) -> None:
+    async def _execute(self, run_id: UUID, incident: IncidentRequest, deadline: float) -> None:
         try:
-            result = await self._executor.run(incident)
+            async with deadline_scope(deadline, RUN_DEADLINE):
+                result = await self._executor.run(incident)
+        except DeadlineExceeded as exc:
+            self._finish_timeout(run_id, exc.code)
         except asyncio.CancelledError:
             self._registry.finish(run_id, RunStatus.CANCELLED)
             raise

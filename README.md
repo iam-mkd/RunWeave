@@ -3,8 +3,8 @@
 An async orchestration runtime for AI agents, built with FastAPI and asyncio.
 The foundation provides typed contracts, replaceable model/tool interfaces, and
 an offline incident-triage demo. Milestone 2 adds bounded workers, a run queue,
-submission/status/cancellation APIs, and bounded in-memory history. Async runtime
-verification is still pending in the managed execution environment.
+submission/status/cancellation APIs, and bounded in-memory history. Milestone 3
+adds execution deadlines, retries for the read-only health tool, and graceful draining.
 
 ## Quick start (PowerShell)
 
@@ -38,18 +38,19 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000$($run.status_url)"
 Invoke-RestMethod -Method Post -Uri "http://127.0.0.1:8000$($run.status_url)/cancel"
 ```
 
-Runs move from `QUEUED` to `RUNNING`, then `SUCCEEDED`, `FAILED`, or `CANCELLED`.
-`TIMED_OUT` is reserved for milestone 3. Repeated cancellation is idempotent;
-cancelling a completed run returns its existing terminal state and result.
-Cancellation records the state immediately and requests cooperative task
-cancellation; the worker slot is released only after execution cleanup completes.
+Runs move from `QUEUED` to `RUNNING`, then `SUCCEEDED`, `FAILED`, `TIMED_OUT`, or
+`CANCELLED`. Queued runs can time out or be cancelled before starting. Cancelling
+a terminal run returns its existing snapshot. Cancellation records the state
+immediately and asks the running task to stop. The worker slot is released after
+execution cleanup completes.
 
 Saturated admission returns 503 with `Retry-After: 1` and code `QUEUE_FULL`.
 An unavailable scheduler returns 503 with code `SCHEDULER_UNAVAILABLE`. Saturation
 alone does not fail readiness. Unknown/expired IDs return 404 (`RUN_NOT_FOUND`);
 malformed IDs or invalid request data return 422. An execution failure records
-`RUN_FAILED` without exposing exception text. Failed runs can still be polled
-with HTTP 200: the execution outcome lives in the returned run state.
+`RUN_FAILED` without exposing exception text. A timed-out run reports
+`RUN_DEADLINE_EXCEEDED` or `STEP_DEADLINE_EXCEEDED`. Polling a failed or timed-out
+run returns HTTP 200 with the execution outcome in the snapshot.
 
 The demo prints a structured summary, severity, and `mock-health:payments` evidence
 reference. Customize the synthetic incident:
@@ -78,14 +79,27 @@ in `.env` fail validation to catch typos. `.env` is excluded from version contro
 | `RUNWEAVE_HISTORY_MAX_RECORDS` | 1000 | Maximum retained terminal runs |
 | `RUNWEAVE_HISTORY_TTL_SECONDS` | 3600 | Terminal record lifetime, starting at completion |
 | `RUNWEAVE_HISTORY_CLEANUP_INTERVAL_SECONDS` | 30 | Background history pruning interval |
+| `RUNWEAVE_RUN_TIMEOUT_SECONDS` | 30 | Total deadline from admission, including queue wait |
+| `RUNWEAVE_STEP_TIMEOUT_SECONDS` | 5 | Wall-clock budget per model or tool step |
+| `RUNWEAVE_SHUTDOWN_GRACE_SECONDS` | 5 | Time to drain accepted runs before cancelling remaining work |
+| `RUNWEAVE_TOOL_RETRY_ATTEMPTS` | 3 | Maximum health lookup attempts, including the first |
+| `RUNWEAVE_TOOL_RETRY_BASE_DELAY_SECONDS` | 0.1 | Initial exponential backoff ceiling |
+| `RUNWEAVE_TOOL_RETRY_MAX_DELAY_SECONDS` | 2 | Maximum delay between health lookup attempts |
+
+The health lookup retries selected transient HTTP and transport failures with
+exponential backoff and jitter. It observes `Retry-After` in seconds or HTTP-date
+form. If the requested wait exceeds the configured cap or would use up the
+remaining deadline, the failure is returned immediately. Attempts and backoff
+share the step and run budgets. The worker keeps its slot during backoff.
 
 The oldest terminal records are evicted when the history cap is exceeded; TTL
 expiration also applies on reads and submissions. Active/queued records are
-not evicted by history limits. Cancelled queue entries remain until consumed
-and skipped, so queued cancellation does not immediately free a queue slot.
+not evicted by history limits. Cancelled and timed-out queue entries remain
+until a worker consumes and skips them.
 All state is local to one process and is lost on restart. Run with one Uvicorn
-worker. Shutdown currently cancels outstanding work and awaits cooperative cleanup;
-the bounded graceful-drain policy belongs to milestone 3.
+worker. Shutdown stops admission, makes readiness fail, and lets accepted runs
+finish within the grace period. It then cancels any remaining work and waits for
+cooperative cleanup before closing the shared HTTP client.
 
 ## Navigation and design
 
@@ -102,11 +116,13 @@ Application code lives in `src/runweave/`.
 | `orchestration/scheduler.py` | Admission, workers, cancellation, supervision, cleanup task |
 | `orchestration/registry.py` | Atomic in-memory transitions and history eviction |
 | `orchestration/models.py` | Immutable run snapshots, states, and error contracts |
+| `deadline.py` | Shared run and step deadline scopes |
 | `agents/contracts.py` | Incident schemas and model protocol |
 | `agents/runner.py` | Coordinate one model → tool → summary run |
 | `agents/fake.py` | Deterministic model adapter |
 | `tools/contracts.py` | Health schemas and tool protocol |
 | `tools/fake.py` | Offline HTTP tool and mock response |
+| `tools/retry.py` | Transient failure classification and health lookup backoff |
 | `demo.py` | Command-line entry point using the same runtime wiring |
 | `tests/` | Lifecycle, validation, substitution, and cancellation checks |
 
@@ -125,25 +141,17 @@ uv run --locked ruff format --check .
 uv run --locked mypy
 ```
 
-Verification in the managed Windows environment passed all 17 synchronous
-validation/state tests, Ruff, and strict mypy. Async tests and the demo remain
-pending: the environment hangs creating the built-in event loop's local socket
-pair, before application code runs. The async suite includes a barrier test for
-128 overlapping runs, admission limits, cancellation races, failure isolation,
-supervision, shutdown cleanup, retention cleanup, and API responses. These are
-test scenarios awaiting execution, not measured performance claims.
-The dependency lockfile is now included and was checked offline after the
-RunWeave rename. Run `uv sync --locked` to refresh an existing environment with
-the renamed package and `runweave-demo` command. See PLAN.md for the remaining
-Milestone 1 and 2 acceptance checks.
+All 53 tests passed in a temporary in-process harness that disabled the Windows
+event loop's wakeup sockets for the test process. This exercised ASGI and mock
+HTTP transports, including 128 overlapping mock runs. The sandbox still hangs
+creating the native loop's socket pair. A normal local test run and Uvicorn
+startup and shutdown remain pending. Ruff, strict mypy, and the lockfile check pass.
 
 ## Current boundaries
 
-The runner has a fixed plan/check/summarize sequence, not an autonomous tool loop.
-Retries, overall execution deadlines, graceful draining, persistent state, and
-live model integration are not implemented yet. A cooperative async tool can be
-cancelled; Python cannot force-stop an adapter that suppresses cancellation or
-blocks the event loop. No crash recovery or exactly-once execution is claimed.
+The runner uses a fixed plan, health check, and summary sequence with a fake
+model. Shutdown's grace period bounds draining. Final cleanup depends on adapters
+cooperating with cancellation. Run state remains in memory for the process lifetime.
 
 Follow [PLAN.md](PLAN.md) in milestone order and [AGENTS.md](AGENTS.md) for coding
-rules. Next after verification: recovery policies and lifecycle hardening in milestone 3.
+rules. Milestone 4 adds agent behavior and tool safety.

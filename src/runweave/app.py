@@ -17,12 +17,12 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        async with open_runtime(config, executor=executor) as runtime:
-            app.state.runtime = runtime
-            try:
+        try:
+            async with open_runtime(config, executor=executor) as runtime:
+                app.state.runtime = runtime
                 yield
-            finally:
-                app.state.runtime = None
+        finally:
+            app.state.runtime = None
 
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
     app.include_router(health_router)

@@ -33,13 +33,16 @@ class ControlledExecutor:
             self.active -= 1
 
 
-def scheduler_for(executor: ControlledExecutor, workers: int = 1, capacity: int = 10) -> Scheduler:
+def scheduler_for(
+    executor: ControlledExecutor, workers: int = 1, capacity: int = 10, *, shutdown_grace: float = 0
+) -> Scheduler:
     return Scheduler(
         executor,
         RunRegistry(1000, 60),
         worker_count=workers,
         queue_capacity=capacity,
         cleanup_interval=60,
+        shutdown_grace=shutdown_grace,
     )
 
 
@@ -140,8 +143,8 @@ async def test_failed_run_is_sanitized_and_does_not_kill_worker() -> None:
 @pytest.mark.asyncio
 async def test_shutdown_cancels_pending_work_and_awaits_active_cleanup() -> None:
     executor = ControlledExecutor()
-    scheduler = scheduler_for(executor)
-    async with scheduler.running():
+    scheduler = scheduler_for(executor, shutdown_grace=0.03)
+    async with asyncio.timeout(1), scheduler.running():
         active = scheduler.submit(request())
         await asyncio.wait_for(executor.reached.wait(), 1)
         queued = scheduler.submit(request())
@@ -151,6 +154,114 @@ async def test_shutdown_cancels_pending_work_and_awaits_active_cleanup() -> None
     assert state(scheduler, queued.id) == RunStatus.CANCELLED
     await asyncio.wait_for(scheduler.join(), 1)
     assert not any(task.get_name().startswith("runweave-") for task in asyncio.all_tasks())
+
+
+@pytest.mark.asyncio
+async def test_shutdown_drains_admitted_runs_and_rejects_new_work() -> None:
+    executor = ControlledExecutor()
+    scheduler = scheduler_for(executor, shutdown_grace=1)
+
+    async def release_during_drain() -> None:
+        assert not scheduler.ready
+        with pytest.raises(AdmissionRejected, match="SCHEDULER_UNAVAILABLE"):
+            scheduler.submit(request())
+        executor.release.set()
+
+    async with scheduler.running():
+        active = scheduler.submit(request())
+        await asyncio.wait_for(executor.reached.wait(), 1)
+        queued = scheduler.submit(request())
+        release = asyncio.create_task(release_during_drain())
+    await release
+    assert state(scheduler, active.id) == RunStatus.SUCCEEDED
+    assert state(scheduler, queued.id) == RunStatus.SUCCEEDED
+
+
+class SlowCleanupExecutor:
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.cleaning = asyncio.Event()
+        self.release = asyncio.Event()
+        self.started: list[str] = []
+
+    async def run(self, incident: IncidentRequest) -> IncidentResult:
+        self.started.append(incident.service)
+        self.entered.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            self.cleaning.set()
+            await self.release.wait()
+        raise AssertionError("Unreachable")
+
+
+@pytest.mark.asyncio
+async def test_deadline_includes_queue_wait_and_skips_expired_work(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor = SlowCleanupExecutor()
+    scheduler = Scheduler(
+        executor,
+        RunRegistry(10, 60),
+        worker_count=1,
+        queue_capacity=2,
+        cleanup_interval=60,
+        run_timeout=0.05,
+        shutdown_grace=0,
+    )
+    queued_expired = asyncio.Event()
+    expire = scheduler._expire_queued
+
+    def observe_expiry(run_id: UUID) -> None:
+        expire(run_id)
+        queued_expired.set()
+
+    monkeypatch.setattr(scheduler, "_expire_queued", observe_expiry)
+    async with scheduler.running():
+        active = scheduler.submit(request())
+        queued = scheduler.submit(request("disputes"))
+        try:
+            await asyncio.wait_for(executor.cleaning.wait(), 2)
+            await asyncio.wait_for(queued_expired.wait(), 2)
+            expired = scheduler.get(queued.id)
+            assert expired is not None and expired.status == RunStatus.TIMED_OUT
+            assert expired.started_at is None
+            assert expired.error is not None and expired.error.code == "RUN_DEADLINE_EXCEEDED"
+        finally:
+            executor.release.set()
+        await asyncio.wait_for(scheduler.join(), 1)
+        assert state(scheduler, active.id) == RunStatus.TIMED_OUT
+        assert executor.started == ["payments"]
+
+
+@pytest.mark.asyncio
+async def test_shutdown_does_not_interrupt_cleanup_after_user_cancellation() -> None:
+    executor = SlowCleanupExecutor()
+    scheduler = Scheduler(
+        executor,
+        RunRegistry(10, 60),
+        worker_count=1,
+        queue_capacity=1,
+        cleanup_interval=60,
+        shutdown_grace=0,
+    )
+
+    async def run_until_shutdown() -> None:
+        async with scheduler.running():
+            run = scheduler.submit(request())
+            await asyncio.wait_for(executor.entered.wait(), 1)
+            scheduler.cancel(run.id)
+            await asyncio.wait_for(executor.cleaning.wait(), 1)
+
+    shutdown = asyncio.create_task(run_until_shutdown())
+    try:
+        await asyncio.wait_for(executor.cleaning.wait(), 1)
+        await asyncio.sleep(0.03)
+        assert not scheduler.ready
+        assert not shutdown.done()
+    finally:
+        executor.release.set()
+        await asyncio.wait_for(shutdown, 1)
 
 
 @pytest.mark.asyncio

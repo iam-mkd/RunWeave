@@ -68,8 +68,11 @@ class RunRegistry:
             return entry.snapshot if entry else None
         if not status.terminal:
             raise ValueError("finish requires a terminal state")
-        if entry.snapshot.status == RunStatus.QUEUED and status != RunStatus.CANCELLED:
-            raise ValueError("Queued work can only transition to RUNNING or CANCELLED")
+        if entry.snapshot.status == RunStatus.QUEUED and status not in (
+            RunStatus.CANCELLED,
+            RunStatus.TIMED_OUT,
+        ):
+            raise ValueError("Queued work can only start, be cancelled, or time out")
         if (status == RunStatus.SUCCEEDED) != (result is not None):
             raise ValueError("Only successful runs must contain a result")
         if (status in (RunStatus.FAILED, RunStatus.TIMED_OUT)) != (error is not None):
