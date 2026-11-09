@@ -5,6 +5,7 @@ The foundation provides typed contracts, replaceable model/tool interfaces, and
 an offline incident-triage demo. Milestone 2 adds bounded workers, a run queue,
 submission/status/cancellation APIs, and bounded in-memory history. Milestone 3
 adds execution deadlines, retries for the read-only health tool, and graceful draining.
+Milestone 4 adds a model-driven tool loop and an optional Groq adapter.
 
 ## Quick start (PowerShell)
 
@@ -52,18 +53,38 @@ malformed IDs or invalid request data return 422. An execution failure records
 `RUN_DEADLINE_EXCEEDED` or `STEP_DEADLINE_EXCEEDED`. Polling a failed or timed-out
 run returns HTTP 200 with the execution outcome in the snapshot.
 
-The demo prints a structured summary, severity, and `mock-health:payments` evidence
-reference. Customize the synthetic incident:
+The demo prints a structured summary, severity, and evidence IDs for synthetic
+service health and a local runbook fixture. To customize the incident, run:
 
 ```powershell
 uv run --locked runweave-demo --service disputes --description "Elevated response latency"
 ```
 
-No API key, external network request, or paid model is used. The shared async HTTP
-client uses HTTPX MockTransport and a fixed synthetic destination; fake tool data
-always reports degraded health. This is a contract/lifecycle demo, not a latency or
-concurrency benchmark. The mock tool awaits a 10 ms synthetic delay so work can
-overlap. MockTransport does not exercise real sockets or connection-pool limits.
+Fake mode runs offline. The health tool uses HTTPX MockTransport and a fixed
+synthetic destination, and the runbook lookup uses a local fixture. The mock
+health tool awaits a 10 ms delay so offline runs can overlap.
+
+## Groq inference
+
+Use the local `.env` file, or copy `.env.example` to `.env` if you are setting up
+a fresh checkout. Replace the key placeholder and select Groq:
+
+```dotenv
+RUNWEAVE_MODEL_PROVIDER=groq
+RUNWEAVE_GROQ_API_KEY=replace_with_your_groq_api_key
+RUNWEAVE_GROQ_MODEL=llama-3.3-70b-versatile
+```
+
+Run `uv run --locked runweave-demo` to make a live inference request. The demo
+sends the synthetic incident and tool evidence to Groq. The health check and
+runbook lookup still use local fixtures. The runner validates the model's tool
+name and arguments against the allowlist, restricts calls to the incident's
+service, and requires the final result to cite both returned evidence IDs.
+
+The default is `fake`. The `.env` file is ignored by Git. Groq requests use a
+fixed HTTPS endpoint with redirects disabled. The completion-token budget
+applies across model turns, and input and tool history are bounded by size and
+step limits. The step deadline includes any wait for a provider slot or rate limit.
 
 ## Configuration
 
@@ -85,6 +106,10 @@ in `.env` fail validation to catch typos. `.env` is excluded from version contro
 | `RUNWEAVE_TOOL_RETRY_ATTEMPTS` | 3 | Maximum health lookup attempts, including the first |
 | `RUNWEAVE_TOOL_RETRY_BASE_DELAY_SECONDS` | 0.1 | Initial exponential backoff ceiling |
 | `RUNWEAVE_TOOL_RETRY_MAX_DELAY_SECONDS` | 2 | Maximum delay between health lookup attempts |
+| `RUNWEAVE_AGENT_MAX_STEPS` | 7 | Maximum model and logical tool interactions per run |
+| `RUNWEAVE_AGENT_COMPLETION_TOKENS` | 2048 | Cumulative model completion-token budget per run |
+| `RUNWEAVE_GROQ_CONCURRENCY` | 2 | Groq request slots per process |
+| `RUNWEAVE_GROQ_REQUESTS_PER_MINUTE` | 30 | Groq request starts per minute, evenly spaced |
 
 The health lookup retries selected transient HTTP and transport failures with
 exponential backoff and jitter. It observes `Retry-After` in seconds or HTTP-date
@@ -120,7 +145,9 @@ Application code lives in `src/runweave/`.
 | `agents/contracts.py` | Incident schemas and model protocol |
 | `agents/runner.py` | Coordinate one model → tool → summary run |
 | `agents/fake.py` | Deterministic model adapter |
+| `agents/groq.py` | Groq tool-call protocol and provider request limits |
 | `tools/contracts.py` | Health schemas and tool protocol |
+| `tools/registry.py` | Allowlisted tools, validated arguments, and evidence |
 | `tools/fake.py` | Offline HTTP tool and mock response |
 | `tools/retry.py` | Transient failure classification and health lookup backoff |
 | `demo.py` | Command-line entry point using the same runtime wiring |
@@ -141,17 +168,18 @@ uv run --locked ruff format --check .
 uv run --locked mypy
 ```
 
-All 53 tests passed in a temporary in-process harness that disabled the Windows
+All 61 tests passed in a temporary in-process harness that disabled the Windows
 event loop's wakeup sockets for the test process. This exercised ASGI and mock
 HTTP transports, including 128 overlapping mock runs. The sandbox still hangs
 creating the native loop's socket pair. A normal local test run and Uvicorn
-startup and shutdown remain pending. Ruff, strict mypy, and the lockfile check pass.
+startup and shutdown remain pending. Groq was tested with mocked HTTP responses.
+A live smoke test requires a key. Ruff, strict mypy, and the lockfile check pass.
 
 ## Current boundaries
 
-The runner uses a fixed plan, health check, and summary sequence with a fake
-model. Shutdown's grace period bounds draining. Final cleanup depends on adapters
+The incident workflow uses synthetic service health and runbook evidence.
+Shutdown's grace period bounds draining. Final cleanup depends on adapters
 cooperating with cancellation. Run state remains in memory for the process lifetime.
 
 Follow [PLAN.md](PLAN.md) in milestone order and [AGENTS.md](AGENTS.md) for coding
-rules. Milestone 4 adds agent behavior and tool safety.
+rules. Milestone 5 adds observability and reproducible load evidence.

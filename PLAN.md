@@ -1,7 +1,7 @@
 # RunWeave: build plan
 
 Status: accepted roadmap, confirmed by the user on 2026-11-05.
-Milestones 1 through 3 are implemented. The in-process test suite passes with
+Milestones 1 through 4 are implemented. The in-process test suite passes with
 wakeup sockets disabled in the test harness. Native Windows verification remains
 pending, so the acceptance checklist remains open.
 
@@ -182,6 +182,16 @@ Add the incident-triage workflow, structured model decisions, typed tool registr
 budgets, destination restrictions, and one optional live provider adapter.
 Done when a run performs multiple validated model/tool steps and returns an
 evidence-backed structured result; fake mode remains fully offline.
+
+Implementation notes (2026-11-09):
+- Both models use the same bounded runner loop. It dispatches validated health
+  and runbook calls and checks the final result against observed evidence IDs.
+- Groq inference is opt-in. It uses the shared HTTP client, a fixed HTTPS
+  destination, bounded response reads, a completion-token budget, and separate
+  controls for concurrency and request rate. The local `.env` contains a dummy key.
+- All 61 tests passed in the socket-free harness, including the mocked Groq
+  transcript and rejected unsafe tool calls. Ruff, strict mypy, and the lockfile
+  check pass. Native Windows and live Groq verification remain open.
 
 ### 5. Observability and reproducible load evidence
 Add metrics, traces, JSON logs, mock fault server, load script, Dockerfile,

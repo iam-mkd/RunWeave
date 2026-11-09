@@ -30,7 +30,10 @@ async def test_submit_poll_and_repeated_cancel_of_completed_run() -> None:
                     break
                 await asyncio.sleep(0.01)
         completed = response.json()
-        assert completed["result"]["evidence_ids"] == ["mock-health:payments"]
+        assert completed["result"]["evidence_ids"] == [
+            "mock-health:payments",
+            "mock-runbook:triage-v1",
+        ]
         assert completed["started_at"] is not None
         assert completed["finished_at"] is not None
         assert (await client.post(f"{submitted['status_url']}/cancel")).json() == completed

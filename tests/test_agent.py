@@ -3,7 +3,13 @@ import asyncio
 import pytest
 from pydantic import ValidationError
 
-from runweave.agents.contracts import IncidentRequest, IncidentResult
+from runweave.agents.contracts import (
+    IncidentRequest,
+    IncidentResult,
+    ModelDecision,
+    ToolCall,
+    ToolExchange,
+)
 from runweave.agents.fake import FakeAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.core.runtime import open_runtime
@@ -12,12 +18,65 @@ from runweave.demo import run_demo
 from runweave.tools.contracts import HealthObservation, HealthQuery
 
 
+class ScriptedModel:
+    def __init__(self, *actions: ToolCall | IncidentResult) -> None:
+        self._actions = iter(actions)
+
+    async def decide(
+        self,
+        incident: IncidentRequest,
+        history: tuple[ToolExchange, ...],
+        tools: tuple[dict[str, object], ...],
+        completion_budget: int,
+    ) -> ModelDecision:
+        return ModelDecision(next(self._actions), completion_tokens=1)
+
+
+class UnexpectedHealthTool:
+    async def execute(self, query: HealthQuery) -> HealthObservation:
+        pytest.fail("An unvalidated tool request reached execution")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("tool", "arguments", "message"),
+    [
+        ("shell", '{"service":"payments"}', "Unknown or unauthorized tool"),
+        ("check_health", '{"service":"other"}', "does not match the incident"),
+        ("check_health", '{"service":"payments","url":"https://example.org"}', "url"),
+    ],
+)
+async def test_tool_boundary_rejects_untrusted_calls(
+    tool: str, arguments: str, message: str
+) -> None:
+    model = ScriptedModel(ToolCall(id="test-1", name=tool, arguments=arguments))
+    runner = AgentRunner(model, UnexpectedHealthTool())
+    with pytest.raises(ValueError, match=message):
+        await runner.run(IncidentRequest(service="payments", description="Latency"))
+
+
+@pytest.mark.asyncio
+async def test_model_cannot_finish_before_collecting_evidence() -> None:
+    result = IncidentResult(summary="Fabricated", severity="low", evidence_ids=("unknown",))
+    runner = AgentRunner(ScriptedModel(result), UnexpectedHealthTool())
+    with pytest.raises(ValueError, match="must cite the observed"):
+        await runner.run(IncidentRequest(service="payments", description="Latency"))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("budget", [{"max_steps": 2}, {"completion_budget": 1}])
+async def test_runner_respects_budget_before_dispatch(budget: dict[str, int]) -> None:
+    runner = AgentRunner(FakeAgentModel(), UnexpectedHealthTool(), **budget)
+    with pytest.raises(ValueError, match="budget exhausted"):
+        await runner.run(IncidentRequest(service="payments", description="Latency"))
+
+
 @pytest.mark.asyncio
 async def test_offline_run_returns_structured_result_with_evidence() -> None:
     incident = IncidentRequest(service="payments", description="Elevated latency")
     result = await run_demo(incident, Settings())
     assert result.severity == "medium"
-    assert result.evidence_ids == ("mock-health:payments",)
+    assert result.evidence_ids == ("mock-health:payments", "mock-runbook:triage-v1")
     assert "Elevated latency" in result.summary
     assert "degraded" in result.summary
     assert IncidentResult.model_validate_json(result.model_dump_json()) == result
@@ -35,7 +94,7 @@ async def test_runner_accepts_a_replacement_tool_without_inheritance() -> None:
     runner = AgentRunner(FakeAgentModel(), HealthyTool())
     result = await runner.run(IncidentRequest(service="payments", description="Check latency"))
     assert result.severity == "low"
-    assert result.evidence_ids == ("replacement-tool:1",)
+    assert result.evidence_ids == ("replacement-tool:1", "mock-runbook:triage-v1")
 
 
 class MismatchedTool:
