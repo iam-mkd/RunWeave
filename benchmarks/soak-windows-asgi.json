@@ -1,0 +1,150 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.9",
+    "logical_cpus": 16,
+    "cpu": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+    "memory_mib": 15791,
+    "processes": 1,
+    "event_loop": "Windows Proactor with wakeup sockets disabled in the benchmark harness"
+  },
+  "workload": "HTTPX ASGI transport, fake model, two 200 ms synthetic tool waits",
+  "queue_capacity": 128,
+  "http_max_connections": 128,
+  "cases": [
+    {
+      "workers": 128,
+      "requests": 76928,
+      "batches": 601,
+      "duration_seconds": 600.823,
+      "runs_per_second": 128.04,
+      "outcomes": {
+        "SUCCEEDED": 76928
+      },
+      "peak_active_runs": 128,
+      "peak_active_tool_steps": 128,
+      "completion_ms": {
+        "p50": 597.579,
+        "p95": 666.374,
+        "p99": 684.636
+      },
+      "queue_wait_ms": {
+        "p50": 119.292,
+        "p95": 224.779,
+        "p99": 251.572
+      },
+      "status_api_ms": {
+        "p50": 1.954,
+        "p95": 2.726,
+        "p99": 3.523
+      },
+      "status_api_samples": 5373,
+      "completion_samples": 8192,
+      "loop_lag_p99_bucket_ms": 1000.0,
+      "rss_start_mib": 57.74,
+      "rss_peak_mib": 63.01,
+      "rss_end_mib": 63.02,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 0.969,
+          "rss_mib": 61.21
+        },
+        {
+          "elapsed_seconds": 31.08,
+          "rss_mib": 62.4
+        },
+        {
+          "elapsed_seconds": 61.291,
+          "rss_mib": 62.63
+        },
+        {
+          "elapsed_seconds": 91.865,
+          "rss_mib": 62.79
+        },
+        {
+          "elapsed_seconds": 122.183,
+          "rss_mib": 62.79
+        },
+        {
+          "elapsed_seconds": 153.117,
+          "rss_mib": 62.79
+        },
+        {
+          "elapsed_seconds": 184.049,
+          "rss_mib": 62.79
+        },
+        {
+          "elapsed_seconds": 214.689,
+          "rss_mib": 62.78
+        },
+        {
+          "elapsed_seconds": 245.572,
+          "rss_mib": 62.78
+        },
+        {
+          "elapsed_seconds": 276.238,
+          "rss_mib": 62.81
+        },
+        {
+          "elapsed_seconds": 306.34,
+          "rss_mib": 62.92
+        },
+        {
+          "elapsed_seconds": 336.97,
+          "rss_mib": 62.92
+        },
+        {
+          "elapsed_seconds": 367.644,
+          "rss_mib": 62.95
+        },
+        {
+          "elapsed_seconds": 398.006,
+          "rss_mib": 62.95
+        },
+        {
+          "elapsed_seconds": 428.2,
+          "rss_mib": 62.93
+        },
+        {
+          "elapsed_seconds": 458.283,
+          "rss_mib": 62.93
+        },
+        {
+          "elapsed_seconds": 489.018,
+          "rss_mib": 62.94
+        },
+        {
+          "elapsed_seconds": 519.944,
+          "rss_mib": 62.95
+        },
+        {
+          "elapsed_seconds": 550.877,
+          "rss_mib": 62.96
+        },
+        {
+          "elapsed_seconds": 581.312,
+          "rss_mib": 62.98
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    }
+  ],
+  "faults": {
+    "outcomes": {
+      "rate-limited": "SUCCEEDED",
+      "transient": "SUCCEEDED",
+      "disconnect": "SUCCEEDED",
+      "forbidden": "FAILED",
+      "malformed": "FAILED",
+      "slow": "TIMED_OUT",
+      "cancelled": "CANCELLED"
+    },
+    "retried_services": {
+      "rate-limited": 2,
+      "transient": 2,
+      "disconnect": 2
+    },
+    "retries": 3
+  }
+}

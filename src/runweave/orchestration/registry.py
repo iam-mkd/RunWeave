@@ -7,19 +7,26 @@ from uuid import UUID, uuid4
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
+from runweave.telemetry import Telemetry
 
 
 @dataclass
 class RunEntry:
     incident: IncidentRequest
     snapshot: RunSnapshot
+    admitted_at: float
 
 
 class RunRegistry:
     """Single-event-loop state; synchronous operations never yield between transitions."""
 
     def __init__(
-        self, max_history: int, ttl_seconds: float, clock: Callable[[], float] = monotonic
+        self,
+        max_history: int,
+        ttl_seconds: float,
+        clock: Callable[[], float] = monotonic,
+        *,
+        telemetry: Telemetry | None = None,
     ) -> None:
         if max_history < 1 or ttl_seconds <= 0:
             raise ValueError("History limits must be positive")
@@ -28,6 +35,10 @@ class RunRegistry:
         self._clock = clock
         self._entries: dict[UUID, RunEntry] = {}
         self._finished: OrderedDict[UUID, float] = OrderedDict()
+        self.telemetry = telemetry or Telemetry()
+
+    def __len__(self) -> int:
+        return len(self._entries)
 
     def create(self, incident: IncidentRequest) -> RunSnapshot:
         self.prune()
@@ -38,7 +49,7 @@ class RunRegistry:
             status_url=f"/v1/runs/{run_id}",
             submitted_at=datetime.now(UTC),
         )
-        self._entries[run_id] = RunEntry(incident, snapshot)
+        self._entries[run_id] = RunEntry(incident, snapshot, self._clock())
         return snapshot
 
     def get(self, run_id: UUID) -> RunSnapshot | None:
@@ -53,6 +64,7 @@ class RunRegistry:
         entry.snapshot = entry.snapshot.model_copy(
             update={"status": RunStatus.RUNNING, "started_at": datetime.now(UTC)}
         )
+        self.telemetry.queue_wait.observe(self._clock() - entry.admitted_at)
         return entry.incident
 
     def finish(
@@ -87,6 +99,7 @@ class RunRegistry:
         )
         self._finished[run_id] = self._clock()
         snapshot = entry.snapshot
+        self.telemetry.finished(snapshot, self._finished[run_id] - entry.admitted_at)
         self.prune()
         return snapshot
 

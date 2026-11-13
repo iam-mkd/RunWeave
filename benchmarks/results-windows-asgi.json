@@ -1,0 +1,238 @@
+{
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.9",
+    "logical_cpus": 16,
+    "cpu": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+    "memory_mib": 15791,
+    "processes": 1,
+    "event_loop": "Windows Proactor with wakeup sockets disabled in the benchmark harness"
+  },
+  "workload": "HTTPX ASGI transport, fake model, two 200 ms synthetic tool waits",
+  "queue_capacity": 128,
+  "http_max_connections": 128,
+  "cases": [
+    {
+      "workers": 1,
+      "requests": 128,
+      "batches": 1,
+      "duration_seconds": 55.128,
+      "runs_per_second": 2.32,
+      "outcomes": {
+        "SUCCEEDED": 128
+      },
+      "peak_active_runs": 1,
+      "peak_active_tool_steps": 1,
+      "completion_ms": {
+        "p50": 27499.513,
+        "p95": 52092.174,
+        "p99": 54202.653
+      },
+      "queue_wait_ms": {
+        "p50": 27078.138,
+        "p95": 51674.044,
+        "p99": 53777.919
+      },
+      "status_api_ms": {
+        "p50": 2.245,
+        "p95": 2.929,
+        "p99": 3.526
+      },
+      "status_api_samples": 875,
+      "completion_samples": 128,
+      "loop_lag_p99_bucket_ms": 25.0,
+      "rss_start_mib": 57.27,
+      "rss_peak_mib": 58.89,
+      "rss_end_mib": 59.07,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 55.128,
+          "rss_mib": 59.04
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    },
+    {
+      "workers": 10,
+      "requests": 128,
+      "batches": 1,
+      "duration_seconds": 6.007,
+      "runs_per_second": 21.31,
+      "outcomes": {
+        "SUCCEEDED": 128
+      },
+      "peak_active_runs": 10,
+      "peak_active_tool_steps": 10,
+      "completion_ms": {
+        "p50": 3075.773,
+        "p95": 5531.647,
+        "p99": 5555.466
+      },
+      "queue_wait_ms": {
+        "p50": 2656.93,
+        "p95": 5104.449,
+        "p99": 5138.934
+      },
+      "status_api_ms": {
+        "p50": 2.266,
+        "p95": 2.966,
+        "p99": 3.088
+      },
+      "status_api_samples": 92,
+      "completion_samples": 128,
+      "loop_lag_p99_bucket_ms": 25.0,
+      "rss_start_mib": 59.07,
+      "rss_peak_mib": 59.23,
+      "rss_end_mib": 59.23,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 6.007,
+          "rss_mib": 59.22
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    },
+    {
+      "workers": 50,
+      "requests": 128,
+      "batches": 1,
+      "duration_seconds": 1.898,
+      "runs_per_second": 67.45,
+      "outcomes": {
+        "SUCCEEDED": 128
+      },
+      "peak_active_runs": 50,
+      "peak_active_tool_steps": 50,
+      "completion_ms": {
+        "p50": 1003.781,
+        "p95": 1366.655,
+        "p99": 1371.98
+      },
+      "queue_wait_ms": {
+        "p50": 571.775,
+        "p95": 935.281,
+        "p99": 940.099
+      },
+      "status_api_ms": {
+        "p50": 2.618,
+        "p95": 3.595,
+        "p99": 3.657
+      },
+      "status_api_samples": 22,
+      "completion_samples": 128,
+      "loop_lag_p99_bucket_ms": 50.0,
+      "rss_start_mib": 59.23,
+      "rss_peak_mib": 59.75,
+      "rss_end_mib": 59.77,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 1.898,
+          "rss_mib": 59.77
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    },
+    {
+      "workers": 100,
+      "requests": 128,
+      "batches": 1,
+      "duration_seconds": 1.433,
+      "runs_per_second": 89.34,
+      "outcomes": {
+        "SUCCEEDED": 128
+      },
+      "peak_active_runs": 100,
+      "peak_active_tool_steps": 100,
+      "completion_ms": {
+        "p50": 649.907,
+        "p95": 917.32,
+        "p99": 921.679
+      },
+      "queue_wait_ms": {
+        "p50": 190.84,
+        "p95": 483.529,
+        "p99": 492.86
+      },
+      "status_api_ms": {
+        "p50": 2.416,
+        "p95": 2.83,
+        "p99": 2.83
+      },
+      "status_api_samples": 15,
+      "completion_samples": 128,
+      "loop_lag_p99_bucket_ms": 100.0,
+      "rss_start_mib": 59.77,
+      "rss_peak_mib": 60.58,
+      "rss_end_mib": 60.58,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 1.433,
+          "rss_mib": 60.58
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    },
+    {
+      "workers": 128,
+      "requests": 128,
+      "batches": 1,
+      "duration_seconds": 1.039,
+      "runs_per_second": 123.14,
+      "outcomes": {
+        "SUCCEEDED": 128
+      },
+      "peak_active_runs": 128,
+      "peak_active_tool_steps": 128,
+      "completion_ms": {
+        "p50": 619.842,
+        "p95": 688.607,
+        "p99": 694.09
+      },
+      "queue_wait_ms": {
+        "p50": 136.24,
+        "p95": 253.979,
+        "p99": 263.592
+      },
+      "status_api_ms": {
+        "p50": 2.198,
+        "p95": 2.879,
+        "p99": 2.879
+      },
+      "status_api_samples": 9,
+      "completion_samples": 128,
+      "loop_lag_p99_bucket_ms": 100.0,
+      "rss_start_mib": 60.58,
+      "rss_peak_mib": 61.11,
+      "rss_end_mib": 61.12,
+      "rss_samples": [
+        {
+          "elapsed_seconds": 1.039,
+          "rss_mib": 61.12
+        }
+      ],
+      "retained_runs": 128,
+      "retries": 0
+    }
+  ],
+  "faults": {
+    "outcomes": {
+      "rate-limited": "SUCCEEDED",
+      "transient": "SUCCEEDED",
+      "disconnect": "SUCCEEDED",
+      "forbidden": "FAILED",
+      "malformed": "FAILED",
+      "slow": "TIMED_OUT",
+      "cancelled": "CANCELLED"
+    },
+    "retried_services": {
+      "rate-limited": 2,
+      "transient": 2,
+      "disconnect": 2
+    },
+    "retries": 3
+  }
+}

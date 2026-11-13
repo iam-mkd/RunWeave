@@ -3,6 +3,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
+import httpx
+
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
@@ -43,6 +45,7 @@ class Scheduler:
         self._accepting = False
         self._closing = False
         self._started = False
+        self._telemetry = registry.telemetry
 
     @property
     def ready(self) -> bool:
@@ -50,8 +53,10 @@ class Scheduler:
 
     def submit(self, incident: IncidentRequest) -> RunSnapshot:
         if not self.ready:
+            self._telemetry.rejected["unavailable"] += 1
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
         if self._queue.full():
+            self._telemetry.rejected["queue_full"] += 1
             raise AdmissionRejected("QUEUE_FULL")
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._run_timeout
@@ -61,7 +66,11 @@ class Scheduler:
         self._queued_deadlines[snapshot.id] = loop.call_at(
             deadline, self._expire_queued, snapshot.id
         )
+        self._telemetry.admitted += 1
         return snapshot
+
+    def metrics(self) -> str:
+        return self._telemetry.render(self._queue.qsize(), len(self._active), len(self._registry))
 
     def get(self, run_id: UUID) -> RunSnapshot | None:
         return self._registry.get(run_id)
@@ -93,6 +102,7 @@ class Scheduler:
                 for index in range(self._worker_count)
             ]
             cleaner = group.create_task(self._cleanup(), name="runweave-history-cleanup")
+            lag_sampler = group.create_task(self._telemetry.sample_loop_lag(), name="runweave-lag")
             self._accepting = True
             try:
                 yield
@@ -109,7 +119,7 @@ class Scheduler:
                 for timer in self._queued_deadlines.values():
                     timer.cancel()
                 self._queued_deadlines.clear()
-                for task in [*workers, cleaner]:
+                for task in [*workers, cleaner, lag_sampler]:
                     if not task.cancelling():
                         task.cancel()
                 while not self._queue.empty():
@@ -151,6 +161,7 @@ class Scheduler:
                         self._execute(run_id, incident, deadline), name=f"runweave-run-{run_id}"
                     )
                     self._active[run_id] = task
+                    self._telemetry.peak_runs = max(self._telemetry.peak_runs, len(self._active))
                     try:
                         await asyncio.shield(task)
                     except asyncio.CancelledError:
@@ -171,14 +182,25 @@ class Scheduler:
 
     async def _execute(self, run_id: UUID, incident: IncidentRequest, deadline: float) -> None:
         try:
-            async with deadline_scope(deadline, RUN_DEADLINE):
-                result = await self._executor.run(incident)
+            with self._telemetry.span("agent.run", run_id=run_id):
+                async with deadline_scope(deadline, RUN_DEADLINE):
+                    result = await self._executor.run(incident)
         except DeadlineExceeded as exc:
             self._finish_timeout(run_id, exc.code)
         except asyncio.CancelledError:
             self._registry.finish(run_id, RunStatus.CANCELLED)
             raise
-        except Exception:
+        except Exception as exc:
+            if isinstance(exc, httpx.HTTPStatusError):
+                status_group = exc.response.status_code // 100
+                category = {4: "http_4xx", 5: "http_5xx"}.get(status_group, "http_other")
+            elif isinstance(exc, httpx.TransportError):
+                category = "transport"
+            elif isinstance(exc, ValueError):
+                category = "validation"
+            else:
+                category = "execution"
+            self._telemetry.failure_kinds[category] += 1
             self._registry.finish(
                 run_id,
                 RunStatus.FAILED,

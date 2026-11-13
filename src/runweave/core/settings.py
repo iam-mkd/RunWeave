@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     groq_model: str = Field(default="llama-3.3-70b-versatile", min_length=1, max_length=100)
     groq_concurrency: int = Field(default=2, ge=1, le=32)
     groq_requests_per_minute: int = Field(default=30, ge=1, le=600)
+    json_logs: bool = False
+    console_traces: bool = False
+    mock_runbook_delay_seconds: float = Field(default=0, ge=0, le=5)
 
     @model_validator(mode="after")
     def require_groq_key(self) -> "Settings":

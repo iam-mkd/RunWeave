@@ -1,0 +1,12 @@
+**
+!Dockerfile
+!README.md
+!pyproject.toml
+!uv.lock
+!src/
+!src/**
+**/__pycache__/
+**/*.pyc
+**/*.egg-info/
+**/.env
+**/.env.*

@@ -64,9 +64,16 @@ async def test_model_cannot_finish_before_collecting_evidence() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("budget", [{"max_steps": 2}, {"completion_budget": 1}])
-async def test_runner_respects_budget_before_dispatch(budget: dict[str, int]) -> None:
-    runner = AgentRunner(FakeAgentModel(), UnexpectedHealthTool(), **budget)
+@pytest.mark.parametrize(("max_steps", "completion_budget"), [(2, 2048), (7, 1)])
+async def test_runner_respects_budget_before_dispatch(
+    max_steps: int, completion_budget: int
+) -> None:
+    runner = AgentRunner(
+        FakeAgentModel(),
+        UnexpectedHealthTool(),
+        max_steps=max_steps,
+        completion_budget=completion_budget,
+    )
     with pytest.raises(ValueError, match="budget exhausted"):
         await runner.run(IncidentRequest(service="payments", description="Latency"))
 

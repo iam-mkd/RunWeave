@@ -1,9 +1,9 @@
 # RunWeave: build plan
 
 Status: accepted roadmap, confirmed by the user on 2026-11-05.
-Milestones 1 through 4 are implemented. The in-process test suite passes with
-wakeup sockets disabled in the test harness. Native Windows verification remains
-pending, so the acceptance checklist remains open.
+Milestones 1 through 5 are implemented. In-process tests and benchmarks run
+with wakeup sockets disabled in the Windows sandbox harness. Native socket and
+Docker smoke checks remain open.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -45,7 +45,7 @@ from provider latency, cost, and rate limits. No production incident data is nee
 | Agent | Small explicit execution loop + provider protocol | Visible step limits and tool boundaries |
 | Environment | uv, pyproject.toml, uv.lock | Reproducible dependency environment |
 | Quality | Ruff, mypy, pytest, pytest-asyncio | Static and behavior checks |
-| Telemetry | JSON logs, prometheus-client, OpenTelemetry | Diagnose queueing and tool latency |
+| Telemetry | JSON logs, Prometheus text exposition, OpenTelemetry | Diagnose queueing and tool latency |
 | Load driver | Async HTTPX script | Controlled concurrency and reproducible scenarios |
 | Packaging | Docker, later Compose | Local repeatable demo |
 | Durability, later | PostgreSQL, async SQLAlchemy, Alembic | Persistent jobs, attempts, leases |
@@ -198,6 +198,20 @@ Add metrics, traces, JSON logs, mock fault server, load script, Dockerfile,
 benchmark report, and a demo README.
 Done when another developer can reproduce the concurrency and failure results
 with documented commands and no paid model credentials.
+
+Implementation notes (2026-11-13):
+- Added Prometheus-compatible `/metrics`, opt-in JSON run logs, and opt-in
+  OpenTelemetry console spans. Logs and traces use allowlisted fields. Metrics
+  group outcomes and errors without labels derived from incident data.
+- Added an offline HTTPX benchmark and deterministic mock health faults. The
+  benchmark compares 1, 10, 50, 100, and 128 workers with the same input batch.
+- Added a lockfile-based Docker image that runs as a non-root user. The Docker
+  daemon was unavailable during verification. See `benchmarks/README.md` for
+  the reproduction commands, measured results, and limits of the evidence.
+- The sweep reached 128 overlapping runs and tool steps. The ten-minute soak
+  completed 76,928 runs and kept terminal history at 128 records. The soak
+  missed the event-loop lag target in the sandbox harness. Native benchmarking
+  and Docker verification remain open.
 
 ### 6. Durable recovery (separate follow-on)
 Persist jobs and attempts in PostgreSQL, define atomic claim/lease/heartbeat

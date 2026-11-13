@@ -5,7 +5,7 @@ Build a FastAPI service that runs 100+ concurrent I/O-bound agent runs with
 bounded resource use, non-blocking tools, observable execution, and explicit
 failure handling. Read PLAN.md before implementation.
 
-Milestones 1 through 4 implementation are authorized. Work in small, reviewable milestones
+Milestones 1 through 5 implementation are authorized. Work in small, reviewable milestones
 and follow the accepted scope and completion criteria in PLAN.md.
 
 ## Proposed stack

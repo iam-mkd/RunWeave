@@ -6,6 +6,7 @@ an offline incident-triage demo. Milestone 2 adds bounded workers, a run queue,
 submission/status/cancellation APIs, and bounded in-memory history. Milestone 3
 adds execution deadlines, retries for the read-only health tool, and graceful draining.
 Milestone 4 adds a model-driven tool loop and an optional Groq adapter.
+Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
 
 ## Quick start (PowerShell)
 
@@ -146,6 +147,7 @@ Application code lives in `src/runweave/`.
 | `agents/runner.py` | Coordinate one model → tool → summary run |
 | `agents/fake.py` | Deterministic model adapter |
 | `agents/groq.py` | Groq tool-call protocol and provider request limits |
+| `telemetry.py` | Metrics, JSON run events, and OpenTelemetry spans |
 | `tools/contracts.py` | Health schemas and tool protocol |
 | `tools/registry.py` | Allowlisted tools, validated arguments, and evidence |
 | `tools/fake.py` | Offline HTTP tool and mock response |
@@ -159,6 +161,37 @@ Adapters need no shared base class; replacing a tool does not require editing th
 runner. No service locator, generic repository, or plugin framework is introduced.
 Comments are reserved for non-obvious decisions; names and types explain routine code.
 
+## Observability and load testing
+
+Scrape `GET /metrics` to monitor admission, active runs, queue depth, retries,
+outcomes, and latency histograms. Set `RUNWEAVE_JSON_LOGS=true` for JSON run
+events on stderr and `RUNWEAVE_CONSOLE_TRACES=true` for OpenTelemetry spans on
+stdout. Run IDs correlate logs and spans. Metrics use bounded status and error
+categories. The application emits only allowlisted telemetry fields and omits
+incident descriptions, tool arguments, headers, and exception messages.
+
+Run the offline benchmark from the repository root. It uses HTTPX's in-process
+ASGI transport and a synthetic workload, with the fake model selected explicitly.
+
+```powershell
+uv run --locked python -m benchmarks.load
+uv run --locked python -m benchmarks.load --workers 128 --soak-seconds 600
+```
+
+The benchmark commands, fault matrix, and measured results are in the
+[benchmark report](benchmarks/README.md).
+
+## Docker
+
+```powershell
+docker build -t runweave:local .
+docker run --rm -p 127.0.0.1:8000:8000 runweave:local
+```
+
+The container runs one Uvicorn process and defaults to the fake model. Check readiness
+at `http://127.0.0.1:8000/health/ready` and metrics at
+`http://127.0.0.1:8000/metrics`.
+
 ## Verification
 
 ```powershell
@@ -168,7 +201,7 @@ uv run --locked ruff format --check .
 uv run --locked mypy
 ```
 
-All 61 tests passed in a temporary in-process harness that disabled the Windows
+All 62 tests passed in a temporary in-process harness that disabled the Windows
 event loop's wakeup sockets for the test process. This exercised ASGI and mock
 HTTP transports, including 128 overlapping mock runs. The sandbox still hangs
 creating the native loop's socket pair. A normal local test run and Uvicorn
@@ -182,4 +215,4 @@ Shutdown's grace period bounds draining. Final cleanup depends on adapters
 cooperating with cancellation. Run state remains in memory for the process lifetime.
 
 Follow [PLAN.md](PLAN.md) in milestone order and [AGENTS.md](AGENTS.md) for coding
-rules. Milestone 5 adds observability and reproducible load evidence.
+rules. Milestone 6 covers durable recovery.

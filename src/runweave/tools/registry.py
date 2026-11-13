@@ -1,3 +1,5 @@
+import asyncio
+
 from runweave.agents.contracts import Evidence, IncidentRequest, ToolCall
 from runweave.tools.contracts import HealthQuery, HealthTool
 
@@ -13,8 +15,9 @@ def tool_definition(name: str, description: str, schema: dict[str, object]) -> d
 
 
 class ToolRegistry:
-    def __init__(self, health_tool: HealthTool) -> None:
+    def __init__(self, health_tool: HealthTool, *, runbook_delay: float = 0) -> None:
         self._health = health_tool
+        self._runbook_delay = runbook_delay
 
     def definitions(self) -> tuple[dict[str, object], ...]:
         return (
@@ -37,6 +40,8 @@ class ToolRegistry:
             if observation.service != query.service:
                 raise ValueError("Tool observation does not match the requested service")
             return Evidence(observation.evidence_id, observation.model_dump_json())
+        if self._runbook_delay:
+            await asyncio.sleep(self._runbook_delay)
         return Evidence(
             "mock-runbook:triage-v1",
             "Check recent deployments and downstream errors. Compare latency and error rates "
