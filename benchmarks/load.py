@@ -63,6 +63,7 @@ def config(workers: int, runs: int, *, faults: bool = False) -> Settings:
     return Settings(
         _env_file=None,  # type: ignore[call-arg]  # BaseSettings dotenv override
         model_provider="fake",
+        database_url=None,
         worker_count=workers,
         queue_capacity=runs,
         run_timeout_seconds=180,

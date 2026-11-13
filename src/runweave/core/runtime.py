@@ -9,8 +9,12 @@ from runweave.agents.fake import FakeAgentModel
 from runweave.agents.groq import GroqAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.core.settings import Settings
+from runweave.orchestration.backend import MemoryBackend, RunBackend
+from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
 from runweave.orchestration.scheduler import Scheduler
+from runweave.storage.engine import postgres_engine
+from runweave.storage.postgres import PostgresRuns
 from runweave.telemetry import Telemetry
 from runweave.tools.fake import FakeHealthTool, fake_health_response
 from runweave.tools.retry import RetryingHealthTool
@@ -20,7 +24,7 @@ from runweave.tools.retry import RetryingHealthTool
 class Runtime:
     client: httpx.AsyncClient
     runner: AgentRunner
-    scheduler: Scheduler
+    scheduler: RunBackend
 
 
 @asynccontextmanager
@@ -70,19 +74,33 @@ async def open_runtime(
             telemetry=telemetry,
             runbook_delay=settings.mock_runbook_delay_seconds,
         )
-        scheduler = Scheduler(
-            executor if executor is not None else runner,
-            RunRegistry(
-                settings.history_max_records, settings.history_ttl_seconds, telemetry=telemetry
-            ),
-            worker_count=settings.worker_count,
-            queue_capacity=settings.queue_capacity,
-            cleanup_interval=settings.history_cleanup_interval_seconds,
-            run_timeout=settings.run_timeout_seconds,
-            shutdown_grace=settings.shutdown_grace_seconds,
-        )
+        run_executor = executor if executor is not None else runner
         try:
-            async with scheduler.running():
-                yield Runtime(client=client, runner=runner, scheduler=scheduler)
+            if settings.database_url is not None:
+                engine = postgres_engine(settings)
+                try:
+                    durable = DurableScheduler(
+                        PostgresRuns(engine), run_executor, settings, telemetry
+                    )
+                    async with durable.running():
+                        yield Runtime(client=client, runner=runner, scheduler=durable)
+                finally:
+                    await engine.dispose()
+            else:
+                scheduler = Scheduler(
+                    run_executor,
+                    RunRegistry(
+                        settings.history_max_records,
+                        settings.history_ttl_seconds,
+                        telemetry=telemetry,
+                    ),
+                    worker_count=settings.worker_count,
+                    queue_capacity=settings.queue_capacity,
+                    cleanup_interval=settings.history_cleanup_interval_seconds,
+                    run_timeout=settings.run_timeout_seconds,
+                    shutdown_grace=settings.shutdown_grace_seconds,
+                )
+                async with scheduler.running():
+                    yield Runtime(client=client, runner=runner, scheduler=MemoryBackend(scheduler))
         finally:
             await telemetry.close()

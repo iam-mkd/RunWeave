@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     json_logs: bool = False
     console_traces: bool = False
     mock_runbook_delay_seconds: float = Field(default=0, ge=0, le=5)
+    database_url: SecretStr | None = None
+    db_pool_size: int = Field(default=8, ge=1, le=64)
+    lease_seconds: float = Field(default=6, ge=1, le=60)
+    db_poll_seconds: float = Field(default=0.25, ge=0.05, le=5)
+    durable_max_attempts: int = Field(default=3, ge=1, le=10)
+    durable_retry_delay_seconds: float = Field(default=0.5, ge=0.05, le=30)
 
     @model_validator(mode="after")
     def require_groq_key(self) -> "Settings":

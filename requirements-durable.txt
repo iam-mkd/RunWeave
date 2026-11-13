@@ -1,0 +1,2 @@
+asyncpg==0.31.0
+alembic==1.18.4

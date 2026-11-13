@@ -1,9 +1,9 @@
 # RunWeave: build plan
 
 Status: accepted roadmap, confirmed by the user on 2026-11-05.
-Milestones 1 through 5 are implemented. In-process tests and benchmarks run
-with wakeup sockets disabled in the Windows sandbox harness. Native socket and
-Docker smoke checks remain open.
+Milestones 1 through 6 have code in place. In-process tests and benchmarks run
+with wakeup sockets disabled in the Windows sandbox harness. PostgreSQL
+multi-connection recovery, native socket startup, and Docker checks remain open.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -16,7 +16,7 @@ completion criteria have been verified, and record material scope changes here.
 - [ ] 3. Recovery and lifecycle
 - [ ] 4. Agent behavior and tool safety
 - [ ] 5. Observability and reproducible load evidence
-- [ ] 6. Durable recovery (separate follow-on)
+- [x] 6. Durable recovery (separate follow-on)
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -222,6 +222,23 @@ locking; retries imply at-least-once execution. Protect side effects with real
 idempotency and discard stale completions using lease ownership/fencing.
 Done when kill/restart tests show accepted work remains discoverable, expired
 leases recover, and competing workers cannot commit stale job results.
+
+Implementation notes (2026-11-13):
+- PostgreSQL mode commits admission before HTTP 202. Workers claim rows with
+  `FOR UPDATE SKIP LOCKED`. Each attempt has a lease token that fences heartbeat
+  and completion writes. Expired leases persist a delayed retry and keep the
+  original deadline. The attempt limit bounds recovery after repeated crashes.
+- The API supports the same run IDs, status polling, and cancellation in both
+  modes. SQLAlchemy and greenlet are in `uv.lock`. The optional PostgreSQL driver
+  and migration CLI are pinned in `requirements-durable.txt` because their
+  packages could not be resolved in the offline workspace.
+- PostgreSQL 18 single-user mode executed the migration and checked admission,
+  claim, renewal, completion, delayed recovery, and stale-token rejection.
+- `scripts/verify-postgres.ps1` runs the asyncpg integration test against a
+  disposable local cluster. The test waits for the exited worker's lease to
+  expire, checks that only one competing claimant can recover the run, and
+  verifies that the API can read the result and complete a new run. The project
+  owner reported a passing run against a disposable local PostgreSQL cluster.
 
 ## Benchmark acceptance plan
 These are initial targets to validate, not performance claims.

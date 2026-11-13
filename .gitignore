@@ -16,6 +16,7 @@ build/
 dist/
 .env
 .env.*
+.pg-test/
 !.env.example
 !.env.*.example
 *.log

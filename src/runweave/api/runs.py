@@ -5,11 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 
 from runweave.agents.contracts import IncidentRequest
 from runweave.api.dependencies import get_scheduler
+from runweave.orchestration.backend import RunBackend
 from runweave.orchestration.models import RunSnapshot
-from runweave.orchestration.scheduler import AdmissionRejected, Scheduler
+from runweave.orchestration.scheduler import AdmissionRejected
 
 router = APIRouter(prefix="/v1/runs", tags=["runs"])
-SchedulerDependency = Annotated[Scheduler, Depends(get_scheduler)]
+SchedulerDependency = Annotated[RunBackend, Depends(get_scheduler)]
 
 
 def require_run(snapshot: RunSnapshot | None) -> RunSnapshot:
@@ -25,7 +26,7 @@ async def submit_run(
     incident: IncidentRequest, response: Response, scheduler: SchedulerDependency
 ) -> RunSnapshot:
     try:
-        snapshot = scheduler.submit(incident)
+        snapshot = await scheduler.submit(incident)
     except AdmissionRejected as exc:
         raise HTTPException(
             status_code=503,
@@ -38,9 +39,9 @@ async def submit_run(
 
 @router.get("/{run_id}")
 async def get_run(run_id: UUID, scheduler: SchedulerDependency) -> RunSnapshot:
-    return require_run(scheduler.get(run_id))
+    return require_run(await scheduler.get(run_id))
 
 
 @router.post("/{run_id}/cancel")
 async def cancel_run(run_id: UUID, scheduler: SchedulerDependency) -> RunSnapshot:
-    return require_run(scheduler.cancel(run_id))
+    return require_run(await scheduler.cancel(run_id))

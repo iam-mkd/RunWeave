@@ -212,7 +212,61 @@ A live smoke test requires a key. Ruff, strict mypy, and the lockfile check pass
 
 The incident workflow uses synthetic service health and runbook evidence.
 Shutdown's grace period bounds draining. Final cleanup depends on adapters
-cooperating with cancellation. Run state remains in memory for the process lifetime.
+cooperating with cancellation. The default in-memory mode keeps run state for
+the process lifetime, subject to retention limits.
 
 Follow [PLAN.md](PLAN.md) in milestone order and [AGENTS.md](AGENTS.md) for coding
-rules. Milestone 6 covers durable recovery.
+rules.
+
+## PostgreSQL durable mode
+
+Set `RUNWEAVE_DATABASE_URL` in `.env` to a dedicated PostgreSQL database using
+`postgresql+asyncpg://user:password@127.0.0.1:5432/runweave`. Use
+`RUNWEAVE_MODEL_PROVIDER=fake` to try recovery locally with synthetic evidence.
+Install the optional driver and migration CLI after syncing the base environment,
+then apply the migration and start the service.
+
+```powershell
+uv sync --locked
+uv pip install -r requirements-durable.txt
+uv run --no-sync alembic upgrade head
+uv run --no-sync uvicorn runweave.app:create_app --factory --workers 1
+```
+
+Use the existing `POST /v1/runs`, `GET /v1/runs/{id}`, and cancel routes. Keep the
+run ID across a process restart. PostgreSQL stores the incident, result, and
+attempt history until retention cleanup. Unfinished jobs count toward
+`RUNWEAVE_QUEUE_CAPACITY` across replicas. The hard row limit is queue capacity
+plus history capacity. Terminal rows are pruned in batches.
+
+Workers renew their leases every third of the configured lease interval. If a
+worker exits, another process can claim the job after lease expiry and the
+persisted retry delay. Recovery starts a new attempt from the beginning within
+the original run deadline. This is at-least-once execution, so repeated attempts
+can repeat inference. The provided tools are read-only. Write tools would need
+downstream idempotency before they could be used safely in durable mode.
+
+Shutdown stops claiming queued work and gives active work the configured grace
+period. Unfinished claims can recover after their leases expire. A cancellation
+committed by another replica reaches the executing worker on its next heartbeat.
+Only the current lease can commit a result.
+
+The integration test creates and removes a uniquely named schema. Point it at a
+disposable database with schema creation permissions. It forces a worker process
+to exit after claiming work, then tests recovery, competing claims, and stale writes.
+
+On Windows, run this from a regular PowerShell session to install the test
+dependencies, start a temporary PostgreSQL cluster on a free loopback port, run
+the test, and clean up the cluster. Pass `-PostgresBin` if PostgreSQL is installed
+in a different directory.
+
+```powershell
+.\scripts\verify-postgres.ps1
+```
+
+For an existing disposable database, use its connection URL instead.
+
+```powershell
+$env:TEST_RUNWEAVE_POSTGRES_URL = 'postgresql+asyncpg://user:password@127.0.0.1:5432/runweave_test'
+uv run --no-sync pytest tests/test_postgres_recovery.py -q
+```

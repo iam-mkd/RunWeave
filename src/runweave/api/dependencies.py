@@ -3,10 +3,10 @@ from typing import cast
 from fastapi import HTTPException, Request
 
 from runweave.core.runtime import Runtime
-from runweave.orchestration.scheduler import Scheduler
+from runweave.orchestration.backend import RunBackend
 
 
-async def get_scheduler(request: Request) -> Scheduler:
+async def get_scheduler(request: Request) -> RunBackend:
     runtime = cast(Runtime | None, getattr(request.app.state, "runtime", None))
     if runtime is None:
         raise HTTPException(
