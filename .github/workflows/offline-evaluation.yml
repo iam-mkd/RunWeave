@@ -1,0 +1,40 @@
+name: Offline agent evaluation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    env:
+      PYDANTIC_AI_NO_BANNER: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked --extra workflow --extra eval
+      - run: uv run --no-sync pytest -q
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync mypy
+      - name: Reproduce both offline reports
+        run: |
+          uv run --no-sync python -m runweave.evaluation.suite --workflow baseline --output target/evals/baseline.json
+          uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
+      - name: Verify regression produces a failing exit status
+        shell: bash
+        run: |
+          set +e
+          uv run --no-sync python -m runweave.evaluation.suite --seed-regression severity --output target/evals/seeded.json
+          status=$?
+          test "$status" -eq 1
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: offline-evaluation
+          path: target/evals/*.json

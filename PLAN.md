@@ -18,8 +18,8 @@ completion criteria have been verified, and record material scope changes here.
 - [ ] 4. Agent behavior and tool safety
 - [ ] 5. Observability and reproducible load evidence
 - [x] 6. Durable recovery
-- [ ] 7. PydanticAI integration and workflow parity
-- [ ] 8. Automated agent evaluation and security fixtures
+- [x] 7. PydanticAI integration and workflow parity
+- [x] 8. Automated agent evaluation and security fixtures
 - [ ] 9. Authentication, authorization, and prompt-injection defenses
 - [ ] 10. Context, token, and cost budgets
 - [ ] 11. Durable workflow checkpoints and replay
@@ -352,6 +352,33 @@ Implementation notes (2026-11-14):
 - **Done when** CI can reproduce an offline report and fails on a seeded
   regression. Establish a quality baseline and a small human-reviewed fixture
   set before defining thresholds for subjective scores. Paid judges are opt-in.
+
+Implementation notes (2026-11-14):
+- The project owner confirmed milestone 7 complete when authorizing milestone 8.
+  The recorded workflow performance regression remains visible in its notes.
+- Added the optional `eval` extra with Pydantic Evals pinned to 2.68.0 and locked
+  dependencies. Packaged nine versioned synthetic fixtures with the application.
+  The owner approved the healthy/degraded, evidence, and attack expectations in
+  the implementation conversation. Review scope and date accompany the dataset.
+- Both baseline and PydanticAI workflows pass all nine cases and 52 deterministic
+  assertions. Checks cover severity, observed health, citations, scoped tool
+  selection, rejected malicious proposals, malformed results, forbidden claim
+  phrases, and canary absence. The baseline runner accepts an optional typed
+  tool registry so fixture content reaches the existing execution boundary.
+- Added stable JSON reports with source hashes and workflow, prompt policy,
+  model, fixture, evaluator, and framework versions. Reference reports and
+  reproduction commands are in `evaluations/`.
+- Added CI for offline evaluation, validation, report artifacts, and a seeded
+  failing CLI command. Tests verify five seeded regression categories for both
+  workflows, reproducibility, CLI status, and task/evaluator failures.
+- Native Windows asyncio validation passed with 83 tests passing and the opt-in
+  PostgreSQL test skipped. Ruff lint/format and strict mypy passed. Both report
+  commands passed locally. Hosted CI execution awaits a repository push.
+- The baseline uses fake decisions and deterministic phrase checks. Subjective
+  scoring and live judges have no thresholds. The evaluation guide records
+  their explicit opt-in and versioned-rubric requirements. Broader authorization,
+  real-provider injection resistance, and telemetry leakage remain in the
+  subsequent policy milestone's scope.
 
 ### 9. Authentication, authorization, and prompt-injection defenses
 

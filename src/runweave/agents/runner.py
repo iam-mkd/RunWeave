@@ -16,10 +16,11 @@ class AgentRunner:
         completion_budget: int = 2048,
         telemetry: Telemetry | None = None,
         runbook_delay: float = 0,
+        tools: ToolRegistry | None = None,
     ) -> None:
         self._steps = TriageSteps(
             model,
-            ToolRegistry(health_tool, runbook_delay=runbook_delay),
+            tools if tools is not None else ToolRegistry(health_tool, runbook_delay=runbook_delay),
             telemetry or Telemetry(),
             step_timeout,
         )

@@ -117,6 +117,20 @@ $env:RUNWEAVE_MODEL_PROVIDER = 'groq'
 uv run --no-sync python -m runweave.demo --service payments --description "Elevated latency"
 ```
 
+## Automated agent evaluation
+
+Milestone 8 adds versioned synthetic fixtures and offline Pydantic Evals reports
+for both workflows, with deterministic regression gates in CI.
+
+```powershell
+uv sync --locked --extra workflow --extra eval
+uv run --no-sync python -m runweave.evaluation.suite --workflow baseline --output target/evals/baseline.json
+uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
+```
+
+See the [evaluation baseline](evaluations/README.md) for fixture review, report
+provenance, seeded regressions, and the scope of deterministic quality checks.
+
 ## Configuration
 
 Settings load from `RUNWEAVE_` environment variables and an optional `.env`. Defaults
@@ -225,18 +239,19 @@ at `http://127.0.0.1:8000/health/ready` and metrics at
 ## Verification
 
 ```powershell
-uv run --locked pytest
-uv run --locked ruff check .
-uv run --locked ruff format --check .
-uv run --locked mypy
+uv sync --locked --extra workflow --extra eval
+uv run --no-sync pytest
+uv run --no-sync ruff check .
+uv run --no-sync ruff format --check .
+uv run --no-sync mypy
 ```
 
-All 62 tests passed in a temporary in-process harness that disabled the Windows
-event loop's wakeup sockets for the test process. This exercised ASGI and mock
-HTTP transports, including 128 overlapping mock runs. The sandbox still hangs
-creating the native loop's socket pair. A normal local test run and Uvicorn
-startup and shutdown remain pending. Groq was tested with mocked HTTP responses.
-A live smoke test requires a key. Ruff, strict mypy, and the lockfile check pass.
+On 2026-11-14 all 83 tests passed with native Windows asyncio and both optional
+workflow/evaluation extras installed. The opt-in PostgreSQL integration test was
+skipped. Both offline evaluation reports passed their nine cases and 52
+assertions. Ruff, strict mypy, and the lockfile check passed. Groq coverage uses
+mocked HTTP responses. Live inference requires explicit opt-in and a key.
+Uvicorn startup/shutdown and container verification remain pending.
 
 ## Current boundaries
 

@@ -26,6 +26,9 @@ workflow = [
     "pydantic-ai-slim==2.68.0",
     "pydantic-graph==2.68.0",
 ]
+eval = [
+    "pydantic-evals==2.68.0",
+]
 
 [dependency-groups]
 dev = [
@@ -38,6 +41,9 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+"runweave.evaluation" = ["fixtures-v1.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
