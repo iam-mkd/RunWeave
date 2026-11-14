@@ -87,6 +87,36 @@ fixed HTTPS endpoint with redirects disabled. The completion-token budget
 applies across model turns, and input and tool history are bounded by size and
 step limits. The step deadline includes any wait for a provider slot or rate limit.
 
+## PydanticAI workflow preview
+
+The PydanticAI workflow is opt-in while running parity checks. Both workflows
+use the same run API and provider settings. The preview uses PydanticAI for
+structured decisions and Pydantic Graph for step routing. The existing Groq
+adapter still owns the HTTP transport, request rate, and concurrency limits.
+
+```powershell
+uv sync --locked --extra workflow
+$env:RUNWEAVE_AGENT_WORKFLOW = 'pydanticai'
+uv run --no-sync pytest tests/test_runs_api.py tests/test_groq.py -q
+uv run --no-sync python -m benchmarks.load --workers 100
+```
+
+The benchmark report includes `"agent_workflow": "pydanticai"` when this
+workflow is selected.
+
+If you also use PostgreSQL mode, restore its driver and migration CLI after
+the locked sync with `uv pip install -r requirements-durable.txt`. Use
+`uv run --no-sync` for subsequent commands so both sets of packages are
+available.
+
+For an opt-in live smoke test, set the Groq API key in `.env` and run one
+synthetic incident. This makes live provider requests.
+
+```powershell
+$env:RUNWEAVE_MODEL_PROVIDER = 'groq'
+uv run --no-sync python -m runweave.demo --service payments --description "Elevated latency"
+```
+
 ## Configuration
 
 Settings load from `RUNWEAVE_` environment variables and an optional `.env`. Defaults

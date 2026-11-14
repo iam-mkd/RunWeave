@@ -18,9 +18,14 @@ def test_groq_requires_replacing_the_placeholder(monkeypatch: pytest.MonkeyPatch
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["baseline", "pydanticai"])
 async def test_groq_runtime_uses_validated_tool_calls_and_preserves_transcript(
     monkeypatch: pytest.MonkeyPatch,
+    workflow: str,
 ) -> None:
+    if workflow == "pydanticai":
+        pytest.importorskip("pydantic_ai")
+    monkeypatch.setenv("RUNWEAVE_AGENT_WORKFLOW", workflow)
     monkeypatch.setenv("RUNWEAVE_MODEL_PROVIDER", "groq")
     monkeypatch.setenv("RUNWEAVE_GROQ_API_KEY", "unit-test-key")
     monkeypatch.setenv("RUNWEAVE_GROQ_REQUESTS_PER_MINUTE", "600")

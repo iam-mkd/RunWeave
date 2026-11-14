@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     tool_retry_max_delay_seconds: float = Field(default=2, gt=0, le=60)
     agent_max_steps: int = Field(default=7, ge=1, le=20)
     agent_completion_tokens: int = Field(default=2048, ge=1, le=8192)
+    agent_workflow: Literal["baseline", "pydanticai"] = "baseline"
     model_provider: Literal["fake", "groq"] = "fake"
     groq_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     groq_model: str = Field(default="llama-3.3-70b-versatile", min_length=1, max_length=100)

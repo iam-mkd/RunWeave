@@ -21,6 +21,12 @@ dependencies = [
 [project.scripts]
 runweave-demo = "runweave.demo:main"
 
+[project.optional-dependencies]
+workflow = [
+    "pydantic-ai-slim==2.68.0",
+    "pydantic-graph==2.68.0",
+]
+
 [dependency-groups]
 dev = [
     "mypy>=1.14,<2",

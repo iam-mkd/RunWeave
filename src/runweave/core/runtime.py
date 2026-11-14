@@ -8,6 +8,7 @@ from runweave.agents.contracts import AgentExecutor, AgentModel
 from runweave.agents.fake import FakeAgentModel
 from runweave.agents.groq import GroqAgentModel
 from runweave.agents.runner import AgentRunner
+from runweave.agents.triage import TriageSteps
 from runweave.core.settings import Settings
 from runweave.orchestration.backend import MemoryBackend, RunBackend
 from runweave.orchestration.durable import DurableScheduler
@@ -17,13 +18,14 @@ from runweave.storage.engine import postgres_engine
 from runweave.storage.postgres import PostgresRuns
 from runweave.telemetry import Telemetry
 from runweave.tools.fake import FakeHealthTool, fake_health_response
+from runweave.tools.registry import ToolRegistry
 from runweave.tools.retry import RetryingHealthTool
 
 
 @dataclass(frozen=True)
 class Runtime:
     client: httpx.AsyncClient
-    runner: AgentRunner
+    runner: AgentExecutor
     scheduler: RunBackend
 
 
@@ -65,17 +67,38 @@ async def open_runtime(
                 concurrency=settings.groq_concurrency,
                 requests_per_minute=settings.groq_requests_per_minute,
             )
-        runner = AgentRunner(
-            model,
-            health_tool,
-            step_timeout=settings.step_timeout_seconds,
-            max_steps=settings.agent_max_steps,
-            completion_budget=settings.agent_completion_tokens,
-            telemetry=telemetry,
-            runbook_delay=settings.mock_runbook_delay_seconds,
-        )
-        run_executor = executor if executor is not None else runner
         try:
+            runner: AgentExecutor
+            if settings.agent_workflow == "pydanticai":
+                try:
+                    from runweave.agents.workflow import PydanticDecisionModel, PydanticWorkflow
+                except ModuleNotFoundError as exc:
+                    if exc.name not in {"pydantic_ai", "pydantic_graph"}:
+                        raise
+                    raise RuntimeError("Run uv sync --locked --extra workflow") from exc
+                runner = PydanticWorkflow(
+                    TriageSteps(
+                        PydanticDecisionModel(model),
+                        ToolRegistry(
+                            health_tool, runbook_delay=settings.mock_runbook_delay_seconds
+                        ),
+                        telemetry,
+                        settings.step_timeout_seconds,
+                    ),
+                    settings.agent_max_steps,
+                    settings.agent_completion_tokens,
+                )
+            else:
+                runner = AgentRunner(
+                    model,
+                    health_tool,
+                    step_timeout=settings.step_timeout_seconds,
+                    max_steps=settings.agent_max_steps,
+                    completion_budget=settings.agent_completion_tokens,
+                    telemetry=telemetry,
+                    runbook_delay=settings.mock_runbook_delay_seconds,
+                )
+            run_executor = executor if executor is not None else runner
             if settings.database_url is not None:
                 engine = postgres_engine(settings)
                 try:

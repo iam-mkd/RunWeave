@@ -210,6 +210,7 @@ async def failure_matrix() -> dict[str, object]:
 
 async def run(args: argparse.Namespace) -> None:
     report = {
+        "agent_workflow": config(1, args.runs).agent_workflow,
         "environment": {
             "platform": platform.platform(),
             "python": platform.python_version(),

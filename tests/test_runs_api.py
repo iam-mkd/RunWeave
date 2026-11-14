@@ -10,7 +10,13 @@ from runweave.core.settings import Settings
 
 
 @pytest.mark.asyncio
-async def test_submit_poll_and_repeated_cancel_of_completed_run() -> None:
+@pytest.mark.parametrize("workflow", ["baseline", "pydanticai"])
+async def test_submit_poll_and_repeated_cancel_of_completed_run(
+    workflow: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if workflow == "pydanticai":
+        pytest.importorskip("pydantic_ai")
+    monkeypatch.setenv("RUNWEAVE_AGENT_WORKFLOW", workflow)
     app = create_app(Settings(worker_count=2))
     async with (
         app.router.lifespan_context(app),
@@ -38,6 +44,35 @@ async def test_submit_poll_and_repeated_cancel_of_completed_run() -> None:
         assert completed["finished_at"] is not None
         assert (await client.post(f"{submitted['status_url']}/cancel")).json() == completed
         assert (await client.get("/health/ready")).status_code == 200
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("workflow", ["baseline", "pydanticai"])
+async def test_step_timeout_preserves_error_code(
+    workflow: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    if workflow == "pydanticai":
+        pytest.importorskip("pydantic_ai")
+    monkeypatch.setenv("RUNWEAVE_AGENT_WORKFLOW", workflow)
+    app = create_app(
+        Settings(worker_count=1, step_timeout_seconds=0.1, mock_runbook_delay_seconds=1)
+    )
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        submitted = await client.post(
+            "/v1/runs", json={"service": "payments", "description": "Latency"}
+        )
+        assert submitted.status_code == 202
+        async with asyncio.timeout(3):
+            while True:
+                completed = (await client.get(submitted.headers["Location"])).json()
+                if completed["finished_at"] is not None:
+                    break
+                await asyncio.sleep(0.01)
+        assert completed["status"] == "TIMED_OUT"
+        assert completed["error"]["code"] == "STEP_DEADLINE_EXCEEDED"
 
 
 @pytest.mark.asyncio
