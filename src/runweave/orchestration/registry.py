@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
+from runweave.security import LOCAL_PRINCIPAL, Principal
 from runweave.telemetry import Telemetry
 
 
@@ -40,7 +41,15 @@ class RunRegistry:
     def __len__(self) -> int:
         return len(self._entries)
 
-    def create(self, incident: IncidentRequest) -> RunSnapshot:
+    def unfinished_for_tenant(self, tenant: str) -> int:
+        return sum(
+            entry.snapshot.principal.tenant == tenant and not entry.snapshot.status.terminal
+            for entry in self._entries.values()
+        )
+
+    def create(
+        self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
+    ) -> RunSnapshot:
         self.prune()
         run_id = uuid4()
         snapshot = RunSnapshot(
@@ -48,6 +57,7 @@ class RunRegistry:
             status=RunStatus.QUEUED,
             status_url=f"/v1/runs/{run_id}",
             submitted_at=datetime.now(UTC),
+            principal=principal,
         )
         self._entries[run_id] = RunEntry(incident, snapshot, self._clock())
         return snapshot

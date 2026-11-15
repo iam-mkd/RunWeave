@@ -131,6 +131,20 @@ uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --out
 See the [evaluation baseline](evaluations/README.md) for fixture review, report
 provenance, seeded regressions, and the scope of deterministic quality checks.
 
+## Authentication and execution policy
+
+Milestone 9 adds owner-scoped run APIs, persisted principals, API/tool scopes,
+atomic tenant admission limits, and credential checks at execution boundaries.
+The default `local` mode uses one fixed developer identity. Select `jwt` mode
+and configure a trusted HS256 issuer, audience, and signing key for authenticated
+deployments. Local multi-tenant tests can use the `test` identity provider.
+
+Foreign runs return 404, missing API scopes return 403, and tenant quota
+rejections return 429 with `Retry-After`. PostgreSQL deployments must apply
+`alembic upgrade head` before starting this version. See the
+[security setup and policy guide](docs/security.md) for configuration, migration,
+JWT claims, audit events, and verification.
+
 ## Configuration
 
 Settings load from `RUNWEAVE_` environment variables and an optional `.env`. Defaults
@@ -246,10 +260,12 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-14 all 83 tests passed with native Windows asyncio and both optional
+On 2026-11-15 all 132 tests passed with native Windows asyncio and both optional
 workflow/evaluation extras installed. The opt-in PostgreSQL integration test was
-skipped. Both offline evaluation reports passed their nine cases and 52
-assertions. Ruff, strict mypy, and the lockfile check passed. Groq coverage uses
+skipped in that suite and passed separately against disposable PostgreSQL 18,
+including legacy migration, owner isolation, and tenant quota races. Both offline
+evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
+and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.
 Uvicorn startup/shutdown and container verification remain pending.
 

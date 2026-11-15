@@ -1,6 +1,8 @@
 import asyncio
 
 from runweave.agents.contracts import Evidence, IncidentRequest, ToolCall
+from runweave.security import PolicyDenied, current_principal
+from runweave.telemetry import Telemetry
 from runweave.tools.contracts import HealthQuery, HealthTool
 
 HEALTH = "check_health"
@@ -15,9 +17,16 @@ def tool_definition(name: str, description: str, schema: dict[str, object]) -> d
 
 
 class ToolRegistry:
-    def __init__(self, health_tool: HealthTool, *, runbook_delay: float = 0) -> None:
+    def __init__(
+        self,
+        health_tool: HealthTool,
+        *,
+        runbook_delay: float = 0,
+        telemetry: Telemetry | None = None,
+    ) -> None:
         self._health = health_tool
         self._runbook_delay = runbook_delay
+        self._telemetry = telemetry
 
     def definitions(self) -> tuple[dict[str, object], ...]:
         return (
@@ -32,9 +41,18 @@ class ToolRegistry:
     async def execute(self, call: ToolCall, incident: IncidentRequest) -> Evidence:
         if call.name not in (HEALTH, RUNBOOK):
             raise ValueError("Unknown or unauthorized tool")
+        principal = current_principal()
+        try:
+            principal.require(f"tools:{call.name}")
+        except PolicyDenied:
+            if self._telemetry:
+                self._telemetry.audit("tool", "scope", principal)
+            raise
         query = HealthQuery.model_validate_json(call.arguments, strict=True)
         if query.service != incident.service:
             raise ValueError("Tool service does not match the incident scope")
+        if self._telemetry:
+            self._telemetry.audit("tool", "allowed", principal)
         if call.name == HEALTH:
             observation = await self._health.execute(query)
             if observation.service != query.service:

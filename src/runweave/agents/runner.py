@@ -1,5 +1,6 @@
 from runweave.agents.contracts import AgentModel, IncidentRequest, IncidentResult
 from runweave.agents.triage import TriageState, TriageSteps, validate_triage_result
+from runweave.security import ContentPolicy
 from runweave.telemetry import Telemetry
 from runweave.tools.contracts import HealthTool
 from runweave.tools.registry import ToolRegistry
@@ -17,12 +18,16 @@ class AgentRunner:
         telemetry: Telemetry | None = None,
         runbook_delay: float = 0,
         tools: ToolRegistry | None = None,
+        content_policy: ContentPolicy | None = None,
     ) -> None:
         self._steps = TriageSteps(
             model,
-            tools if tools is not None else ToolRegistry(health_tool, runbook_delay=runbook_delay),
+            tools
+            if tools is not None
+            else ToolRegistry(health_tool, runbook_delay=runbook_delay, telemetry=telemetry),
             telemetry or Telemetry(),
             step_timeout,
+            content_policy=content_policy,
         )
         self._max_steps = max_steps
         self._completion_budget = completion_budget

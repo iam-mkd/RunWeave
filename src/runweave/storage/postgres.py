@@ -7,8 +7,10 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
+from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
 
-_COLUMNS = "id, status, submitted_at, started_at, finished_at, result, error"
+_COLUMNS = "id, status, submitted_at, started_at, finished_at, result, error, principal"
+_OWNER = "principal->>'tenant' = :tenant AND principal->>'subject' = :subject"
 _FINISH_ATTEMPT = """
     UPDATE runweave_attempts a SET finished_at = clock_timestamp(), outcome = changed.status
     FROM changed WHERE a.run_id = changed.id AND a.attempt = changed.attempt
@@ -35,7 +37,7 @@ class PostgresRuns:
 
     async def check(self) -> None:
         async with self._engine.connect() as conn:
-            await conn.execute(text("SELECT id FROM runweave_runs LIMIT 0"))
+            await conn.execute(text("SELECT id, principal FROM runweave_runs LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_attempts LIMIT 0"))
 
     async def admit(
@@ -46,17 +48,29 @@ class PostgresRuns:
         run_seconds: float,
         attempts: int,
         history_max: int,
+        principal: Principal = LOCAL_PRINCIPAL,
+        tenant_limit: int = 1000,
     ) -> RunSnapshot | None:
         async with self._engine.begin() as conn:
             # Serialize admission across replicas. Worker transactions never take this lock.
             await conn.execute(text("SELECT pg_advisory_xact_lock(795940314, 1)"))
+            unfinished = await conn.scalar(
+                text(
+                    "SELECT count(*) FROM runweave_runs WHERE finished_at IS NULL "
+                    "AND principal->>'tenant' = :tenant"
+                ),
+                {"tenant": principal.tenant},
+            )
+            if unfinished is not None and unfinished >= tenant_limit:
+                raise TenantQuotaExceeded()
             result = await conn.execute(
                 text(f"""
                 INSERT INTO runweave_runs
-                    (id, incident, status, submitted_at, available_at, deadline_at, max_attempts)
+                    (id, incident, status, submitted_at, available_at, deadline_at,
+                     max_attempts, principal)
                 SELECT :id, CAST(:incident AS jsonb), 'QUEUED', statement_timestamp(),
                     statement_timestamp(), statement_timestamp() + :timeout * interval '1 second',
-                    :attempts
+                    :attempts, CAST(:principal AS jsonb)
                 WHERE (SELECT count(*) FROM runweave_runs WHERE finished_at IS NULL) < :capacity
                   AND (SELECT count(*) FROM runweave_runs) < :max_rows
                 RETURNING {_COLUMNS}
@@ -68,15 +82,20 @@ class PostgresRuns:
                     attempts=attempts,
                     capacity=capacity,
                     max_rows=capacity + history_max,
+                    principal=principal.model_dump_json(),
                 ),
             )
             row = result.mappings().one_or_none()
         return snapshot(row) if row is not None else None
 
-    async def get(self, run_id: UUID) -> RunSnapshot | None:
+    async def get(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        condition = f" AND {_OWNER}" if principal is not None else ""
+        params: dict[str, object] = {"id": run_id}
+        if principal is not None:
+            params.update(tenant=principal.tenant, subject=principal.subject)
         async with self._engine.connect() as conn:
             result = await conn.execute(
-                text(f"SELECT {_COLUMNS} FROM runweave_runs WHERE id = :id"), {"id": run_id}
+                text(f"SELECT {_COLUMNS} FROM runweave_runs WHERE id = :id{condition}"), params
             )
             row = result.mappings().one_or_none()
         return snapshot(row) if row is not None else None
@@ -101,7 +120,8 @@ class PostgresRuns:
                 ), recorded AS (
                     INSERT INTO runweave_attempts (run_id, attempt, lease_token, started_at)
                     SELECT id, attempt, lease_token, clock_timestamp() FROM claimed
-                ) SELECT id, status, submitted_at, started_at, finished_at, result, error, incident,
+                ) SELECT id, status, submitted_at, started_at, finished_at, result, error,
+                    principal, incident,
                     extract(epoch FROM deadline_at - clock_timestamp()) AS remaining
                 FROM claimed
             """),
@@ -170,12 +190,17 @@ class PostgresRuns:
             ),
         )
 
-    async def cancel(self, run_id: UUID) -> RunSnapshot | None:
+    async def cancel(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        condition = "status IN ('QUEUED', 'RUNNING')"
+        params: dict[str, object] = dict(id=run_id, status="CANCELLED", result=None, error=None)
+        if principal is not None:
+            condition += f" AND {_OWNER}"
+            params.update(tenant=principal.tenant, subject=principal.subject)
         changed = await self._finish(
-            "status IN ('QUEUED', 'RUNNING')",
-            dict(id=run_id, status="CANCELLED", result=None, error=None),
+            condition,
+            params,
         )
-        return changed if changed is not None else await self.get(run_id)
+        return changed if changed is not None else await self.get(run_id, principal)
 
     async def maintain(self, *, retry_delay: float, history_ttl: float, history_max: int) -> None:
         async with self._engine.begin() as conn:

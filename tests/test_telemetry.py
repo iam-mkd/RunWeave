@@ -43,7 +43,8 @@ async def test_metrics_logs_and_traces_omit_sensitive_fields(
         assert "runweave_active_runs 0" in metrics.text
         assert "runweave_queue_wait_seconds_count 1" in metrics.text
     captured = capsys.readouterr()
-    event = json.loads(captured.err.strip())
+    events = [json.loads(line) for line in captured.err.splitlines()]
+    event = next(event for event in events if event["event"] == "run.finished")
     assert event["event"] == "run.finished"
     assert event["run_id"] == response.json()["id"]
     assert '"name": "agent.run"' in captured.out

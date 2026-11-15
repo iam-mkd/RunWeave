@@ -24,13 +24,14 @@ from runweave.agents.contracts import (
 from runweave.agents.fake import FakeAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.agents.triage import TriageSteps
+from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
 from runweave.telemetry import Telemetry
 from runweave.tools.contracts import HealthObservation, HealthQuery
 from runweave.tools.registry import HEALTH, RUNBOOK, ToolRegistry
 
 Workflow = Literal["baseline", "pydanticai"]
 Regression = Literal["severity", "evidence", "claims", "secret", "tool"]
-EVALUATOR_VERSION = "triage-checks-v1"
+EVALUATOR_VERSION = "triage-checks-v2"
 CANARY = "RW_PRIVATE_CANARY_73f09"
 DEFAULT_RUNBOOK = "Compare synthetic latency and error rates before escalating."
 
@@ -44,17 +45,19 @@ class Fixture(BaseModel):
     severity: Literal["low", "medium", "high"] = "medium"
     runbook: str = DEFAULT_RUNBOOK
     scenario: Literal[
-        "normal", "shell", "cross_service", "extra_url", "fabricated", "malformed"
+        "normal", "shell", "cross_service", "extra_url", "fabricated", "malformed", "secret_result"
     ] = "normal"
     error_contains: str | None = None
     expected_calls: tuple[str, ...] = (HEALTH, RUNBOOK)
     forbidden_claims: tuple[str, ...] = ("production outage confirmed", "root cause proven")
+    principal: Principal = LOCAL_PRINCIPAL
+    protected_values: tuple[str, ...] = ()
 
 
 class FixtureSet(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal["triage-fixtures-v1"]
+    version: Literal["triage-fixtures-v1", "triage-fixtures-v2"]
     review: dict[str, str]
     cases: list[Fixture] = Field(min_length=1)
 
@@ -125,6 +128,8 @@ class FixtureModel(FakeAgentModel):
                 payload["evidence_ids"] = ["fabricated"]
             if scenario == "malformed":
                 payload["severity"] = "critical-invalid"
+            if scenario == "secret_result":
+                payload["summary"] = CANARY
             decision = ModelDecision(IncidentResult.model_validate(payload), 1)
         if isinstance(decision.action, ToolCall):
             self.proposals.append(decision.action)
@@ -135,6 +140,7 @@ async def execute_fixture(fixture: Fixture, workflow: Workflow) -> Observation:
     model = FixtureModel(fixture)
     tools = FixtureTools(fixture)
     telemetry = Telemetry()
+    content_policy = ContentPolicy(fixture.protected_values)
     expected_errors: tuple[type[Exception], ...] = (ValueError,)
     try:
         runner: AgentExecutor
@@ -145,12 +151,23 @@ async def execute_fixture(fixture: Fixture, workflow: Workflow) -> Observation:
 
             expected_errors += (UnexpectedModelBehavior,)
             runner = PydanticWorkflow(
-                TriageSteps(PydanticDecisionModel(model), tools, telemetry, 5), 7, 2048
+                TriageSteps(
+                    PydanticDecisionModel(model), tools, telemetry, 5, content_policy=content_policy
+                ),
+                7,
+                2048,
             )
         else:
-            runner = AgentRunner(model, FixtureHealth(fixture), tools=tools, telemetry=telemetry)
+            runner = AgentRunner(
+                model,
+                FixtureHealth(fixture),
+                tools=tools,
+                telemetry=telemetry,
+                content_policy=content_policy,
+            )
         try:
-            result = await runner.run(fixture.incident)
+            with principal_scope(fixture.principal):
+                result = await runner.run(fixture.incident)
             return Observation(
                 result=result, executed=tuple(tools.executed), proposals=tuple(model.proposals)
             )
@@ -215,11 +232,14 @@ class TriageEvaluator(Evaluator[Fixture, Observation, None]):
 
 
 def load_fixtures() -> tuple[FixtureSet, str]:
-    raw = files("runweave.evaluation").joinpath("fixtures-v1.json").read_bytes()
-    fixtures = FixtureSet.model_validate_json(raw)
+    resources = files("runweave.evaluation")
+    original = resources.joinpath("fixtures-v1.json").read_bytes()
+    extension = resources.joinpath("fixtures-v2.json").read_bytes()
+    fixtures = FixtureSet.model_validate_json(extension)
+    fixtures.cases = FixtureSet.model_validate_json(original).cases + fixtures.cases
     if len({case.name for case in fixtures.cases}) != len(fixtures.cases):
         raise ValueError("Fixture names must be unique")
-    return fixtures, hashlib.sha256(raw).hexdigest()
+    return fixtures, hashlib.sha256(original + extension).hexdigest()
 
 
 def seed_regression(output: Observation, regression: Regression) -> Observation:
@@ -308,6 +328,7 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
         ).hexdigest(),
         "tool_policy_sha256": hashlib.sha256(
             files("runweave.tools").joinpath("registry.py").read_bytes()
+            + files("runweave").joinpath("security.py").read_bytes()
         ).hexdigest(),
     }
 

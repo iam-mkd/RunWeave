@@ -8,6 +8,7 @@ from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.scheduler import AdmissionRejected
+from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
 from runweave.storage.engine import StorageUnavailable, storage_errors
 from runweave.storage.postgres import Claim, PostgresRuns
 from runweave.telemetry import Telemetry
@@ -15,7 +16,12 @@ from runweave.telemetry import Telemetry
 
 class DurableScheduler:
     def __init__(
-        self, store: PostgresRuns, executor: AgentExecutor, settings: Settings, telemetry: Telemetry
+        self,
+        store: PostgresRuns,
+        executor: AgentExecutor,
+        settings: Settings,
+        telemetry: Telemetry,
+        content_policy: ContentPolicy | None = None,
     ) -> None:
         self._store = store
         self._executor = executor
@@ -27,12 +33,17 @@ class DurableScheduler:
         self._idle = asyncio.Event()
         self._idle.set()
         self._in_progress = 0
+        self._content_policy = content_policy or ContentPolicy()
 
     @property
     def ready(self) -> bool:
         return self._accepting
 
-    async def submit(self, incident: IncidentRequest) -> RunSnapshot:
+    async def submit(
+        self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
+    ) -> RunSnapshot:
+        principal.require("runs:submit")
+        self._content_policy.check(incident.model_dump_json())
         if not self.ready:
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
         with storage_errors():
@@ -42,6 +53,8 @@ class DurableScheduler:
                 run_seconds=self._settings.run_timeout_seconds,
                 attempts=self._settings.durable_max_attempts,
                 history_max=self._settings.history_max_records,
+                principal=principal,
+                tenant_limit=self._settings.tenant_max_unfinished,
             )
         if run is None:
             self._telemetry.rejected["queue_full"] += 1
@@ -49,13 +62,17 @@ class DurableScheduler:
         self._telemetry.admitted += 1
         return run
 
-    async def get(self, run_id: UUID) -> RunSnapshot | None:
+    async def get(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        if principal is not None:
+            principal.require("runs:read")
         with storage_errors():
-            return await self._store.get(run_id)
+            return await self._store.get(run_id, principal)
 
-    async def cancel(self, run_id: UUID) -> RunSnapshot | None:
+    async def cancel(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        if principal is not None:
+            principal.require("runs:cancel")
         with storage_errors():
-            run = await self._store.cancel(run_id)
+            run = await self._store.cancel(run_id, principal)
         if run is not None and run.status == RunStatus.CANCELLED:
             for active_id, task in self._active.values():
                 if active_id == run_id and not task.cancelling():
@@ -148,9 +165,16 @@ class DurableScheduler:
                 return
 
     async def _run(self, claim: Claim, deadline: float) -> IncidentResult:
-        with self._telemetry.span("agent.run", run_id=claim.snapshot.id):
+        with (
+            principal_scope(claim.snapshot.principal),
+            self._telemetry.span("agent.run", run_id=claim.snapshot.id),
+        ):
             async with deadline_scope(deadline, RUN_DEADLINE):
-                return await self._executor.run(claim.incident)
+                claim.snapshot.principal.require("runs:submit")
+                self._content_policy.check(claim.incident.model_dump_json())
+                result = await self._executor.run(claim.incident)
+                self._content_policy.check(result.model_dump_json())
+                return result
 
     async def _execute(self, claim: Claim, deadline: float) -> None:
         run_id = claim.snapshot.id

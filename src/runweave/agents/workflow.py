@@ -49,6 +49,7 @@ class PydanticDecisionModel:
             ],
             retries=0,
         )
+        self._agent.instrument = False
 
     async def decide(
         self,

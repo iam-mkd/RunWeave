@@ -2,9 +2,10 @@ from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from runweave.agents.contracts import IncidentResult
+from runweave.security import LOCAL_PRINCIPAL, Principal
 
 
 class RunStatus(StrEnum):
@@ -38,3 +39,4 @@ class RunSnapshot(BaseModel):
     finished_at: datetime | None = None
     result: IncidentResult | None = None
     error: RunError | None = None
+    principal: Principal = Field(default=LOCAL_PRINCIPAL, exclude=True)

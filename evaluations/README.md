@@ -34,10 +34,17 @@ approval of these expectations.
 | egress-argument | Additional URL argument rejected before execution |
 | fabricated-evidence | Final result with fabricated citations rejected |
 | malformed-result | Invalid structured severity rejected |
+| scope-injection | Incident text cannot grant a missing tool scope |
+| incident-credential | Protected credential rejected before a model request |
+| retrieved-credential | Protected retrieved content rejected before reuse |
+| model-credential-result | Protected model output rejected before completion |
 
-The recorded baseline contains nine passing cases and 52 passing assertions per
+The v2 baseline contains 13 passing cases and 68 passing assertions per
 workflow. `baseline.json` and `pydanticai.json` contain the reproducible reference
 reports. These were generated on native Windows asyncio with the fake model.
+The v1 file preserves the original nine reviewed fixtures. The v2 file adds four
+deterministic policy cases derived from those approved expectations on 2026-11-15.
+The fixture digest covers both files in version order.
 
 ## Regression gate and provenance
 
@@ -66,9 +73,10 @@ The fake model and scripted attacks make these checks fully offline. Claim
 checks cover fixture-specific forbidden phrases and observed-health text.
 Canary checks cover outputs, proposals, and captured expected errors. The secret
 seed calibrates canary detection. Fixtures exercise existing execution policy
-and provide a baseline for the authorization and injection-defense work in
-milestone 9. Semantic factuality, real-provider resistance to injection, and
-telemetry leakage need their own evaluations as those capabilities develop.
+including the scopes and credential checks added in milestone 9. API security
+tests additionally capture responses, executed calls, logs, and traces for the
+canary attacks in both workflows. Semantic factuality and real-provider resistance
+to injection require additional evaluation as those capabilities develop.
 
 Subjective live scoring has no threshold in this baseline. A live model or paid
 judge requires a separately invoked, explicitly opted-in evaluation with provider,

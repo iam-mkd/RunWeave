@@ -2,9 +2,10 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 6 have code in place. The PostgreSQL recovery check passed
-locally. In-process tests and benchmarks run with wakeup sockets disabled in
-the Windows sandbox harness. Native socket startup and Docker checks remain open.
+Milestones 1 through 9 have code in place. Native Windows in-process tests and
+the disposable PostgreSQL recovery/security checks passed locally. Earlier
+benchmark harness limitations are recorded below. Server startup and Docker
+checks remain open.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -20,7 +21,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 6. Durable recovery
 - [x] 7. PydanticAI integration and workflow parity
 - [x] 8. Automated agent evaluation and security fixtures
-- [ ] 9. Authentication, authorization, and prompt-injection defenses
+- [x] 9. Authentication, authorization, and prompt-injection defenses
 - [ ] 10. Context, token, and cost budgets
 - [ ] 11. Durable workflow checkpoints and replay
 - [ ] 12. Human approvals and resumable waiting
@@ -393,6 +394,42 @@ Implementation notes (2026-11-14):
 - **Done when** cross-tenant access tests fail closed and injection fixtures
   cannot trigger unauthorized operations or leak test secrets through tool calls,
   outputs, or telemetry. Extend the same tests as new capabilities arrive.
+
+Implementation notes (2026-11-15):
+- Added immutable tenant/subject/scope principals and local, test, and signed-JWT
+  identity providers. JWT mode pins HS256 and requires a configured issuer,
+  audience, signing key, integer issued-at/expiry claims, and bounded identity
+  fields. PyJWT 2.15.1 is pinned in `uv.lock`.
+- Run reads and cancellation filter by tenant and subject. API scope checks
+  precede access. Cancellation also requires read scope because it returns the
+  run snapshot. Foreign and unknown IDs share the same 404 response.
+- Principals persist with each job, propagate through isolated execution
+  contexts, and retain scopes/expiry through durable recovery. Migration 0002
+  maps legacy jobs to the fixed local developer owner. Tool dispatch rechecks
+  scopes and expiry, with strict arguments and incident service binding.
+- Atomic per-tenant unfinished-run quotas return 429 with Retry-After. Memory
+  mode admits without yielding. PostgreSQL checks quota under the existing
+  transaction-level admission lock across replicas.
+- Added configured-credential filtering across incident input, model proposals,
+  retrieved evidence, final results, and retained API responses. Validation and
+  execution errors omit sensitive payloads. Both HTTP adapters disable redirects
+  explicitly, health responses are bounded, and PydanticAI content instrumentation
+  is disabled. Policy metrics and optional JSON audit events use bounded labels
+  and hashed principal identities.
+- Extended the reviewed v1 evaluation baseline with four v2 policy cases. Both
+  workflows passed all 13 cases and 68 assertions. The seeded-regression command
+  returned exit 1 with no task failures. The security guide describes the exact
+  credential filtering and fake-model evaluation scope.
+- Native Windows validation passed with 132 tests passing and the opt-in
+  PostgreSQL test skipped in the main suite. That integration test passed
+  separately on disposable PostgreSQL 18, covering migration of an existing row,
+  owner isolation, concurrent tenant admissions, lease recovery, and fencing.
+  Ruff lint/format, strict mypy, and the offline lockfile check passed.
+- CI now provisions a disposable PostgreSQL service for the integration test
+  alongside offline evaluation and security tests. Hosted execution awaits a push.
+  The default local identity preserves the offline demo. JWT deployment setup,
+  the migration command, monitoring access, expiry-based permission refresh, and
+  audit queue limits are documented in `docs/security.md`.
 
 ### 10. Context, token, and cost budgets
 

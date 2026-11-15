@@ -12,12 +12,26 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PYDANTIC_AI_NO_BANNER: '1'
+      TEST_RUNWEAVE_POSTGRES_URL: postgresql+asyncpg://runweave_test:synthetic-test-password@127.0.0.1:5432/postgres
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: runweave_test
+          POSTGRES_PASSWORD: synthetic-test-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U runweave_test -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: '3.13'
       - run: uv sync --locked --extra workflow --extra eval
+      - run: uv pip install -r requirements-durable.txt
       - run: uv run --no-sync pytest -q
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .

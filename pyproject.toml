@@ -14,6 +14,7 @@ dependencies = [
     "opentelemetry-sdk>=1.44,<2",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
+    "pyjwt==2.15.1",
     "sqlalchemy[asyncio]>=2.0.54,<2.1",
     "uvicorn>=0.34,<1",
 ]
@@ -43,7 +44,7 @@ dev = [
 where = ["src"]
 
 [tool.setuptools.package-data]
-"runweave.evaluation" = ["fixtures-v1.json"]
+"runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

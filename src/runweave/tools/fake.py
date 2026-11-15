@@ -26,6 +26,13 @@ class FakeHealthTool:
         self._client = client
 
     async def execute(self, query: HealthQuery) -> HealthObservation:
-        response = await self._client.get(f"/health/{query.service}")
-        response.raise_for_status()
-        return HealthObservation.model_validate(response.json())
+        body = bytearray()
+        async with self._client.stream(
+            "GET", f"https://mock-tools.invalid/health/{query.service}", follow_redirects=False
+        ) as response:
+            response.raise_for_status()
+            async for chunk in response.aiter_bytes(chunk_size=4096):
+                if len(body) + len(chunk) > 16384:
+                    raise ValueError("Health response exceeds the size limit")
+                body.extend(chunk)
+        return HealthObservation.model_validate_json(body)

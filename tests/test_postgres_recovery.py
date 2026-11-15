@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.app import create_app
 from runweave.core.settings import Settings
-from runweave.orchestration.models import RunStatus
+from runweave.orchestration.models import RunSnapshot, RunStatus
+from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
 from runweave.storage.postgres import PostgresRuns
 
 _DSN = "TEST_RUNWEAVE_POSTGRES_URL"
@@ -46,12 +47,30 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
     async with admin.begin() as conn:
         await conn.execute(text(f"CREATE SCHEMA {schema}"))
     try:
-        migration = _TEST_FILE.parents[1] / "migrations/0001_durable_runs.sql"
-        migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
+        legacy_id = uuid4()
         async with engine.begin() as conn:
-            for statement in migration_sql.split(";"):
-                if statement.strip():
-                    await conn.execute(text(statement))
+            for name in ("0001_durable_runs.sql", "0002_run_principals.sql"):
+                migration = _TEST_FILE.parents[1] / "migrations" / name
+                migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
+                for statement in migration_sql.split(";"):
+                    if statement.strip():
+                        await conn.execute(text(statement))
+                if name == "0001_durable_runs.sql":
+                    await conn.execute(
+                        text("""
+                        INSERT INTO runweave_runs
+                        (id, incident, status, submitted_at, available_at, deadline_at,
+                         finished_at, max_attempts)
+                        VALUES (:id, '{"service":"payments","description":"Legacy"}'::jsonb,
+                            'CANCELLED', now(), now(), now(), now(), 3)
+                    """),
+                        {"id": legacy_id},
+                    )
+            legacy_principal = await conn.scalar(
+                text("SELECT principal FROM runweave_runs WHERE id = :id"), {"id": legacy_id}
+            )
+            assert Principal.model_validate(legacy_principal) == LOCAL_PRINCIPAL
+            await conn.execute(text("DELETE FROM runweave_runs WHERE id = :id"), {"id": legacy_id})
         store = PostgresRuns(engine)
         incident = IncidentRequest(service="payments", description="Synthetic restart test")
 
@@ -115,7 +134,47 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         assert await store.renew(claim, 3)
         completed = await store.finish(claim, RunStatus.SUCCEEDED, result=result)
         assert completed is not None and completed.result == result
+        assert completed.principal == LOCAL_PRINCIPAL
         assert await store.cancel(run_id) == completed
+
+        owner = Principal(tenant="tenant-a", subject="alice", scopes=LOCAL_PRINCIPAL.scopes)
+        stranger = Principal(tenant="tenant-b", subject="alice", scopes=LOCAL_PRINCIPAL.scopes)
+        colleague = Principal(tenant="tenant-a", subject="bob", scopes=LOCAL_PRINCIPAL.scopes)
+
+        async def scoped_admit(principal: Principal) -> RunSnapshot | None:
+            return await store.admit(
+                incident,
+                capacity=100,
+                run_seconds=30,
+                attempts=3,
+                history_max=100,
+                principal=principal,
+                tenant_limit=1,
+            )
+
+        scoped = await asyncio.gather(
+            *(scoped_admit(owner) for _ in range(8)), return_exceptions=True
+        )
+        owned = [run for run in scoped if not isinstance(run, BaseException) and run is not None]
+        assert len(owned) == 1
+        assert sum(isinstance(item, TenantQuotaExceeded) for item in scoped) == 7
+        owned_id = owned[0].id
+        for other in (stranger, colleague):
+            assert await store.get(owned_id, other) is None
+            assert await store.cancel(owned_id, other) is None
+        owned_snapshot = await store.get(owned_id, owner)
+        assert owned_snapshot is not None and owned_snapshot.status == RunStatus.QUEUED
+        foreign = await scoped_admit(stranger)
+        assert foreign is not None
+        assert await store.cancel(foreign.id, stranger) is not None
+        assert await store.cancel(owned_id, owner) is not None
+        replacement = await scoped_admit(owner)
+        assert replacement is not None
+        recovered_claim = await store.claim(3)
+        assert recovered_claim is not None
+        assert recovered_claim.snapshot.id == replacement.id
+        assert recovered_claim.snapshot.principal == owner
+        assert await store.finish(recovered_claim, RunStatus.SUCCEEDED, result=result) is not None
 
         monkeypatch.setattr(
             "runweave.core.runtime.postgres_engine", lambda settings: scoped_engine(dsn, schema)
@@ -129,6 +188,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
             ) as client,
         ):
             assert (await client.get(completed.status_url)).json()["status"] == "SUCCEEDED"
+            assert (await client.get(replacement.status_url)).status_code == 404
             accepted = await client.post("/v1/runs", json=incident.model_dump())
             assert accepted.status_code == 202
             async with asyncio.timeout(5):

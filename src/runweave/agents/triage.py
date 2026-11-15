@@ -9,6 +9,7 @@ from runweave.agents.contracts import (
     ToolExchange,
 )
 from runweave.deadline import STEP_DEADLINE, deadline_scope
+from runweave.security import ContentPolicy
 from runweave.telemetry import Telemetry
 from runweave.tools.registry import HEALTH, RUNBOOK, ToolRegistry
 
@@ -25,14 +26,22 @@ class TriageState:
 
 class TriageSteps:
     def __init__(
-        self, model: AgentModel, tools: ToolRegistry, telemetry: Telemetry, step_timeout: float
+        self,
+        model: AgentModel,
+        tools: ToolRegistry,
+        telemetry: Telemetry,
+        step_timeout: float,
+        *,
+        content_policy: ContentPolicy | None = None,
     ) -> None:
         self._model = model
         self._tools = tools
         self._telemetry = telemetry
         self._step_timeout = step_timeout
+        self._content_policy = content_policy or ContentPolicy()
 
     async def decide(self, state: TriageState) -> ToolCall | IncidentResult:
+        self._content_policy.check(state.incident.model_dump_json())
         if state.steps_remaining <= 0 or state.tokens_remaining <= 0:
             raise ValueError(_BUDGET_EXHAUSTED)
         deadline = asyncio.get_running_loop().time() + self._step_timeout
@@ -46,6 +55,7 @@ class TriageSteps:
                 )
         if not 0 < decision.completion_tokens <= state.tokens_remaining:
             raise ValueError("Invalid completion token usage")
+        self._content_policy.check(decision.action.model_dump_json())
         state.steps_remaining -= 1
         state.tokens_remaining -= decision.completion_tokens
         return decision.action
@@ -60,6 +70,10 @@ class TriageSteps:
         with self._telemetry.step(tool=True):
             async with deadline_scope(deadline, STEP_DEADLINE):
                 evidence = await self._tools.execute(call, state.incident)
+        self._content_policy.check(evidence.id)
+        self._content_policy.check(evidence.content)
+        if len(evidence.content) > 16384 or len(evidence.id) > 100:
+            raise ValueError("Tool evidence exceeds the size limit")
         state.history.append(ToolExchange(call, evidence))
         state.steps_remaining -= 1
 

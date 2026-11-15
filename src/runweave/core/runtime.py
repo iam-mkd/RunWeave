@@ -14,6 +14,7 @@ from runweave.orchestration.backend import MemoryBackend, RunBackend
 from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
 from runweave.orchestration.scheduler import Scheduler
+from runweave.security import ContentPolicy
 from runweave.storage.engine import postgres_engine
 from runweave.storage.postgres import PostgresRuns
 from runweave.telemetry import Telemetry
@@ -27,6 +28,8 @@ class Runtime:
     client: httpx.AsyncClient
     runner: AgentExecutor
     scheduler: RunBackend
+    telemetry: Telemetry
+    content_policy: ContentPolicy
 
 
 @asynccontextmanager
@@ -51,6 +54,14 @@ async def open_runtime(
         trust_env=False,
     ) as client:
         telemetry = Telemetry(json_logs=settings.json_logs, console_traces=settings.console_traces)
+        content_policy = ContentPolicy(
+            (
+                settings.groq_api_key.get_secret_value(),
+                settings.auth_signing_key.get_secret_value(),
+                *settings.auth_test_identities.keys(),
+                *(value.get_secret_value() for value in settings.protected_values),
+            )
+        )
         health_tool = RetryingHealthTool(
             FakeHealthTool(client),
             attempts=settings.tool_retry_attempts,
@@ -80,10 +91,13 @@ async def open_runtime(
                     TriageSteps(
                         PydanticDecisionModel(model),
                         ToolRegistry(
-                            health_tool, runbook_delay=settings.mock_runbook_delay_seconds
+                            health_tool,
+                            runbook_delay=settings.mock_runbook_delay_seconds,
+                            telemetry=telemetry,
                         ),
                         telemetry,
                         settings.step_timeout_seconds,
+                        content_policy=content_policy,
                     ),
                     settings.agent_max_steps,
                     settings.agent_completion_tokens,
@@ -97,16 +111,17 @@ async def open_runtime(
                     completion_budget=settings.agent_completion_tokens,
                     telemetry=telemetry,
                     runbook_delay=settings.mock_runbook_delay_seconds,
+                    content_policy=content_policy,
                 )
             run_executor = executor if executor is not None else runner
             if settings.database_url is not None:
                 engine = postgres_engine(settings)
                 try:
                     durable = DurableScheduler(
-                        PostgresRuns(engine), run_executor, settings, telemetry
+                        PostgresRuns(engine), run_executor, settings, telemetry, content_policy
                     )
                     async with durable.running():
-                        yield Runtime(client=client, runner=runner, scheduler=durable)
+                        yield Runtime(client, runner, durable, telemetry, content_policy)
                 finally:
                     await engine.dispose()
             else:
@@ -122,8 +137,12 @@ async def open_runtime(
                     cleanup_interval=settings.history_cleanup_interval_seconds,
                     run_timeout=settings.run_timeout_seconds,
                     shutdown_grace=settings.shutdown_grace_seconds,
+                    tenant_limit=settings.tenant_max_unfinished,
+                    content_policy=content_policy,
                 )
                 async with scheduler.running():
-                    yield Runtime(client=client, runner=runner, scheduler=MemoryBackend(scheduler))
+                    yield Runtime(
+                        client, runner, MemoryBackend(scheduler), telemetry, content_policy
+                    )
         finally:
             await telemetry.close()

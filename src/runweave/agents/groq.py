@@ -141,6 +141,7 @@ class GroqAgentModel:
                 GROQ_URL,
                 json=payload,
                 headers={"Authorization": f"Bearer {self._api_key.get_secret_value().strip()}"},
+                follow_redirects=False,
             ) as response:
                 response.raise_for_status()
                 async for chunk in response.aiter_bytes(chunk_size=8192):

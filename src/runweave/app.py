@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from runweave.agents.contracts import AgentExecutor
@@ -11,6 +12,8 @@ from runweave.api.metrics import router as metrics_router
 from runweave.api.runs import router as runs_router
 from runweave.core.runtime import open_runtime
 from runweave.core.settings import Settings
+from runweave.identity import IdentityProvider
+from runweave.security import PolicyDenied
 from runweave.storage.engine import StorageUnavailable
 
 
@@ -34,6 +37,21 @@ def create_app(
             app.state.runtime = None
 
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
+    app.state.identity_provider = IdentityProvider(config)
+
+    @app.exception_handler(PolicyDenied)
+    async def policy_denied(request: Request, exc: PolicyDenied) -> JSONResponse:
+        return JSONResponse(
+            status_code=403,
+            content={"detail": {"code": "FORBIDDEN", "message": "Operation not permitted"}},
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={"detail": {"code": "INVALID_REQUEST", "message": "Invalid request data"}},
+        )
 
     @app.exception_handler(StorageUnavailable)
     async def storage_unavailable(request: Request, exc: StorageUnavailable) -> JSONResponse:

@@ -3,6 +3,8 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from runweave.security import Principal
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -14,6 +16,13 @@ class Settings(BaseSettings):
     )
 
     app_name: str = Field(default="RunWeave", min_length=1, max_length=100)
+    auth_mode: Literal["local", "test", "jwt"] = "local"
+    auth_test_identities: dict[str, Principal] = Field(default_factory=dict, repr=False)
+    auth_issuer: str = Field(default="", max_length=500)
+    auth_audience: str = Field(default="", max_length=200)
+    auth_signing_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    tenant_max_unfinished: int = Field(default=1000, ge=1, le=10000)
+    protected_values: tuple[SecretStr, ...] = Field(default=(), max_length=32)
     http_timeout_seconds: float = Field(default=5.0, gt=0, le=60)
     http_max_connections: int = Field(default=128, ge=1, le=1024)
     worker_count: int = Field(default=128, ge=1, le=1024)
@@ -50,4 +59,20 @@ class Settings(BaseSettings):
         key = self.groq_api_key.get_secret_value().strip()
         if self.model_provider == "groq" and (not key or key == "replace_with_your_groq_api_key"):
             raise ValueError("Set RUNWEAVE_GROQ_API_KEY before enabling Groq")
+        return self
+
+    @model_validator(mode="after")
+    def require_identity_configuration(self) -> "Settings":
+        if self.auth_mode == "jwt" and (
+            not self.auth_issuer.strip()
+            or not self.auth_audience.strip()
+            or len(self.auth_signing_key.get_secret_value().encode()) < 32
+        ):
+            raise ValueError("JWT mode requires issuer, audience, and a 32-byte signing key")
+        if self.auth_mode == "test" and not self.auth_test_identities:
+            raise ValueError("Test mode requires configured test identities")
+        if len(self.auth_test_identities) > 32 or any(
+            not 16 <= len(token) <= 512 for token in self.auth_test_identities
+        ):
+            raise ValueError("Configure at most 32 test tokens of 16 to 512 characters")
         return self

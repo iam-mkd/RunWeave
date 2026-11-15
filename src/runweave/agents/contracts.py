@@ -26,7 +26,7 @@ class IncidentResult(BaseModel):
 
 
 class ToolCall(BaseModel):
-    model_config = ConfigDict(frozen=True, strict=True)
+    model_config = ConfigDict(frozen=True, strict=True, extra="forbid")
 
     id: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=64)

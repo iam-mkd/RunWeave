@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import logging
 import sys
@@ -19,6 +20,7 @@ from opentelemetry.trace import StatusCode
 
 if TYPE_CHECKING:
     from runweave.orchestration.models import RunSnapshot
+    from runweave.security import Principal
 
 BUCKETS = (0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 15, 30, 60)
 
@@ -66,6 +68,7 @@ class Telemetry:
         self.rejected: Counter[str] = Counter()
         self.outcomes: Counter[str] = Counter()
         self.failure_kinds: Counter[str] = Counter()
+        self.audit_decisions: Counter[tuple[str, str]] = Counter()
         self.retry_attempts = 0
         self.queue_wait = Histogram()
         self.run_duration = Histogram()
@@ -101,6 +104,26 @@ class Telemetry:
             await asyncio.to_thread(self._provider.shutdown)
         if self._listener:
             await asyncio.to_thread(self._listener.stop)
+
+    def audit(self, action: str, reason: str, principal: "Principal | None" = None) -> None:
+        self.audit_decisions[action, reason] += 1
+        if self._logger:
+            identity = (
+                hashlib.sha256(f"{principal.tenant}/{principal.subject}".encode()).hexdigest()
+                if principal
+                else None
+            )
+            self._logger.info(
+                json.dumps(
+                    {
+                        "timestamp": datetime.now(UTC).isoformat(),
+                        "event": "policy.decision",
+                        "action": action,
+                        "reason": reason,
+                        "principal_hash": identity,
+                    }
+                )
+            )
 
     async def sample_loop_lag(self) -> None:
         loop = asyncio.get_running_loop()
@@ -176,6 +199,11 @@ class Telemetry:
             "peak_active_tool_steps": ("gauge", self.peak_tools),
         }
         lines: list[str] = []
+        lines.append("# TYPE runweave_policy_decisions_total counter")
+        for (action, reason), count in sorted(self.audit_decisions.items()):
+            lines.append(
+                f'runweave_policy_decisions_total{{action="{action}",reason="{reason}"}} {count}'
+            )
         for name, (kind, value) in scalars.items():
             lines.extend((f"# TYPE runweave_{name} {kind}", f"runweave_{name} {value}"))
         for name, label, counts in (

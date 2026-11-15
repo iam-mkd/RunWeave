@@ -9,6 +9,13 @@ from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.registry import RunRegistry
+from runweave.security import (
+    LOCAL_PRINCIPAL,
+    ContentPolicy,
+    Principal,
+    TenantQuotaExceeded,
+    principal_scope,
+)
 
 
 class AdmissionRejected(Exception):
@@ -28,8 +35,10 @@ class Scheduler:
         cleanup_interval: float,
         run_timeout: float = 30.0,
         shutdown_grace: float = 5.0,
+        tenant_limit: int = 1000,
+        content_policy: ContentPolicy | None = None,
     ) -> None:
-        if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0:
+        if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0 or tenant_limit < 1:
             raise ValueError("Scheduler limits must be positive")
         if run_timeout <= 0 or shutdown_grace < 0:
             raise ValueError("Run timeout must be positive and shutdown grace nonnegative")
@@ -46,22 +55,30 @@ class Scheduler:
         self._closing = False
         self._started = False
         self._telemetry = registry.telemetry
+        self._tenant_limit = tenant_limit
+        self._content_policy = content_policy or ContentPolicy()
 
     @property
     def ready(self) -> bool:
         return self._accepting
 
-    def submit(self, incident: IncidentRequest) -> RunSnapshot:
+    def submit(
+        self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
+    ) -> RunSnapshot:
+        principal.require("runs:submit")
+        self._content_policy.check(incident.model_dump_json())
         if not self.ready:
             self._telemetry.rejected["unavailable"] += 1
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
+        if self._registry.unfinished_for_tenant(principal.tenant) >= self._tenant_limit:
+            raise TenantQuotaExceeded()
         if self._queue.full():
             self._telemetry.rejected["queue_full"] += 1
             raise AdmissionRejected("QUEUE_FULL")
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._run_timeout
         # No await between capacity check, record creation, and enqueue.
-        snapshot = self._registry.create(incident)
+        snapshot = self._registry.create(incident, principal)
         self._queue.put_nowait(snapshot.id)
         self._queued_deadlines[snapshot.id] = loop.call_at(
             deadline, self._expire_queued, snapshot.id
@@ -72,11 +89,26 @@ class Scheduler:
     def metrics(self) -> str:
         return self._telemetry.render(self._queue.qsize(), len(self._active), len(self._registry))
 
-    def get(self, run_id: UUID) -> RunSnapshot | None:
-        return self._registry.get(run_id)
+    def get(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        if principal is not None:
+            principal.require("runs:read")
+        snapshot = self._registry.get(run_id)
+        return (
+            snapshot
+            if snapshot is None or principal is None or principal.owns(snapshot.principal)
+            else None
+        )
 
-    def cancel(self, run_id: UUID) -> RunSnapshot | None:
-        snapshot = self.get(run_id)
+    def cancel(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
+        if principal is not None:
+            principal.require("runs:cancel")
+        snapshot = self._registry.get(run_id)
+        if (
+            snapshot is not None
+            and principal is not None
+            and not principal.owns(snapshot.principal)
+        ):
+            return None
         if snapshot is None or snapshot.status.terminal:
             return snapshot
         cancelled = self._registry.finish(run_id, RunStatus.CANCELLED)
@@ -182,9 +214,17 @@ class Scheduler:
 
     async def _execute(self, run_id: UUID, incident: IncidentRequest, deadline: float) -> None:
         try:
-            with self._telemetry.span("agent.run", run_id=run_id):
+            snapshot = self._registry.get(run_id)
+            assert snapshot is not None
+            with (
+                principal_scope(snapshot.principal),
+                self._telemetry.span("agent.run", run_id=run_id),
+            ):
                 async with deadline_scope(deadline, RUN_DEADLINE):
+                    snapshot.principal.require("runs:submit")
+                    self._content_policy.check(incident.model_dump_json())
                     result = await self._executor.run(incident)
+                    self._content_policy.check(result.model_dump_json())
         except DeadlineExceeded as exc:
             self._finish_timeout(run_id, exc.code)
         except asyncio.CancelledError:
