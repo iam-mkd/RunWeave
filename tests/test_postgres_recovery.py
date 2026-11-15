@@ -12,8 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.app import create_app
+from runweave.budgets import BudgetExceeded, BudgetPolicy, Reservation
 from runweave.core.settings import Settings
-from runweave.orchestration.models import RunSnapshot, RunStatus
+from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
 from runweave.storage.postgres import PostgresRuns
 
@@ -32,6 +33,7 @@ async def crash_after_claim() -> None:
     store = PostgresRuns(scoped_engine(os.environ[_DSN], os.environ[_SCHEMA]))
     claim = await store.claim(1)
     assert claim is not None
+    await Reservation.reserve(store.ledger(claim), "fake-v1", 11, 7)
     print(claim.snapshot.id, flush=True)
     os._exit(17)
 
@@ -48,8 +50,14 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         await conn.execute(text(f"CREATE SCHEMA {schema}"))
     try:
         legacy_id = uuid4()
+        legacy_active = uuid4()
+        legacy_token = uuid4()
         async with engine.begin() as conn:
-            for name in ("0001_durable_runs.sql", "0002_run_principals.sql"):
+            for name in (
+                "0001_durable_runs.sql",
+                "0002_run_principals.sql",
+                "0003_run_budgets.sql",
+            ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
                 for statement in migration_sql.split(";"):
@@ -66,11 +74,58 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                     """),
                         {"id": legacy_id},
                     )
+                if name == "0002_run_principals.sql":
+                    await conn.execute(
+                        text("""
+                        INSERT INTO runweave_runs
+                        (id, incident, principal, status, submitted_at, available_at, deadline_at,
+                         started_at, attempt, max_attempts, lease_token, lease_until)
+                        VALUES (:id, '{"service":"payments","description":"Legacy active"}'::jsonb,
+                            CAST(:principal AS jsonb), 'RUNNING', now(), now(),
+                            now() + interval '30 seconds', now(), 1, 3, :token,
+                            now() + interval '10 seconds')
+                    """),
+                        {
+                            "id": legacy_active,
+                            "token": legacy_token,
+                            "principal": LOCAL_PRINCIPAL.model_dump_json(),
+                        },
+                    )
+                    await conn.execute(
+                        text("""
+                        INSERT INTO runweave_attempts (run_id, attempt, lease_token, started_at)
+                        VALUES (:id, 1, :token, now())
+                    """),
+                        {"id": legacy_active, "token": legacy_token},
+                    )
             legacy_principal = await conn.scalar(
                 text("SELECT principal FROM runweave_runs WHERE id = :id"), {"id": legacy_id}
             )
             assert Principal.model_validate(legacy_principal) == LOCAL_PRINCIPAL
+            legacy_outcome = (
+                (
+                    await conn.execute(
+                        text("SELECT status, error, budget FROM runweave_runs WHERE id = :id"),
+                        {"id": legacy_active},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert legacy_outcome["status"] == "FAILED"
+            assert legacy_outcome["error"]["code"] == "BUDGET_ACCOUNTING_UNAVAILABLE"
+            assert legacy_outcome["budget"] is None
+            assert (
+                await conn.scalar(
+                    text("SELECT outcome FROM runweave_attempts WHERE run_id = :id"),
+                    {"id": legacy_active},
+                )
+                == "FAILED"
+            )
             await conn.execute(text("DELETE FROM runweave_runs WHERE id = :id"), {"id": legacy_id})
+            await conn.execute(
+                text("DELETE FROM runweave_runs WHERE id = :id"), {"id": legacy_active}
+            )
         store = PostgresRuns(engine)
         incident = IncidentRequest(service="payments", description="Synthetic restart test")
 
@@ -126,6 +181,15 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         assert sum(item is not None for item in claims) == 1
         claim = next(item for item in claims if item is not None)
         assert claim.snapshot.id == run_id and claim.token != token
+        budget = await store.ledger(claim).read()
+        assert (budget.requests, budget.input_tokens, budget.output_tokens) == (1, 11, 7)
+        stale = store.ledger(replace(claim, token=token))
+        with pytest.raises(BudgetExceeded, match="Run budget"):
+            await Reservation.reserve(stale, "fake-v1", 1, 1)
+        with pytest.raises(BudgetExceeded):
+            await Reservation(stale, next(iter(budget.calls)), 7).settle(1, 1)
+        next_call = await Reservation.reserve(store.ledger(claim), "fake-v1", 10, 5)
+        await next_call.settle(2, 1)
         result = IncidentResult(summary="Recovered", severity="low", evidence_ids=("fixture",))
         assert (
             await store.finish(replace(claim, token=token), RunStatus.SUCCEEDED, result=result)
@@ -135,6 +199,13 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         completed = await store.finish(claim, RunStatus.SUCCEEDED, result=result)
         assert completed is not None and completed.result == result
         assert completed.principal == LOCAL_PRINCIPAL
+        assert completed.usage is not None
+        assert (
+            completed.usage.requests,
+            completed.usage.input_tokens,
+            completed.usage.output_tokens,
+            completed.usage.uncertain_requests,
+        ) == (2, 13, 8, 1)
         assert await store.cancel(run_id) == completed
 
         owner = Principal(tenant="tenant-a", subject="alice", scopes=LOCAL_PRINCIPAL.scopes)
@@ -150,6 +221,14 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                 history_max=100,
                 principal=principal,
                 tenant_limit=1,
+                budget_policy=BudgetPolicy(
+                    max_requests=20,
+                    max_output_tokens=10,
+                    input_nanos_per_token=1,
+                    output_nanos_per_token=1,
+                    max_cost_nanos=12,
+                    price_version="db-fixture-v1",
+                ),
             )
 
         scoped = await asyncio.gather(
@@ -174,7 +253,37 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         assert recovered_claim is not None
         assert recovered_claim.snapshot.id == replacement.id
         assert recovered_claim.snapshot.principal == owner
-        assert await store.finish(recovered_claim, RunStatus.SUCCEEDED, result=result) is not None
+        ledger = store.ledger(recovered_claim)
+        parallel = await asyncio.gather(
+            *(Reservation.reserve(ledger, "fake-v1", 2, 3) for _ in range(12)),
+            return_exceptions=True,
+        )
+        assert sum(isinstance(item, Reservation) for item in parallel) == 2
+        assert sum(isinstance(item, BudgetExceeded) for item in parallel) == 10
+        charged = await ledger.read()
+        assert charged.policy.price_version == "db-fixture-v1"
+        assert (charged.requests, charged.input_tokens, charged.output_tokens) == (2, 4, 6)
+        held = next(item for item in parallel if isinstance(item, Reservation))
+        pending = next(
+            item for item in parallel if isinstance(item, Reservation) and item is not held
+        )
+        with pytest.raises(BudgetExceeded):
+            await held.settle(2, 4)
+        assert (await ledger.read()).blocked
+        with pytest.raises(BudgetExceeded) as overage:
+            await Reservation.reserve(ledger, "fake-v1", 0, 1)
+        assert overage.value.code == "PROVIDER_USAGE_EXCEEDED_RESERVATION"
+        assert (
+            await store.finish(
+                recovered_claim,
+                RunStatus.FAILED,
+                error=RunError(code=overage.value.code, message="Agent execution failed"),
+            )
+            is not None
+        )
+        with pytest.raises(BudgetExceeded):
+            await pending.settle(1, 1)
+        assert (await ledger.read()).output_tokens == 7
 
         monkeypatch.setattr(
             "runweave.core.runtime.postgres_engine", lambda settings: scoped_engine(dsn, schema)

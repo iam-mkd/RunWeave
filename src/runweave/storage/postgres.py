@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from uuid import UUID, uuid4
 
@@ -6,10 +6,11 @@ from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
+from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
 
-_COLUMNS = "id, status, submitted_at, started_at, finished_at, result, error, principal"
+_COLUMNS = "id, status, submitted_at, started_at, finished_at, result, error, principal, budget"
 _OWNER = "principal->>'tenant' = :tenant AND principal->>'subject' = :subject"
 _FINISH_ATTEMPT = """
     UPDATE runweave_attempts a SET finished_at = clock_timestamp(), outcome = changed.status
@@ -27,7 +28,8 @@ class Claim:
 
 
 def snapshot(row: RowMapping) -> RunSnapshot:
-    fields = {key: row[key] for key in _COLUMNS.split(", ")}
+    fields = {key: row[key] for key in _COLUMNS.split(", ") if key != "budget"}
+    fields["usage"] = BudgetState.model_validate(row["budget"]).summary() if row["budget"] else None
     return RunSnapshot.model_validate({**fields, "status_url": f"/v1/runs/{row['id']}"})
 
 
@@ -37,7 +39,7 @@ class PostgresRuns:
 
     async def check(self) -> None:
         async with self._engine.connect() as conn:
-            await conn.execute(text("SELECT id, principal FROM runweave_runs LIMIT 0"))
+            await conn.execute(text("SELECT id, principal, budget FROM runweave_runs LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_attempts LIMIT 0"))
 
     async def admit(
@@ -50,6 +52,7 @@ class PostgresRuns:
         history_max: int,
         principal: Principal = LOCAL_PRINCIPAL,
         tenant_limit: int = 1000,
+        budget_policy: BudgetPolicy | None = None,
     ) -> RunSnapshot | None:
         async with self._engine.begin() as conn:
             # Serialize admission across replicas. Worker transactions never take this lock.
@@ -67,10 +70,10 @@ class PostgresRuns:
                 text(f"""
                 INSERT INTO runweave_runs
                     (id, incident, status, submitted_at, available_at, deadline_at,
-                     max_attempts, principal)
+                     max_attempts, principal, budget)
                 SELECT :id, CAST(:incident AS jsonb), 'QUEUED', statement_timestamp(),
                     statement_timestamp(), statement_timestamp() + :timeout * interval '1 second',
-                    :attempts, CAST(:principal AS jsonb)
+                    :attempts, CAST(:principal AS jsonb), CAST(:budget AS jsonb)
                 WHERE (SELECT count(*) FROM runweave_runs WHERE finished_at IS NULL) < :capacity
                   AND (SELECT count(*) FROM runweave_runs) < :max_rows
                 RETURNING {_COLUMNS}
@@ -83,6 +86,7 @@ class PostgresRuns:
                     capacity=capacity,
                     max_rows=capacity + history_max,
                     principal=principal.model_dump_json(),
+                    budget=BudgetState(policy=budget_policy or BudgetPolicy()).model_dump_json(),
                 ),
             )
             row = result.mappings().one_or_none()
@@ -121,7 +125,7 @@ class PostgresRuns:
                     INSERT INTO runweave_attempts (run_id, attempt, lease_token, started_at)
                     SELECT id, attempt, lease_token, clock_timestamp() FROM claimed
                 ) SELECT id, status, submitted_at, started_at, finished_at, result, error,
-                    principal, incident,
+                    principal, budget, incident,
                     extract(epoch FROM deadline_at - clock_timestamp()) AS remaining
                 FROM claimed
             """),
@@ -150,6 +154,9 @@ class PostgresRuns:
                 {"id": claim.snapshot.id, "token": claim.token, "lease": seconds},
             )
             return result.first() is not None
+
+    def ledger(self, claim: Claim) -> "PostgresBudget":
+        return PostgresBudget(self._engine, claim)
 
     async def _finish(self, condition: str, params: Mapping[str, object]) -> RunSnapshot | None:
         async with self._engine.begin() as conn:
@@ -258,3 +265,51 @@ class PostgresRuns:
                 )
             ).one()
         return int(row[0]), int(row[1])
+
+
+class PostgresBudget:
+    def __init__(self, engine: AsyncEngine, claim: Claim) -> None:
+        self._engine = engine
+        self._claim = claim
+
+    async def read(self) -> BudgetState:
+        async with self._engine.connect() as conn:
+            raw = await conn.scalar(
+                text("SELECT budget FROM runweave_runs WHERE id = :id"),
+                {"id": self._claim.snapshot.id},
+            )
+        if raw is None:
+            raise BudgetExceeded("BUDGET_LEASE_LOST")
+        return BudgetState.model_validate(raw)
+
+    async def update[T](self, change: Callable[[BudgetState], T]) -> T:
+        async with self._engine.begin() as conn:
+            raw = await conn.scalar(
+                text("""
+                SELECT budget FROM runweave_runs
+                WHERE id = :id AND status = 'RUNNING' AND lease_token = :token
+                    AND lease_until > clock_timestamp() AND deadline_at > clock_timestamp()
+                FOR UPDATE
+            """),
+                {"id": self._claim.snapshot.id, "token": self._claim.token},
+            )
+            if raw is None:
+                raise BudgetExceeded("BUDGET_LEASE_LOST")
+            state = BudgetState.model_validate(raw)
+            result = change(state)
+            changed = await conn.scalar(
+                text(
+                    "UPDATE runweave_runs SET budget = CAST(:budget AS jsonb) "
+                    "WHERE id = :id AND status = 'RUNNING' AND lease_token = :token "
+                    "AND lease_until > clock_timestamp() AND deadline_at > clock_timestamp() "
+                    "RETURNING id"
+                ),
+                {
+                    "id": self._claim.snapshot.id,
+                    "token": self._claim.token,
+                    "budget": state.model_dump_json(),
+                },
+            )
+            if changed is None:
+                raise BudgetExceeded("BUDGET_LEASE_LOST")
+        return result

@@ -6,6 +6,7 @@ from uuid import UUID
 import httpx
 
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
+from runweave.budgets import BudgetExceeded, BudgetPolicy, budget_scope
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.registry import RunRegistry
@@ -37,6 +38,7 @@ class Scheduler:
         shutdown_grace: float = 5.0,
         tenant_limit: int = 1000,
         content_policy: ContentPolicy | None = None,
+        budget_policy: BudgetPolicy | None = None,
     ) -> None:
         if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0 or tenant_limit < 1:
             raise ValueError("Scheduler limits must be positive")
@@ -57,6 +59,7 @@ class Scheduler:
         self._telemetry = registry.telemetry
         self._tenant_limit = tenant_limit
         self._content_policy = content_policy or ContentPolicy()
+        self._budget_policy = budget_policy or BudgetPolicy()
 
     @property
     def ready(self) -> bool:
@@ -78,7 +81,7 @@ class Scheduler:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._run_timeout
         # No await between capacity check, record creation, and enqueue.
-        snapshot = self._registry.create(incident, principal)
+        snapshot = self._registry.create(incident, principal, self._budget_policy)
         self._queue.put_nowait(snapshot.id)
         self._queued_deadlines[snapshot.id] = loop.call_at(
             deadline, self._expire_queued, snapshot.id
@@ -218,6 +221,7 @@ class Scheduler:
             assert snapshot is not None
             with (
                 principal_scope(snapshot.principal),
+                budget_scope(self._registry.budget(run_id)),
                 self._telemetry.span("agent.run", run_id=run_id),
             ):
                 async with deadline_scope(deadline, RUN_DEADLINE):
@@ -244,7 +248,10 @@ class Scheduler:
             self._registry.finish(
                 run_id,
                 RunStatus.FAILED,
-                error=RunError(code="RUN_FAILED", message="Agent execution failed"),
+                error=RunError(
+                    code=exc.code if isinstance(exc, BudgetExceeded) else "RUN_FAILED",
+                    message="Agent execution failed",
+                ),
             )
         else:
             self._registry.finish(run_id, RunStatus.SUCCEEDED, result=result)

@@ -23,6 +23,7 @@ from runweave.agents.contracts import (
 )
 from runweave.agents.groq import FINISH
 from runweave.agents.triage import TriageState, TriageSteps, validate_triage_result
+from runweave.budgets import run_budget
 from runweave.tools.contracts import HealthQuery
 from runweave.tools.registry import HEALTH, RUNBOOK
 
@@ -59,15 +60,17 @@ class PydanticDecisionModel:
         completion_budget: int,
     ) -> ModelDecision:
         used = 0
+        input_tokens: int | None = None
 
         async def request(_messages: list[ModelMessage], _info: AgentInfo) -> ModelResponse:
-            nonlocal used
+            nonlocal used, input_tokens
             if used:
                 raise ValueError("Expected one provider request per triage step")
             decision = await self._provider.decide(incident, history, tools, completion_budget)
             if not 0 < decision.completion_tokens <= completion_budget:
                 raise ValueError("Invalid completion token usage")
             used = decision.completion_tokens
+            input_tokens = decision.input_tokens
             action = decision.action
             part = (
                 ToolCallPart(FINISH, action.model_dump_json())
@@ -83,13 +86,14 @@ class PydanticDecisionModel:
         )
         output = result.output
         if isinstance(output, IncidentResult):
-            return ModelDecision(output, used)
+            return ModelDecision(output, used, input_tokens)
         if output.approvals or len(output.calls) != 1:
             raise ValueError("Expected one deferred triage tool call")
         call = output.calls[0]
         return ModelDecision(
             ToolCall(id=call.tool_call_id, name=call.tool_name, arguments=call.args_as_json_str()),
             used,
+            input_tokens,
         )
 
 
@@ -144,7 +148,8 @@ class PydanticWorkflow:
     async def run(self, incident: IncidentRequest) -> IncidentResult:
         state = TriageState(incident, self._max_steps, self._completion_budget)
         try:
-            result: IncidentResult = await self._graph.run(state=state, deps=self._steps)
+            with run_budget(self._steps.budget_policy):
+                result: IncidentResult = await self._graph.run(state=state, deps=self._steps)
             return result
         except ExceptionGroup as group:
             # The triage graph is serial, so preserve the underlying step error for the scheduler.

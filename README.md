@@ -74,6 +74,9 @@ a fresh checkout. Replace the key placeholder and select Groq:
 RUNWEAVE_MODEL_PROVIDER=groq
 RUNWEAVE_GROQ_API_KEY=replace_with_your_groq_api_key
 RUNWEAVE_GROQ_MODEL=llama-3.3-70b-versatile
+RUNWEAVE_MODEL_INPUT_USD_PER_MILLION=<your_input_rate>
+RUNWEAVE_MODEL_OUTPUT_USD_PER_MILLION=<your_output_rate>
+RUNWEAVE_MODEL_PRICE_VERSION=<your_contract_or_price_revision>
 ```
 
 Run `uv run --locked runweave-demo` to make a live inference request. The demo
@@ -81,6 +84,10 @@ sends the synthetic incident and tool evidence to Groq. The health check and
 runbook lookup still use local fixtures. The runner validates the model's tool
 name and arguments against the allowlist, restricts calls to the incident's
 service, and requires the final result to cite both returned evidence IDs.
+
+Replace the pricing placeholders with your model/tier rates in USD per million
+tokens and a price revision. The [budget guide](docs/budgets.md) describes the
+per-run cost estimate, reservations, and conservative missing-usage accounting.
 
 The default is `fake`. The `.env` file is ignored by Git. Groq requests use a
 fixed HTTPS endpoint with redirects disabled. The completion-token budget
@@ -146,6 +153,13 @@ rejections return 429 with `Retry-After`. PostgreSQL deployments must apply
 JWT claims, audit events, and verification.
 
 ## Configuration
+
+Milestone 10 adds shared model-request, input/output-token, context, and estimated
+spend limits. Both workflows report aggregate `usage` in run snapshots. Durable
+recovery retains charges from previous attempts. PostgreSQL deployments must
+apply migration 0003. It fails unfinished legacy jobs whose prior usage is unknown
+and preserves terminal results with unavailable usage. See the
+[budget configuration and upgrade guide](docs/budgets.md).
 
 Settings load from `RUNWEAVE_` environment variables and an optional `.env`. Defaults
 work out of the box. `.env.example` lists supported options; copy it to `.env` if
@@ -260,10 +274,11 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-15 all 132 tests passed with native Windows asyncio and both optional
+On 2026-11-15 all 162 tests passed with native Windows asyncio and both optional
 workflow/evaluation extras installed. The opt-in PostgreSQL integration test was
 skipped in that suite and passed separately against disposable PostgreSQL 18,
-including legacy migration, owner isolation, and tenant quota races. Both offline
+including budget migration, worker-kill accounting recovery, concurrent reservations,
+stale-lease fencing, owner isolation, and tenant quota races. Both offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.

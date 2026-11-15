@@ -1,8 +1,10 @@
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from runweave.budgets import BudgetPolicy
 from runweave.security import Principal
 
 
@@ -38,6 +40,20 @@ class Settings(BaseSettings):
     tool_retry_max_delay_seconds: float = Field(default=2, gt=0, le=60)
     agent_max_steps: int = Field(default=7, ge=1, le=20)
     agent_completion_tokens: int = Field(default=2048, ge=1, le=8192)
+    agent_request_limit: int = Field(default=20, ge=1, le=1000)
+    agent_input_tokens: int = Field(default=100000, ge=1, le=10000000)
+    agent_context_tokens: int = Field(default=16384, ge=1, le=131072)
+    agent_evidence_bytes: int = Field(default=2048, ge=128, le=16384)
+    agent_max_cost_usd: Decimal = Field(
+        default=Decimal("0.05"), ge=0, le=100, decimal_places=9, max_digits=12
+    )
+    model_input_usd_per_million: Decimal | None = Field(
+        default=None, ge=0, le=1000, decimal_places=3
+    )
+    model_output_usd_per_million: Decimal | None = Field(
+        default=None, ge=0, le=1000, decimal_places=3
+    )
+    model_price_version: str = Field(default="", max_length=100)
     agent_workflow: Literal["baseline", "pydanticai"] = "baseline"
     model_provider: Literal["fake", "groq"] = "fake"
     groq_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
@@ -60,6 +76,35 @@ class Settings(BaseSettings):
         if self.model_provider == "groq" and (not key or key == "replace_with_your_groq_api_key"):
             raise ValueError("Set RUNWEAVE_GROQ_API_KEY before enabling Groq")
         return self
+
+    @model_validator(mode="after")
+    def require_live_prices(self) -> "Settings":
+        if self.model_provider == "groq" and (
+            self.model_input_usd_per_million is None
+            or self.model_output_usd_per_million is None
+            or not self.model_price_version.strip()
+        ):
+            raise ValueError("Configure versioned input and output prices before enabling Groq")
+        return self
+
+    def budget_policy(self) -> BudgetPolicy:
+        live = self.model_provider == "groq"
+        return BudgetPolicy(
+            model=self.groq_model if live else "fake-v1",
+            price_version=self.model_price_version if live else "fake-free-v1",
+            input_nanos_per_token=int((self.model_input_usd_per_million or 0) * 1000)
+            if live
+            else 0,
+            output_nanos_per_token=int((self.model_output_usd_per_million or 0) * 1000)
+            if live
+            else 0,
+            max_requests=self.agent_request_limit,
+            max_input_tokens=self.agent_input_tokens,
+            max_output_tokens=self.agent_completion_tokens,
+            max_cost_nanos=int(self.agent_max_cost_usd * 1000000000),
+            context_tokens=self.agent_context_tokens,
+            evidence_bytes=self.agent_evidence_bytes,
+        )
 
     @model_validator(mode="after")
     def require_identity_configuration(self) -> "Settings":

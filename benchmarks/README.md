@@ -1,5 +1,45 @@
 # RunWeave load and recovery report
 
+## Milestone 10 verification on November 15, 2026
+
+Both workflows completed all 128 synthetic runs with 100 workers, reaching 100
+overlapping runs and 100 tool steps. These were sequentially measured cases on
+native Windows asyncio, Python 3.13.9, Windows 11, 16 logical CPUs, and 15,791 MiB
+of memory, with one application process, queue capacity 128, and HTTP limit 128.
+Both used the same fake model and two 200 ms synthetic tool waits. Reports now
+record the effective budget policy. It allowed 20 model attempts, 100,000 input
+tokens, 2,048 output tokens, 16,384 context tokens, 2,048 evidence bytes per item,
+and USD 0.05 estimated spend. Fake prices were zero.
+
+| Metric | Baseline | PydanticAI |
+| --- | ---: | ---: |
+| Duration (s) | 1.342 | 4.697 |
+| Throughput (runs/s) | 95.41 | 27.25 |
+| Completion p50 / p95 / p99 (ms) | 634.81 / 939.41 / 978.26 | 2536.81 / 3392.45 / 3399.70 |
+| Queue wait p50 / p95 / p99 (ms) | 141.17 / 496.49 / 506.24 | 145.25 / 2423.23 / 2430.67 |
+| Status API p50 / p95 / p99 (ms) | 1.68 / 1.94 / 1.94 | 1.56 / 2.04 / 2.11 |
+| Status probes | 15 | 45 |
+| Event-loop lag p99 bucket upper bound (ms) | 100 | 250 |
+| RSS start / peak / end (MiB) | 78.00 / 81.70 / 81.75 | 77.76 / 119.14 / 116.95 |
+
+Each case retained 128 records. Both failure matrices matched the expected
+rate-limit, transient, disconnect, forbidden, malformed, slow, and cancellation
+outcomes, with three health-tool retries. Both cases missed the strict sub-50 ms
+lag target. Workflow performance parity remains open. This verification used mocked I/O.
+
+The generated reports are `target/evals/m10-baseline-load.json` and
+`target/evals/m10-pydanticai-load.json`. Reproduce each case separately with the
+appropriate workflow selected.
+
+```powershell
+$env:RUNWEAVE_AGENT_WORKFLOW = 'baseline'
+uv run --no-sync python -m benchmarks.load --workers 100 --output target/evals/m10-baseline-load.json
+$env:RUNWEAVE_AGENT_WORKFLOW = 'pydanticai'
+uv run --no-sync python -m benchmarks.load --workers 100 --output target/evals/m10-pydanticai-load.json
+```
+
+## Earlier sandbox measurements on November 13, 2026
+
 Measured on November 13, 2026 with Python 3.13.9 on Windows 11, 16 logical CPUs,
 and 15,791 MiB of memory. One process ran the driver and ASGI app. The sandbox
 hung creating the native Windows wakeup socket pair, so the measurement used

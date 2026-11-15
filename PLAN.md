@@ -2,8 +2,8 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 9 have code in place. Native Windows in-process tests and
-the disposable PostgreSQL recovery/security checks passed locally. Earlier
+Milestones 1 through 10 have code in place. Native Windows in-process tests and
+the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
 checks remain open.
 
@@ -22,7 +22,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 7. PydanticAI integration and workflow parity
 - [x] 8. Automated agent evaluation and security fixtures
 - [x] 9. Authentication, authorization, and prompt-injection defenses
-- [ ] 10. Context, token, and cost budgets
+- [x] 10. Context, token, and cost budgets
 - [ ] 11. Durable workflow checkpoints and replay
 - [ ] 12. Human approvals and resumable waiting
 - [ ] 13. Scoped persistent memory
@@ -446,7 +446,43 @@ Implementation notes (2026-11-15):
   retries or failures preserve accounting. Report spend as an estimate and
   document how missing provider usage affects the ledger.
 
+Implementation notes (2026-11-15):
+- Added a shared run ledger for model attempts, cumulative input/output tokens,
+  context limits, evidence bytes, and estimated USD spend. Reservations are
+  charged before model invocation. Concurrent asyncio branches share memory
+  transactions or PostgreSQL row-locked transactions fenced by the live lease.
+- Admission pins model, budget policy, estimator, and configured price version.
+  Groq requires explicit input/output rates because its current listing quotes
+  the configured Llama model through sales. Fake prices are zero. Integer
+  nanodollar arithmetic avoids floating-point spend errors.
+- One canonical context builder includes instructions, schemas, arguments,
+  paired tool messages, evidence references, and output allowance. A documented
+  UTF-8-byte estimate replaces unavailable pinned tokenizer assets. Deterministic
+  runbook compaction preserves structured health data, IDs, and message pairs.
+- Groq reconciles known usage before result validation. Missing usage, failures,
+  cancellation, and worker death retain conservative reservations. Provider
+  overages are recorded and block new reservations. Late refunds require a live
+  lease. API snapshots and optional completion logs expose aggregate usage.
+- Migration 0003 persists the ledger with admission and retains it across lease
+  recovery. Terminal legacy jobs retain results with unavailable usage. Unfinished
+  legacy jobs fail with BUDGET_ACCOUNTING_UNAVAILABLE because earlier usage is
+  unknown. Stop existing workers before applying this upgrade.
+- Native Windows validation passed with 162 tests and one PostgreSQL integration
+  test skipped in the main suite. The integration passed separately on disposable
+  PostgreSQL 18, including worker-kill reservations, recovered charges, concurrent
+  reservations, durable overage blocking, stale/terminal fencing, and migration.
+  Ruff lint/format, strict mypy, and the offline lockfile check passed.
+- Both offline evaluation paths passed all 13 cases and 68 assertions. The
+  reports now hash budget source. Both 100-worker load checks completed all 128
+  runs, reached 100 overlapping runs/tools, and matched the fault matrix. The
+  event-loop lag target remains open. See benchmarks/README.md for measurements.
+- Verification caught a stale non-editable uv build. Added explicit source and
+  packaged-resource cache keys, rebuilt, and reran the PostgreSQL check against
+  the current installed package. Live inference and hosted CI remain opt-in or
+  pending. Configuration and upgrade details are in docs/budgets.md.
+
 ### 11. Durable workflow checkpoints and replay
+
 
 - Persist typed, versioned workflow state and the next node at explicit
   boundaries, including committed evidence and usage. Start with RunWeave's

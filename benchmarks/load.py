@@ -223,6 +223,7 @@ async def run(args: argparse.Namespace) -> None:
         "workload": "HTTPX ASGI transport, fake model, two 200 ms synthetic tool waits",
         "queue_capacity": args.runs,
         "http_max_connections": 128,
+        "budget_policy": config(args.workers[0], args.runs).budget_policy().model_dump(mode="json"),
         "cases": [
             await workload(workers, args.runs, args.soak_seconds) for workers in args.workers
         ],

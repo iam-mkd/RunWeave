@@ -1,4 +1,5 @@
 {
+  "budget_sha256": "14d26e67ea5f2bf650afb7dafed39655e3f2f794f004552d0e1621b6d5d982d4",
   "cases": [
     {
       "assertions": {
@@ -147,7 +148,7 @@
       "name": "unauthorized-tool"
     }
   ],
-  "evaluator_sha256": "57fc6c80a3afeb38c8fa33667656447b0de583605235b3e974de17636cd15793",
+  "evaluator_sha256": "d9ad94dacb9395ed0895133cc1bacfcf8d29d48c79eedfd1f8470b0796e67359",
   "evaluator_version": "triage-checks-v2",
   "fixture_sha256": "7ae23a90681bb22a791c2b8aed42f9de8433b92e5e3514595d40999efe54a996",
   "fixture_version": "triage-fixtures-v2",
@@ -168,5 +169,5 @@
   "task_failures": [],
   "tool_policy_sha256": "e60d61edbb4dca88829ac57d544412ca65a5f0d5c0fe7600f1f9ac2c1465da14",
   "workflow": "pydanticai",
-  "workflow_sha256": "54f6be0452c33c2cac93db1ccb598ed08e6875b054ef9115ba2734b2be41d2e7"
+  "workflow_sha256": "cf54855838c6baafd3e23aea435bef8c0465a679acb1d0e1b6076a2ada61c493"
 }

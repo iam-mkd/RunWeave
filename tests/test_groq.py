@@ -30,6 +30,9 @@ async def test_groq_runtime_uses_validated_tool_calls_and_preserves_transcript(
     monkeypatch.setenv("RUNWEAVE_GROQ_API_KEY", "unit-test-key")
     monkeypatch.setenv("RUNWEAVE_GROQ_REQUESTS_PER_MINUTE", "600")
     monkeypatch.setenv("RUNWEAVE_AGENT_COMPLETION_TOKENS", "64")
+    monkeypatch.setenv("RUNWEAVE_MODEL_INPUT_USD_PER_MILLION", "0.59")
+    monkeypatch.setenv("RUNWEAVE_MODEL_OUTPUT_USD_PER_MILLION", "0.79")
+    monkeypatch.setenv("RUNWEAVE_MODEL_PRICE_VERSION", "mock-prices-v1")
     evidence_ids = ["mock-health:payments", "mock-runbook:triage-v1"]
     actions = [
         ("check_health", {"service": "payments"}),

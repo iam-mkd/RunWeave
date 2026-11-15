@@ -5,6 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 from runweave.agents.contracts import IncidentResult
+from runweave.budgets import BudgetSummary
 from runweave.security import LOCAL_PRINCIPAL, Principal
 
 
@@ -40,3 +41,4 @@ class RunSnapshot(BaseModel):
     result: IncidentResult | None = None
     error: RunError | None = None
     principal: Principal = Field(default=LOCAL_PRINCIPAL, exclude=True)
+    usage: BudgetSummary | None = None

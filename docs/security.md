@@ -120,7 +120,9 @@ under sustained overload, which is reflected in the dropped-event metric.
 
 ## PostgreSQL upgrade
 
-Apply migrations before starting the updated durable service.
+Apply migrations before starting the updated durable service. Milestone 10 also
+adds migration 0003 and handles unfinished pre-budget jobs as described in the
+[budget upgrade guide](budgets.md).
 
 ```powershell
 uv pip install -r requirements-durable.txt

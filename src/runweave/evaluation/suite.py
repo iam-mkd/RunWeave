@@ -330,6 +330,11 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
             files("runweave.tools").joinpath("registry.py").read_bytes()
             + files("runweave").joinpath("security.py").read_bytes()
         ).hexdigest(),
+        "budget_sha256": hashlib.sha256(
+            files("runweave").joinpath("budgets.py").read_bytes()
+            + agent_files.joinpath("budgeted.py").read_bytes()
+            + agent_files.joinpath("context.py").read_bytes()
+        ).hexdigest(),
     }
 
 

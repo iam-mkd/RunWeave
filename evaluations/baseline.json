@@ -1,4 +1,5 @@
 {
+  "budget_sha256": "14d26e67ea5f2bf650afb7dafed39655e3f2f794f004552d0e1621b6d5d982d4",
   "cases": [
     {
       "assertions": {
@@ -147,7 +148,7 @@
       "name": "unauthorized-tool"
     }
   ],
-  "evaluator_sha256": "57fc6c80a3afeb38c8fa33667656447b0de583605235b3e974de17636cd15793",
+  "evaluator_sha256": "d9ad94dacb9395ed0895133cc1bacfcf8d29d48c79eedfd1f8470b0796e67359",
   "evaluator_version": "triage-checks-v2",
   "fixture_sha256": "7ae23a90681bb22a791c2b8aed42f9de8433b92e5e3514595d40999efe54a996",
   "fixture_version": "triage-fixtures-v2",
@@ -168,5 +169,5 @@
   "task_failures": [],
   "tool_policy_sha256": "e60d61edbb4dca88829ac57d544412ca65a5f0d5c0fe7600f1f9ac2c1465da14",
   "workflow": "baseline",
-  "workflow_sha256": "ef046fd2c95a6474adb118b2e74497b8adbcb11977f5332400384629c4d4bd18"
+  "workflow_sha256": "82a0e8c9c2581a14c6a7463711baf1d197d0675c15fd218f7d78f5d8f7f99a2d"
 }

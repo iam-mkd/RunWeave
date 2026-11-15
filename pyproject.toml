@@ -43,6 +43,14 @@ dev = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.uv]
+cache-keys = [
+    { file = "pyproject.toml" },
+    { file = "README.md" },
+    { file = "src/**/*.py" },
+    { file = "src/**/*.json" },
+]
+
 [tool.setuptools.package-data]
 "runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 

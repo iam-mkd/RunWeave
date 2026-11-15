@@ -171,17 +171,23 @@ class Telemetry:
         self.outcomes[snapshot.status.value] += 1
         self.run_duration.observe(duration)
         if self._logger:
-            self._logger.info(
-                json.dumps(
-                    {
-                        "timestamp": datetime.now(UTC).isoformat(),
-                        "event": "run.finished",
-                        "run_id": str(snapshot.id),
-                        "status": snapshot.status.value,
-                        "duration_seconds": duration,
-                    }
-                )
-            )
+            event: dict[str, object] = {
+                "timestamp": datetime.now(UTC).isoformat(),
+                "event": "run.finished",
+                "run_id": str(snapshot.id),
+                "status": snapshot.status.value,
+                "duration_seconds": duration,
+            }
+            if snapshot.usage is not None:
+                usage = snapshot.usage
+                event["usage"] = {
+                    "requests": usage.requests,
+                    "input_tokens": usage.input_tokens,
+                    "output_tokens": usage.output_tokens,
+                    "estimated_cost_usd": str(usage.estimated_cost_usd),
+                    "uncertain_requests": usage.uncertain_requests,
+                }
+            self._logger.info(json.dumps(event))
 
     def render(self, queue_depth: int, active_runs: int, retained_runs: int) -> str:
         scalars = {

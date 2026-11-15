@@ -49,6 +49,7 @@ class ToolExchange:
 class ModelDecision:
     action: ToolCall | IncidentResult
     completion_tokens: int
+    input_tokens: int | None = None
 
 
 class AgentModel(Protocol):

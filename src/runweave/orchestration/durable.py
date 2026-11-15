@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
 from runweave.agents.contracts import AgentExecutor, IncidentRequest, IncidentResult
+from runweave.budgets import BudgetExceeded, budget_scope
 from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
@@ -55,6 +56,7 @@ class DurableScheduler:
                 history_max=self._settings.history_max_records,
                 principal=principal,
                 tenant_limit=self._settings.tenant_max_unfinished,
+                budget_policy=self._settings.budget_policy(),
             )
         if run is None:
             self._telemetry.rejected["queue_full"] += 1
@@ -167,6 +169,7 @@ class DurableScheduler:
     async def _run(self, claim: Claim, deadline: float) -> IncidentResult:
         with (
             principal_scope(claim.snapshot.principal),
+            budget_scope(self._store.ledger(claim)),
             self._telemetry.span("agent.run", run_id=claim.snapshot.id),
         ):
             async with deadline_scope(deadline, RUN_DEADLINE):
@@ -201,11 +204,14 @@ class DurableScheduler:
                     RunStatus.TIMED_OUT,
                     error=RunError(code=exc.code, message="Execution deadline exceeded"),
                 )
-            except Exception:
+            except Exception as exc:
                 finished = await self._store.finish(
                     claim,
                     RunStatus.FAILED,
-                    error=RunError(code="RUN_FAILED", message="Agent execution failed"),
+                    error=RunError(
+                        code=exc.code if isinstance(exc, BudgetExceeded) else "RUN_FAILED",
+                        message="Agent execution failed",
+                    ),
                 )
             else:
                 finished = await self._store.finish(claim, RunStatus.SUCCEEDED, result=result)

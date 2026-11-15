@@ -98,6 +98,7 @@ async def open_runtime(
                         telemetry,
                         settings.step_timeout_seconds,
                         content_policy=content_policy,
+                        budget_policy=settings.budget_policy(),
                     ),
                     settings.agent_max_steps,
                     settings.agent_completion_tokens,
@@ -112,6 +113,7 @@ async def open_runtime(
                     telemetry=telemetry,
                     runbook_delay=settings.mock_runbook_delay_seconds,
                     content_policy=content_policy,
+                    budget_policy=settings.budget_policy(),
                 )
             run_executor = executor if executor is not None else runner
             if settings.database_url is not None:
@@ -139,6 +141,7 @@ async def open_runtime(
                     shutdown_grace=settings.shutdown_grace_seconds,
                     tenant_limit=settings.tenant_max_unfinished,
                     content_policy=content_policy,
+                    budget_policy=settings.budget_policy(),
                 )
                 async with scheduler.running():
                     yield Runtime(

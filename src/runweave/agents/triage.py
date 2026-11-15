@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import dataclass, field
 
+from runweave.agents.budgeted import BudgetedModel
 from runweave.agents.contracts import (
     AgentModel,
     IncidentRequest,
@@ -8,6 +9,7 @@ from runweave.agents.contracts import (
     ToolCall,
     ToolExchange,
 )
+from runweave.budgets import BudgetPolicy
 from runweave.deadline import STEP_DEADLINE, deadline_scope
 from runweave.security import ContentPolicy
 from runweave.telemetry import Telemetry
@@ -33,8 +35,10 @@ class TriageSteps:
         step_timeout: float,
         *,
         content_policy: ContentPolicy | None = None,
+        budget_policy: BudgetPolicy | None = None,
     ) -> None:
-        self._model = model
+        self.budget_policy = budget_policy or BudgetPolicy()
+        self._model = BudgetedModel(model, self.budget_policy, telemetry)
         self._tools = tools
         self._telemetry = telemetry
         self._step_timeout = step_timeout

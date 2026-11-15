@@ -6,6 +6,7 @@ from time import monotonic
 from uuid import UUID, uuid4
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
+from runweave.budgets import BudgetPolicy, BudgetState, MemoryBudget
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, Principal
 from runweave.telemetry import Telemetry
@@ -16,6 +17,7 @@ class RunEntry:
     incident: IncidentRequest
     snapshot: RunSnapshot
     admitted_at: float
+    budget: MemoryBudget
 
 
 class RunRegistry:
@@ -48,24 +50,36 @@ class RunRegistry:
         )
 
     def create(
-        self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
+        self,
+        incident: IncidentRequest,
+        principal: Principal = LOCAL_PRINCIPAL,
+        budget_policy: BudgetPolicy | None = None,
     ) -> RunSnapshot:
         self.prune()
         run_id = uuid4()
+        budget = MemoryBudget(BudgetState(policy=budget_policy or BudgetPolicy()))
         snapshot = RunSnapshot(
             id=run_id,
             status=RunStatus.QUEUED,
             status_url=f"/v1/runs/{run_id}",
             submitted_at=datetime.now(UTC),
             principal=principal,
+            usage=budget.state.summary(),
         )
-        self._entries[run_id] = RunEntry(incident, snapshot, self._clock())
+        self._entries[run_id] = RunEntry(incident, snapshot, self._clock(), budget)
         return snapshot
 
     def get(self, run_id: UUID) -> RunSnapshot | None:
         self.prune()
         entry = self._entries.get(run_id)
+        if entry is not None:
+            entry.snapshot = entry.snapshot.model_copy(
+                update={"usage": entry.budget.state.summary()}
+            )
         return entry.snapshot if entry else None
+
+    def budget(self, run_id: UUID) -> MemoryBudget:
+        return self._entries[run_id].budget
 
     def claim(self, run_id: UUID) -> IncidentRequest | None:
         entry = self._entries.get(run_id)
@@ -105,6 +119,7 @@ class RunRegistry:
                 "finished_at": datetime.now(UTC),
                 "result": result,
                 "error": error,
+                "usage": entry.budget.state.summary(),
             }
         )
         self._finished[run_id] = self._clock()

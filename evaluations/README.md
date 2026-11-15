@@ -61,7 +61,8 @@ and uploads the reports.
 
 Reports record workflow, fake prompt policy, model, fixture, evaluator, and
 framework versions. SHA-256 hashes identify workflow source, evaluator source,
-tool policy, and fixture bytes. Bump the corresponding version when behavior or
+tool policy, fixture bytes, and budget source. The budget hash covers the ledger,
+model wrapper, and context preparation. Bump the corresponding version when behavior or
 expectations change. Compare reports from the same source bytes. Source newline
 conversion changes source hashes. Timing and raw outputs are omitted from the
 stable report. Task failures include case names and evaluator failures include
