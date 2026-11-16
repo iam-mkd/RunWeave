@@ -335,6 +335,11 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
             + agent_files.joinpath("budgeted.py").read_bytes()
             + agent_files.joinpath("context.py").read_bytes()
         ).hexdigest(),
+        "checkpoint_sha256": hashlib.sha256(
+            files("runweave").joinpath("checkpoints.py").read_bytes()
+            + files("runweave").joinpath("effects.py").read_bytes()
+            + files("runweave.storage").joinpath("checkpoints.py").read_bytes()
+        ).hexdigest(),
     }
 
 

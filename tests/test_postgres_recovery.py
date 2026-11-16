@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.app import create_app
-from runweave.budgets import BudgetExceeded, BudgetPolicy, Reservation
+from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState, Reservation
 from runweave.core.settings import Settings
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
@@ -52,11 +52,13 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         legacy_id = uuid4()
         legacy_active = uuid4()
         legacy_token = uuid4()
+        legacy_checkpoint_missing = uuid4()
         async with engine.begin() as conn:
             for name in (
                 "0001_durable_runs.sql",
                 "0002_run_principals.sql",
                 "0003_run_budgets.sql",
+                "0004_workflow_checkpoints.sql",
             ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
@@ -98,6 +100,23 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                     """),
                         {"id": legacy_active, "token": legacy_token},
                     )
+                if name == "0003_run_budgets.sql":
+                    await conn.execute(
+                        text("""
+                        INSERT INTO runweave_runs
+                        (id, incident, principal, budget, status, submitted_at, available_at,
+                         deadline_at, max_attempts)
+                        VALUES (:id, '{"service":"payments","description":"Legacy budget"}'::jsonb,
+                            CAST(:principal AS jsonb), CAST(:budget AS jsonb), 'QUEUED',
+                            now(), now(),
+                            now() + interval '30 seconds', 3)
+                    """),
+                        {
+                            "id": legacy_checkpoint_missing,
+                            "principal": LOCAL_PRINCIPAL.model_dump_json(),
+                            "budget": BudgetState(policy=BudgetPolicy()).model_dump_json(),
+                        },
+                    )
             legacy_principal = await conn.scalar(
                 text("SELECT principal FROM runweave_runs WHERE id = :id"), {"id": legacy_id}
             )
@@ -115,6 +134,22 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
             assert legacy_outcome["status"] == "FAILED"
             assert legacy_outcome["error"]["code"] == "BUDGET_ACCOUNTING_UNAVAILABLE"
             assert legacy_outcome["budget"] is None
+            missing_checkpoint = (
+                (
+                    await conn.execute(
+                        text("SELECT status, error, budget FROM runweave_runs WHERE id = :id"),
+                        {"id": legacy_checkpoint_missing},
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            assert missing_checkpoint["status"] == "FAILED"
+            assert missing_checkpoint["error"]["code"] == "CHECKPOINT_UNAVAILABLE"
+            assert missing_checkpoint["budget"] is not None
+            await conn.execute(
+                text("DELETE FROM runweave_runs WHERE id = :id"), {"id": legacy_checkpoint_missing}
+            )
             assert (
                 await conn.scalar(
                     text("SELECT outcome FROM runweave_attempts WHERE run_id = :id"),

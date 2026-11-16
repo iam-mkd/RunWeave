@@ -148,7 +148,8 @@
       "name": "unauthorized-tool"
     }
   ],
-  "evaluator_sha256": "d9ad94dacb9395ed0895133cc1bacfcf8d29d48c79eedfd1f8470b0796e67359",
+  "checkpoint_sha256": "0a9e8281cd8917917090295f3ff81ddc63f1fe79eb29ecec4da635423053b9b6",
+  "evaluator_sha256": "918debcef832ce801c2cf77b24b7aa35ae202794e43d3ef279d8ac3ef3cffbad",
   "evaluator_version": "triage-checks-v2",
   "fixture_sha256": "7ae23a90681bb22a791c2b8aed42f9de8433b92e5e3514595d40999efe54a996",
   "fixture_version": "triage-fixtures-v2",
@@ -167,7 +168,7 @@
   "schema_version": "eval-report-v1",
   "seeded_regression": null,
   "task_failures": [],
-  "tool_policy_sha256": "e60d61edbb4dca88829ac57d544412ca65a5f0d5c0fe7600f1f9ac2c1465da14",
+  "tool_policy_sha256": "848b83d2352b2cb17957cbfd6d7f3cd9c9622d606335593a5b380d1b4e215e04",
   "workflow": "pydanticai",
-  "workflow_sha256": "cf54855838c6baafd3e23aea435bef8c0465a679acb1d0e1b6076a2ada61c493"
+  "workflow_sha256": "d43de5ba353a53466f66ed89607e48ee85b42670d6783708a4d414733c0151b9"
 }

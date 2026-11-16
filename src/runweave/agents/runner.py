@@ -1,5 +1,5 @@
 from runweave.agents.contracts import AgentModel, IncidentRequest, IncidentResult
-from runweave.agents.triage import TriageState, TriageSteps, validate_triage_result
+from runweave.agents.triage import TriageSteps
 from runweave.budgets import BudgetPolicy, run_budget
 from runweave.security import ContentPolicy
 from runweave.telemetry import Telemetry
@@ -36,10 +36,12 @@ class AgentRunner:
         self._completion_budget = completion_budget
 
     async def run(self, incident: IncidentRequest) -> IncidentResult:
-        state = TriageState(incident, self._max_steps, self._completion_budget)
         with run_budget(self._steps.budget_policy):
+            state = await self._steps.restore(
+                incident, self._max_steps, self._completion_budget, "baseline"
+            )
             while True:
                 action = await self._steps.decide(state)
                 if isinstance(action, IncidentResult):
-                    return validate_triage_result(state, action)
+                    return await self._steps.finish(state, action)
                 await self._steps.collect(state, action)

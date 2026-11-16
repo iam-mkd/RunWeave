@@ -2,7 +2,7 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 10 have code in place. Native Windows in-process tests and
+Milestones 1 through 11 have code in place. Native Windows in-process tests and
 the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
 checks remain open.
@@ -23,7 +23,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 8. Automated agent evaluation and security fixtures
 - [x] 9. Authentication, authorization, and prompt-injection defenses
 - [x] 10. Context, token, and cost budgets
-- [ ] 11. Durable workflow checkpoints and replay
+- [x] 11. Durable workflow checkpoints and replay
 - [ ] 12. Human approvals and resumable waiting
 - [ ] 13. Scoped persistent memory
 - [ ] 14. Typed multi-agent coordination
@@ -483,7 +483,6 @@ Implementation notes (2026-11-15):
 
 ### 11. Durable workflow checkpoints and replay
 
-
 - Persist typed, versioned workflow state and the next node at explicit
   boundaries, including committed evidence and usage. Start with RunWeave's
   existing PostgreSQL lease scheduler as execution owner. At this milestone,
@@ -499,6 +498,35 @@ Implementation notes (2026-11-15):
   budgets, reject stale writes, and cover a crash both before and after an
   effect commit. Validate resume across deployments for supported versions and
   define a safe outcome for an unsupported checkpoint version.
+
+Completion notes (2026-11-16):
+- Kept the existing lease scheduler as sole execution owner after evaluating
+  PydanticAI durable integrations. Both workflows share typed v1 checkpoints,
+  pinned workflow/prompt/tool/model identity, saved node/evidence/allowances,
+  lease fencing, monotonic compare-and-swap sequence, and atomic usage snapshots.
+  The authoritative ledger retains uncertain inference charges during replay.
+- Added a bounded operation journal with stable identities, argument digests,
+  committed-result reuse, and an internal effect adapter boundary. Confirmed
+  downstream effects reconcile safely; unknown outcomes fail with
+  EFFECT_RECONCILIATION_REQUIRED and a needs_resolution journal entry. Public
+  tools remain reads; approval/write-tool wiring is milestone 12.
+- Supported v1 replay survives changed deployment defaults; incompatible workflow
+  identity or checkpoint versions fail the affected job safely. Restored content
+  and receipt reuse recheck current policy and permissions. Migration 0004 fails
+  unfinished legacy jobs with CHECKPOINT_UNAVAILABLE while retaining budgets and
+  terminal history. Stop workers before this upgrade. See docs/checkpoints.md.
+- Native validation: 181 offline tests passed, 22 database tests skipped there;
+  all 22 passed separately on disposable PostgreSQL 18. Actual worker termination
+  covered nine boundaries for each workflow, including before/after downstream
+  effect commit, receipt commit, and done. Additional coverage verifies competing
+  checkpoint writers, expired/cancelled fencing, uncertain non-idempotent effects,
+  and processing a healthy job after an unsupported-version failure. The legacy
+  migration and follow-on healthy-job assertions passed in a targeted rerun.
+- Ruff lint/format, strict mypy (63 files), and offline lock verification passed.
+  Both regenerated evaluation reports passed 13 cases and 68 assertions, now
+  including checkpoint/effect source provenance. The seeded severity regression
+  exited 1 as expected. Live inference, hosted CI, container verification, and the
+  previously recorded load event-loop lag target remain open.
 
 ### 12. Human approvals and resumable waiting
 

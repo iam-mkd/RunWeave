@@ -152,6 +152,12 @@ rejections return 429 with `Retry-After`. PostgreSQL deployments must apply
 [security setup and policy guide](docs/security.md) for configuration, migration,
 JWT claims, audit events, and verification.
 
+Durable mode resumes typed workflow checkpoints with pinned workflow/prompt/model
+identity and fenced operation receipts. Migration 0004 fails unfinished older
+runs that have no checkpoint; stop workers before upgrading. See the
+[checkpoint and replay guide](docs/checkpoints.md) for compatibility, effect
+reconciliation, and upgrade details.
+
 ## Configuration
 
 Milestone 10 adds shared model-request, input/output-token, context, and estimated
@@ -274,11 +280,12 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-15 all 162 tests passed with native Windows asyncio and both optional
-workflow/evaluation extras installed. The opt-in PostgreSQL integration test was
-skipped in that suite and passed separately against disposable PostgreSQL 18,
-including budget migration, worker-kill accounting recovery, concurrent reservations,
-stale-lease fencing, owner isolation, and tenant quota races. Both offline
+On 2026-11-16 all 181 offline tests passed with native Windows asyncio and both optional
+workflow/evaluation extras installed. The 22 opt-in PostgreSQL tests were skipped
+in that suite and passed separately against disposable PostgreSQL 18, including
+worker termination at nine checkpoint/effect boundaries for both workflows,
+retained budgets, concurrent writes, stale leases, safe version rejection,
+manual resolution, migration, owner isolation, and tenant quota races. Both offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.
@@ -317,10 +324,11 @@ plus history capacity. Terminal rows are pruned in batches.
 
 Workers renew their leases every third of the configured lease interval. If a
 worker exits, another process can claim the job after lease expiry and the
-persisted retry delay. Recovery starts a new attempt from the beginning within
-the original run deadline. This is at-least-once execution, so repeated attempts
-can repeat inference. The provided tools are read-only. Write tools would need
-downstream idempotency before they could be used safely in durable mode.
+persisted retry delay. Recovery resumes the next saved workflow node within the
+original run deadline. Committed results are reused; inference interrupted before
+checkpoint commit can repeat and consume additional budget. Public tools are
+read-only. The internal effect boundary requires downstream confirmation and
+idempotency for retries, or fails for manual resolution of an unknown outcome.
 
 Shutdown stops claiming queued work and gives active work the configured grace
 period. Unfinished claims can recover after their leases expire. A cancellation

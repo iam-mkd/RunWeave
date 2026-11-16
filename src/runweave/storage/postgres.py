@@ -1,5 +1,6 @@
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import RowMapping, text
@@ -7,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState
+from runweave.checkpoints import Workflow, initial_checkpoint
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
 
@@ -17,6 +19,9 @@ _FINISH_ATTEMPT = """
     FROM changed WHERE a.run_id = changed.id AND a.attempt = changed.attempt
     AND a.finished_at IS NULL
 """
+
+if TYPE_CHECKING:
+    from runweave.storage.checkpoints import PostgresCheckpoints
 
 
 @dataclass(frozen=True)
@@ -39,8 +44,11 @@ class PostgresRuns:
 
     async def check(self) -> None:
         async with self._engine.connect() as conn:
-            await conn.execute(text("SELECT id, principal, budget FROM runweave_runs LIMIT 0"))
+            await conn.execute(
+                text("SELECT id, principal, budget, checkpoint FROM runweave_runs LIMIT 0")
+            )
             await conn.execute(text("SELECT run_id FROM runweave_attempts LIMIT 0"))
+            await conn.execute(text("SELECT run_id FROM runweave_operations LIMIT 0"))
 
     async def admit(
         self,
@@ -53,6 +61,8 @@ class PostgresRuns:
         principal: Principal = LOCAL_PRINCIPAL,
         tenant_limit: int = 1000,
         budget_policy: BudgetPolicy | None = None,
+        workflow: Workflow = "baseline",
+        max_steps: int = 7,
     ) -> RunSnapshot | None:
         async with self._engine.begin() as conn:
             # Serialize admission across replicas. Worker transactions never take this lock.
@@ -70,10 +80,11 @@ class PostgresRuns:
                 text(f"""
                 INSERT INTO runweave_runs
                     (id, incident, status, submitted_at, available_at, deadline_at,
-                     max_attempts, principal, budget)
+                     max_attempts, principal, budget, checkpoint)
                 SELECT :id, CAST(:incident AS jsonb), 'QUEUED', statement_timestamp(),
                     statement_timestamp(), statement_timestamp() + :timeout * interval '1 second',
-                    :attempts, CAST(:principal AS jsonb), CAST(:budget AS jsonb)
+                    :attempts, CAST(:principal AS jsonb), CAST(:budget AS jsonb),
+                    CAST(:checkpoint AS jsonb)
                 WHERE (SELECT count(*) FROM runweave_runs WHERE finished_at IS NULL) < :capacity
                   AND (SELECT count(*) FROM runweave_runs) < :max_rows
                 RETURNING {_COLUMNS}
@@ -87,6 +98,9 @@ class PostgresRuns:
                     max_rows=capacity + history_max,
                     principal=principal.model_dump_json(),
                     budget=BudgetState(policy=budget_policy or BudgetPolicy()).model_dump_json(),
+                    checkpoint=initial_checkpoint(
+                        incident, workflow, max_steps, budget_policy or BudgetPolicy()
+                    ).model_dump_json(),
                 ),
             )
             row = result.mappings().one_or_none()
@@ -157,6 +171,11 @@ class PostgresRuns:
 
     def ledger(self, claim: Claim) -> "PostgresBudget":
         return PostgresBudget(self._engine, claim)
+
+    def checkpoints(self, claim: Claim) -> "PostgresCheckpoints":
+        from runweave.storage.checkpoints import PostgresCheckpoints
+
+        return PostgresCheckpoints(self._engine, claim)
 
     async def _finish(self, condition: str, params: Mapping[str, object]) -> RunSnapshot | None:
         async with self._engine.begin() as conn:

@@ -92,10 +92,12 @@ above the reserved bound is recorded and blocks further reservations, even if
 the aggregate allowance still has room. Other in-flight calls can settle their
 known usage while the ledger stays blocked.
 
-Recovery reruns the workflow from the beginning within the original deadline.
-Its requests share the existing accounting. A child task shares its parent's
-ledger and pinned model policy. Workflow-node replay and typed delegation arrive
-in later milestones.
+Recovery resumes the next committed workflow node within the original deadline.
+Its requests share the authoritative existing accounting, including uncertain
+reservations. Checkpoints retain the original allowances and atomically snapshot
+usage; they never reset the ledger. A child task shares its parent's ledger and
+pinned model policy. See [workflow replay](checkpoints.md); typed delegation is
+planned for milestone 14.
 
 ## API and telemetry
 

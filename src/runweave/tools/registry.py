@@ -38,7 +38,7 @@ class ToolRegistry:
             ),
         )
 
-    async def execute(self, call: ToolCall, incident: IncidentRequest) -> Evidence:
+    def validate(self, call: ToolCall, incident: IncidentRequest) -> HealthQuery:
         if call.name not in (HEALTH, RUNBOOK):
             raise ValueError("Unknown or unauthorized tool")
         principal = current_principal()
@@ -53,6 +53,10 @@ class ToolRegistry:
             raise ValueError("Tool service does not match the incident scope")
         if self._telemetry:
             self._telemetry.audit("tool", "allowed", principal)
+        return query
+
+    async def execute(self, call: ToolCall, incident: IncidentRequest) -> Evidence:
+        query = self.validate(call, incident)
         if call.name == HEALTH:
             observation = await self._health.execute(query)
             if observation.service != query.service:

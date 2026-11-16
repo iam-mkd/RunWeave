@@ -147,8 +147,8 @@ uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --out
 ```
 
 The PostgreSQL script creates and removes a disposable local cluster and
-synchronizes the base environment. Restore workflow/evaluation extras afterwards
-when continuing framework tests. Security tests use synthetic identities and
+synchronizes workflow/evaluation extras and installs durable test requirements.
+Use `uv run --no-sync` for subsequent checks. Security tests use synthetic identities and
 credentials, local transports, and mocked model decisions. They cover owner
 isolation, scope denial, concurrent quotas, JWT failure cases, injection attempts,
 credential disclosure through outputs and telemetry, redirects, and response

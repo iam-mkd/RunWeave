@@ -5,6 +5,7 @@ from uuid import UUID
 
 from runweave.agents.contracts import AgentExecutor, IncidentRequest, IncidentResult
 from runweave.budgets import BudgetExceeded, budget_scope
+from runweave.checkpoints import CheckpointError, checkpoint_scope
 from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
@@ -57,6 +58,8 @@ class DurableScheduler:
                 principal=principal,
                 tenant_limit=self._settings.tenant_max_unfinished,
                 budget_policy=self._settings.budget_policy(),
+                workflow=self._settings.agent_workflow,
+                max_steps=self._settings.agent_max_steps,
             )
         if run is None:
             self._telemetry.rejected["queue_full"] += 1
@@ -170,6 +173,7 @@ class DurableScheduler:
         with (
             principal_scope(claim.snapshot.principal),
             budget_scope(self._store.ledger(claim)),
+            checkpoint_scope(self._store.checkpoints(claim)),
             self._telemetry.span("agent.run", run_id=claim.snapshot.id),
         ):
             async with deadline_scope(deadline, RUN_DEADLINE):
@@ -209,7 +213,9 @@ class DurableScheduler:
                     claim,
                     RunStatus.FAILED,
                     error=RunError(
-                        code=exc.code if isinstance(exc, BudgetExceeded) else "RUN_FAILED",
+                        code=exc.code
+                        if isinstance(exc, (BudgetExceeded, CheckpointError))
+                        else "RUN_FAILED",
                         message="Agent execution failed",
                     ),
                 )

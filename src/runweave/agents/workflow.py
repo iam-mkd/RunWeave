@@ -22,7 +22,7 @@ from runweave.agents.contracts import (
     ToolExchange,
 )
 from runweave.agents.groq import FINISH
-from runweave.agents.triage import TriageState, TriageSteps, validate_triage_result
+from runweave.agents.triage import TriageState, TriageSteps
 from runweave.budgets import run_budget
 from runweave.tools.contracts import HealthQuery
 from runweave.tools.registry import HEALTH, RUNBOOK
@@ -131,7 +131,8 @@ class PydanticWorkflow:
         async def finish(
             ctx: StepContext[TriageState, TriageSteps, IncidentResult],  # type: ignore[type-arg,unused-ignore]
         ) -> IncidentResult:
-            return validate_triage_result(ctx.state, ctx.inputs)
+            steps: TriageSteps = ctx.deps
+            return await steps.finish(ctx.state, ctx.inputs)
 
         builder.add(
             builder.edge_from(builder.start_node).to(decide),
@@ -146,9 +147,11 @@ class PydanticWorkflow:
         return builder.build()
 
     async def run(self, incident: IncidentRequest) -> IncidentResult:
-        state = TriageState(incident, self._max_steps, self._completion_budget)
         try:
             with run_budget(self._steps.budget_policy):
+                state = await self._steps.restore(
+                    incident, self._max_steps, self._completion_budget, "pydanticai"
+                )
                 result: IncidentResult = await self._graph.run(state=state, deps=self._steps)
             return result
         except ExceptionGroup as group:
