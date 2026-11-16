@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from runweave.agents.contracts import AgentExecutor
+from runweave.api.approvals import router as approvals_router
 from runweave.api.health import router as health_router
 from runweave.api.metrics import router as metrics_router
 from runweave.api.runs import router as runs_router
@@ -63,5 +64,6 @@ def create_app(
 
     app.include_router(health_router)
     app.include_router(runs_router)
+    app.include_router(approvals_router)
     app.include_router(metrics_router)
     return app

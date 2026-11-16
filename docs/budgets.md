@@ -99,6 +99,11 @@ usage; they never reset the ledger. A child task shares its parent's ledger and
 pinned model policy. See [workflow replay](checkpoints.md); typed delegation is
 planned for milestone 14.
 
+For an opt-in sandbox ticket, [approval waiting](approvals.md) pauses only the
+active run deadline. Waiting has its own absolute expiry; request/token/cost
+allowances and uncertain reservations are unchanged. Run snapshots expose the
+waiting timestamp and accumulated waiting seconds separately.
+
 ## API and telemetry
 
 Run snapshots add a `usage` object containing `model`, `price_version`,

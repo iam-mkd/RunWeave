@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager, suppress
 from uuid import UUID
 
 from runweave.agents.contracts import AgentExecutor, IncidentRequest, IncidentResult
+from runweave.approvals import AwaitingApproval, ticket_scope
 from runweave.budgets import BudgetExceeded, budget_scope
 from runweave.checkpoints import CheckpointError, checkpoint_scope
 from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
+from runweave.identity import IdentityProvider
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.scheduler import AdmissionRejected
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
@@ -36,6 +38,8 @@ class DurableScheduler:
         self._idle.set()
         self._in_progress = 0
         self._content_policy = content_policy or ContentPolicy()
+        self.approvals = store.approvals()
+        self._identity = IdentityProvider(settings)
 
     @property
     def ready(self) -> bool:
@@ -45,6 +49,14 @@ class DurableScheduler:
         self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
     ) -> RunSnapshot:
         principal.require("runs:submit")
+        if incident.create_ticket:
+            principal.require("tools:create_ticket")
+            try:
+                import runweave.agents.ticket  # noqa: F401
+            except ModuleNotFoundError as exc:
+                if exc.name != "pydantic_ai":
+                    raise
+                raise AdmissionRejected("WORKFLOW_EXTRA_REQUIRED") from None
         self._content_policy.check(incident.model_dump_json())
         if not self.ready:
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
@@ -170,10 +182,22 @@ class DurableScheduler:
                 return
 
     async def _run(self, claim: Claim, deadline: float) -> IncidentResult:
+        def authorize() -> Principal:
+            return self._identity.execution_principal(claim.snapshot.principal)
+
         with (
-            principal_scope(claim.snapshot.principal),
+            principal_scope(authorize()),
             budget_scope(self._store.ledger(claim)),
             checkpoint_scope(self._store.checkpoints(claim)),
+            ticket_scope(
+                self._store.ticket_gate(
+                    claim,
+                    ttl=self._settings.approval_ttl_seconds,
+                    limit=self._settings.approval_max_pending,
+                    authorize=authorize,
+                    content_policy=self._content_policy,
+                )
+            ),
             self._telemetry.span("agent.run", run_id=claim.snapshot.id),
         ):
             async with deadline_scope(deadline, RUN_DEADLINE):
@@ -202,6 +226,9 @@ class DurableScheduler:
                 return
             try:
                 result = task.result()
+            except AwaitingApproval:
+                self._telemetry.audit("approval", "waiting", claim.snapshot.principal)
+                return
             except DeadlineExceeded as exc:
                 finished = await self._store.finish(
                     claim,

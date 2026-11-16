@@ -3,7 +3,8 @@
 Milestone 9 adds run ownership, API and tool scopes, tenant admission limits,
 and credential checks at execution boundaries. The default local mode assigns
 every request to tenant `local`, subject `developer`, with access to the two
-registered synthetic read tools. Select JWT mode for authenticated deployments.
+registered synthetic read tools and the opt-in approved sandbox ticket action.
+Select JWT mode for authenticated deployments.
 
 ## Identity configuration
 
@@ -63,6 +64,9 @@ the identity established by the selected provider.
 | Cancel and return a run snapshot | `runs:cancel`, `runs:read`, and matching tenant and subject |
 | Execute health lookup | `tools:check_health` |
 | Execute runbook lookup | `tools:lookup_runbook` |
+| Request/execute a sandbox ticket | `tools:create_ticket` |
+| Read an approval | `runs:read` and matching tenant/subject |
+| Decide an approval | `approvals:decide`, `runs:read`, and matching tenant/subject |
 
 Foreign and unknown run IDs both return 404. The request body uses the incident
 schema, which forbids ownership and permission fields. Internal snapshots carry
@@ -71,8 +75,14 @@ expiry are preserved through queued execution and durable recovery. Each tool
 dispatch checks its scope and identity expiry again. A run whose identity has
 expired before execution fails with a sanitized run error.
 
+Milestone 12 rechecks current identity before approved effects. The server-owned
+`RUNWEAVE_AUTH_REVOKED_SUBJECTS` denylist blocks tenant/subject pairs on API calls
+and recovered execution. Apply revocation to every replica. JWT authority remains
+bounded by admitted scopes and token expiry; there is no external introspection.
+Test mode also checks the current identity map. See [approval policy](approvals.md).
+
 `RUNWEAVE_TENANT_MAX_UNFINISHED` defaults to 1,000. It bounds queued and running
-jobs across all subjects in one tenant. Terminal transitions release quota.
+and approval-waiting jobs across all subjects in one tenant. Terminal transitions release quota.
 Memory mode checks quota and enqueues without yielding. PostgreSQL checks quota
 and commits admission under the existing transaction-level admission lock, so
 competing replicas share one limit. A tenant quota rejection returns 429 with

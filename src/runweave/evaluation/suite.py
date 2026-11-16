@@ -340,6 +340,13 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
             + files("runweave").joinpath("effects.py").read_bytes()
             + files("runweave.storage").joinpath("checkpoints.py").read_bytes()
         ).hexdigest(),
+        "approval_sha256": hashlib.sha256(
+            files("runweave").joinpath("approvals.py").read_bytes()
+            + agent_files.joinpath("ticket.py").read_bytes()
+            + files("runweave.storage").joinpath("approvals.py").read_bytes()
+            + files("runweave").joinpath("identity.py").read_bytes()
+            + files("runweave.api").joinpath("approvals.py").read_bytes()
+        ).hexdigest(),
     }
 
 

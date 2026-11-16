@@ -2,7 +2,7 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 11 have code in place. Native Windows in-process tests and
+Milestones 1 through 12 have code in place. Native Windows in-process tests and
 the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
 checks remain open.
@@ -24,7 +24,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 9. Authentication, authorization, and prompt-injection defenses
 - [x] 10. Context, token, and cost budgets
 - [x] 11. Durable workflow checkpoints and replay
-- [ ] 12. Human approvals and resumable waiting
+- [x] 12. Human approvals and resumable waiting
 - [ ] 13. Scoped persistent memory
 - [ ] 14. Typed multi-agent coordination
 - [ ] 15. Sandboxed code and authorized browser automation
@@ -541,6 +541,41 @@ Completion notes (2026-11-16):
 - **Done when** approval survives restart, only approved arguments can execute,
   duplicate and concurrent decisions are safe, and denial, expiry, cancellation,
   or revoked permissions prevent the effect.
+
+Completion notes (2026-11-16):
+- Added opt-in `create_ticket: true` for a concrete PostgreSQL sandbox ticket.
+  Both workflows use PydanticAI deferred tools with requires_approval and persist
+  the exact call/messages before releasing the lease. The existing scheduler
+  remains execution owner; the deterministic approval adapter makes no live
+  model calls. Memory mode rejects this action before admission.
+- Added owner-scoped approval read/decision endpoints with explicit scopes and
+  binding to tenant, run, request ID, call ID, argument digest, versioned policy,
+  and expiry. Duplicate decisions are idempotent; opposing decisions conflict.
+  Execution rechecks current authority, saved messages, policy, and arguments.
+  The sandbox insert requires a live lease/deadline and unexpired approval, and
+  commits with its executed status. Stable operation receipts reconcile crashes.
+- WAITING_APPROVAL releases workers, retains quotas, and has a bounded global
+  pending limit and absolute expiry. Waiting time pauses the active deadline
+  without resetting model budgets and is exposed separately on snapshots.
+  Rejection, cancellation, and expiry terminate safely. Current test identities
+  and the server-owned tenant/subject denylist support permission revocation;
+  JWT scopes/expiry remain pinned with no external identity introspection.
+- Migration 0005 preserves existing jobs and grants no new scopes to legacy
+  principals. Stop workers and apply the migration before upgrade; downgrade
+  requires resolving approvals and restoring a backup. Configuration, exact API
+  examples, owner-approval limits, and retention are in docs/approvals.md.
+- Validation passed: 184 offline tests with 49 database cases skipped there;
+  a full 48-test PostgreSQL run plus a final five-case identity rerun including
+  the new submission-scope revocation case. All 49 distinct database cases passed.
+  Process exits while waiting and after real sandbox commit verify restart and
+  deduplication for both workflows. API checks prove the sole worker stays free,
+  and tests cover decision races, changed bindings/state, cancellation, expiry,
+  revocation, capacity, separate wait time, and existing recovery/migrations.
+- Ruff lint/format, strict mypy (69 files), and offline lock verification passed.
+  Both refreshed evaluations passed 13 cases and 68 assertions and now hash
+  approval/identity/API source. The seeded severity regression exited 1 as
+  expected. Live inference, hosted CI, Docker/startup verification, and the prior
+  event-loop lag target remain open; this milestone adds no external ticket service.
 
 ### 13. Scoped persistent memory
 

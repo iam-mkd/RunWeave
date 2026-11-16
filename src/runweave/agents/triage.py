@@ -166,6 +166,10 @@ class TriageSteps:
     async def finish(self, state: TriageState, result: IncidentResult) -> IncidentResult:
         validated = validate_triage_result(state, result)
         self._content_policy.check(validated.model_dump_json())
+        if state.incident.create_ticket:
+            from runweave.approvals import current_ticket_gate
+
+            await current_ticket_gate().run(state.incident, validated)
         if state.next_node != "done":
             state.action = validated
             state.next_node = "done"

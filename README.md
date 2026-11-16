@@ -158,6 +158,12 @@ runs that have no checkpoint; stop workers before upgrading. See the
 [checkpoint and replay guide](docs/checkpoints.md) for compatibility, effect
 reconciliation, and upgrade details.
 
+Milestone 12 adds opt-in sandbox ticket creation with durable human approval.
+Submit `create_ticket: true`, review `/v1/runs/{id}/approval`, then submit the
+exact bound decision. Waiting releases the worker lease and has a separate hard
+expiry. See the [approval guide](docs/approvals.md) for scopes, API examples,
+revocation, and migration 0005.
+
 ## Configuration
 
 Milestone 10 adds shared model-request, input/output-token, context, and estimated
@@ -280,12 +286,13 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-16 all 181 offline tests passed with native Windows asyncio and both optional
-workflow/evaluation extras installed. The 22 opt-in PostgreSQL tests were skipped
-in that suite and passed separately against disposable PostgreSQL 18, including
-worker termination at nine checkpoint/effect boundaries for both workflows,
-retained budgets, concurrent writes, stale leases, safe version rejection,
-manual resolution, migration, owner isolation, and tenant quota races. Both offline
+On 2026-11-16 all 184 offline tests passed with native Windows asyncio and both optional
+workflow/evaluation extras installed. The 49 opt-in PostgreSQL tests were skipped
+in that suite. A full 48-test database run and a final five-case authorization
+rerun (including one added case) passed on disposable PostgreSQL 18. Coverage includes
+worker termination at checkpoint/effect boundaries for both workflows, approval
+restart and sandbox-commit recovery, separate wait time, concurrent decisions,
+revocation, cancellation, expiry, owner isolation, and migration. Both offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.

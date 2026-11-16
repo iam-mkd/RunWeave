@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     app_name: str = Field(default="RunWeave", min_length=1, max_length=100)
     auth_mode: Literal["local", "test", "jwt"] = "local"
     auth_test_identities: dict[str, Principal] = Field(default_factory=dict, repr=False)
+    auth_revoked_subjects: frozenset[tuple[str, str]] = Field(
+        default_factory=frozenset, max_length=1000
+    )
     auth_issuer: str = Field(default="", max_length=500)
     auth_audience: str = Field(default="", max_length=200)
     auth_signing_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
@@ -69,6 +72,8 @@ class Settings(BaseSettings):
     db_poll_seconds: float = Field(default=0.25, ge=0.05, le=5)
     durable_max_attempts: int = Field(default=3, ge=1, le=10)
     durable_retry_delay_seconds: float = Field(default=0.5, ge=0.05, le=30)
+    approval_ttl_seconds: float = Field(default=3600, ge=1, le=86400)
+    approval_max_pending: int = Field(default=100, ge=1, le=10000)
 
     @model_validator(mode="after")
     def require_groq_key(self) -> "Settings":

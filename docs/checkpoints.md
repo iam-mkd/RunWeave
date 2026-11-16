@@ -41,8 +41,9 @@ read may repeat. A final done checkpoint completes without repeating inference.
 ## External effects
 
 The internal `EffectRunner` provides a boundary for explicitly wired adapters.
-Public triage tools remain scoped reads; approval and write-tool wiring belongs
-to milestone 12. Controlled database fixtures verify the effect protocol.
+Model-proposed triage tools remain scoped reads. Milestone 12 adds an explicitly
+requested [sandbox ticket approval gate](approvals.md) after validated triage.
+Controlled database fixtures also verify the general effect protocol.
 
 The stable operation key hashes run ID, kind, and tool-call ID. A separate digest
 binds the tool name and canonical arguments. Reusing a call ID with different

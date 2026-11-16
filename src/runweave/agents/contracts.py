@@ -10,6 +10,7 @@ class IncidentRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     service: ServiceName
+    create_ticket: bool = False
     description: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
     ]

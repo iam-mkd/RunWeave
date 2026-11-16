@@ -10,7 +10,15 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, StringConstrai
 IdentityName = Annotated[str, StringConstraints(pattern=r"^[a-zA-Z0-9][a-zA-Z0-9_.:@-]{0,127}$")]
 Scope = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z0-9_:.-]{0,63}$")]
 ALL_SCOPES = frozenset(
-    {"runs:submit", "runs:read", "runs:cancel", "tools:check_health", "tools:lookup_runbook"}
+    {
+        "runs:submit",
+        "runs:read",
+        "runs:cancel",
+        "tools:check_health",
+        "tools:lookup_runbook",
+        "tools:create_ticket",
+        "approvals:decide",
+    }
 )
 
 

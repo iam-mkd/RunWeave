@@ -10,9 +10,12 @@ from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState
 from runweave.checkpoints import Workflow, initial_checkpoint
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
-from runweave.security import LOCAL_PRINCIPAL, Principal, TenantQuotaExceeded
+from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, TenantQuotaExceeded
 
-_COLUMNS = "id, status, submitted_at, started_at, finished_at, result, error, principal, budget"
+_COLUMNS = (
+    "id, status, submitted_at, started_at, finished_at, result, error, principal, budget, "
+    "approval_wait_started_at, approval_wait_seconds"
+)
 _OWNER = "principal->>'tenant' = :tenant AND principal->>'subject' = :subject"
 _FINISH_ATTEMPT = """
     UPDATE runweave_attempts a SET finished_at = clock_timestamp(), outcome = changed.status
@@ -21,6 +24,7 @@ _FINISH_ATTEMPT = """
 """
 
 if TYPE_CHECKING:
+    from runweave.storage.approvals import PostgresApprovals, PostgresTicketGate
     from runweave.storage.checkpoints import PostgresCheckpoints
 
 
@@ -49,6 +53,8 @@ class PostgresRuns:
             )
             await conn.execute(text("SELECT run_id FROM runweave_attempts LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_operations LIMIT 0"))
+            await conn.execute(text("SELECT run_id FROM runweave_approvals LIMIT 0"))
+            await conn.execute(text("SELECT run_id FROM runweave_sandbox_tickets LIMIT 0"))
 
     async def admit(
         self,
@@ -139,7 +145,7 @@ class PostgresRuns:
                     INSERT INTO runweave_attempts (run_id, attempt, lease_token, started_at)
                     SELECT id, attempt, lease_token, clock_timestamp() FROM claimed
                 ) SELECT id, status, submitted_at, started_at, finished_at, result, error,
-                    principal, budget, incident,
+                    principal, budget, incident, approval_wait_started_at, approval_wait_seconds,
                     extract(epoch FROM deadline_at - clock_timestamp()) AS remaining
                 FROM claimed
             """),
@@ -177,6 +183,31 @@ class PostgresRuns:
 
         return PostgresCheckpoints(self._engine, claim)
 
+    def approvals(self) -> "PostgresApprovals":
+        from runweave.storage.approvals import PostgresApprovals
+
+        return PostgresApprovals(self._engine)
+
+    def ticket_gate(
+        self,
+        claim: Claim,
+        *,
+        ttl: float,
+        limit: int,
+        authorize: Callable[[], Principal],
+        content_policy: ContentPolicy,
+    ) -> "PostgresTicketGate":
+        from runweave.storage.approvals import PostgresTicketGate
+
+        return PostgresTicketGate(
+            self._engine,
+            claim,
+            ttl=ttl,
+            limit=limit,
+            authorize=authorize,
+            content_policy=content_policy,
+        )
+
     async def _finish(self, condition: str, params: Mapping[str, object]) -> RunSnapshot | None:
         async with self._engine.begin() as conn:
             result = await conn.execute(
@@ -184,6 +215,9 @@ class PostgresRuns:
                 WITH changed AS (
                     UPDATE runweave_runs SET status = :status, finished_at = clock_timestamp(),
                         lease_token = NULL, lease_until = NULL,
+                        approval_wait_seconds = approval_wait_seconds + COALESCE(
+                            extract(epoch FROM clock_timestamp() - approval_wait_started_at), 0),
+                        approval_wait_started_at = NULL,
                         result = CAST(:result AS jsonb), error = CAST(:error AS jsonb)
                     WHERE id = :id AND {condition}
                     RETURNING *
@@ -192,6 +226,14 @@ class PostgresRuns:
                 params,
             )
             row = result.mappings().one_or_none()
+            if row is not None and row["status"] == "CANCELLED":
+                await conn.execute(
+                    text("""
+                    UPDATE runweave_approvals SET status = 'cancelled'
+                    WHERE run_id = :id AND status IN ('pending', 'approved')
+                """),
+                    {"id": row["id"]},
+                )
         return snapshot(row) if row is not None else None
 
     async def finish(
@@ -217,7 +259,7 @@ class PostgresRuns:
         )
 
     async def cancel(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
-        condition = "status IN ('QUEUED', 'RUNNING')"
+        condition = "status IN ('QUEUED', 'RUNNING', 'WAITING_APPROVAL')"
         params: dict[str, object] = dict(id=run_id, status="CANCELLED", result=None, error=None)
         if principal is not None:
             condition += f" AND {_OWNER}"
@@ -229,12 +271,15 @@ class PostgresRuns:
         return changed if changed is not None else await self.get(run_id, principal)
 
     async def maintain(self, *, retry_delay: float, history_ttl: float, history_max: int) -> None:
+        from runweave.storage.approvals import expire_approvals
+
         async with self._engine.begin() as conn:
+            await expire_approvals(conn)
             await conn.execute(
                 text("""
                 WITH candidates AS (
                     SELECT id FROM runweave_runs WHERE finished_at IS NULL AND (
-                        deadline_at <= statement_timestamp() OR
+                        (status != 'WAITING_APPROVAL' AND deadline_at <= statement_timestamp()) OR
                         (status = 'RUNNING' AND lease_until <= statement_timestamp())
                     ) ORDER BY deadline_at, id LIMIT 128 FOR UPDATE SKIP LOCKED
                 ), changed AS (

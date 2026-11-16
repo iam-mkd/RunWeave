@@ -59,6 +59,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                 "0002_run_principals.sql",
                 "0003_run_budgets.sql",
                 "0004_workflow_checkpoints.sql",
+                "0005_human_approvals.sql",
             ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
@@ -120,7 +121,11 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
             legacy_principal = await conn.scalar(
                 text("SELECT principal FROM runweave_runs WHERE id = :id"), {"id": legacy_id}
             )
-            assert Principal.model_validate(legacy_principal) == LOCAL_PRINCIPAL
+            assert Principal.model_validate(legacy_principal) == LOCAL_PRINCIPAL.model_copy(
+                update={
+                    "scopes": LOCAL_PRINCIPAL.scopes - {"tools:create_ticket", "approvals:decide"}
+                }
+            )
             legacy_outcome = (
                 (
                     await conn.execute(

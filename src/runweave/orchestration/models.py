@@ -12,6 +12,7 @@ from runweave.security import LOCAL_PRINCIPAL, Principal
 class RunStatus(StrEnum):
     QUEUED = "QUEUED"
     RUNNING = "RUNNING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
     SUCCEEDED = "SUCCEEDED"
     FAILED = "FAILED"
     TIMED_OUT = "TIMED_OUT"
@@ -19,7 +20,7 @@ class RunStatus(StrEnum):
 
     @property
     def terminal(self) -> bool:
-        return self not in (RunStatus.QUEUED, RunStatus.RUNNING)
+        return self not in (RunStatus.QUEUED, RunStatus.RUNNING, RunStatus.WAITING_APPROVAL)
 
 
 class RunError(BaseModel):
@@ -42,3 +43,5 @@ class RunSnapshot(BaseModel):
     error: RunError | None = None
     principal: Principal = Field(default=LOCAL_PRINCIPAL, exclude=True)
     usage: BudgetSummary | None = None
+    approval_wait_started_at: datetime | None = None
+    approval_wait_seconds: float = Field(default=0, ge=0)
