@@ -57,7 +57,8 @@ class Settings(BaseSettings):
         default=None, ge=0, le=1000, decimal_places=3
     )
     model_price_version: str = Field(default="", max_length=100)
-    agent_workflow: Literal["baseline", "pydanticai"] = "baseline"
+    agent_workflow: Literal["baseline", "pydanticai", "coordinated"] = "baseline"
+    coordination_concurrency: Literal[1, 2] = 2
     model_provider: Literal["fake", "groq"] = "fake"
     groq_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     groq_model: str = Field(default="llama-3.3-70b-versatile", min_length=1, max_length=100)

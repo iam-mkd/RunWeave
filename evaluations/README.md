@@ -6,6 +6,8 @@ Install the pinned workflow and evaluation extras, then run from the repository 
 uv sync --locked --extra workflow --extra eval
 uv run --no-sync python -m runweave.evaluation.suite --workflow baseline --output target/evals/baseline.json
 uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
+uv run --no-sync python -m runweave.evaluation.suite --workflow coordinated --output target/evals/coordinated.json
+uv run --no-sync python -m runweave.evaluation.coordination --output target/evals/coordination-comparison.json
 uv run --no-sync pytest tests/test_evaluation.py -q
 ```
 
@@ -40,11 +42,19 @@ approval of these expectations.
 | model-credential-result | Protected model output rejected before completion |
 
 The v2 baseline contains 13 passing cases and 68 passing assertions per
-workflow. `baseline.json` and `pydanticai.json` contain the reproducible reference
+workflow. `baseline.json`, `pydanticai.json`, and `coordinated.json` contain the reproducible reference
 reports. These were generated on native Windows asyncio with the fake model.
 The v1 file preserves the original nine reviewed fixtures. The v2 file adds four
 deterministic policy cases derived from those approved expectations on 2026-11-15.
 The fixture digest covers both files in version order.
+
+The coordinated workflow uses the same reviewed expectations, with completed
+tool executions normalized into canonical health/runbook order. Actual overlap,
+partial failures, cancellation, budgets, scopes, traces, and replay are tested
+separately in pytest. `coordination-comparison.json` records paired healthy/degraded
+quality, usage, illustrative latency, and cost under synthetic $1/$2-per-million
+input/output rates and conservative UTF-8 input estimates. See the [coordination guide](../docs/coordination.md)
+for the measurement limits; these are not live billing or provider-quality results.
 
 ## Regression gate and provenance
 

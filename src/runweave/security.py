@@ -21,6 +21,7 @@ ALL_SCOPES = frozenset(
         "memory:read",
         "memory:write",
         "memory:delete",
+        "agents:delegate",
     }
 )
 

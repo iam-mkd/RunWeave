@@ -36,17 +36,21 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync mypy
-      - name: Reproduce both offline reports
+      - name: Reproduce offline reports and paired comparison
         run: |
           uv run --no-sync python -m runweave.evaluation.suite --workflow baseline --output target/evals/baseline.json
           uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
+          uv run --no-sync python -m runweave.evaluation.suite --workflow coordinated --output target/evals/coordinated.json
+          uv run --no-sync python -m runweave.evaluation.coordination --output target/evals/coordination-comparison.json
       - name: Verify regression produces a failing exit status
         shell: bash
         run: |
           set +e
-          uv run --no-sync python -m runweave.evaluation.suite --seed-regression severity --output target/evals/seeded.json
-          status=$?
-          test "$status" -eq 1
+          for workflow in baseline coordinated; do
+            uv run --no-sync python -m runweave.evaluation.suite --workflow "$workflow" --seed-regression severity --output "target/evals/seeded-$workflow.json"
+            status=$?
+            if [ "$status" -ne 1 ]; then exit 1; fi
+          done
       - uses: actions/upload-artifact@v4
         if: always()
         with:

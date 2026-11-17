@@ -80,7 +80,25 @@ async def open_runtime(
             )
         try:
             runner: AgentExecutor
-            if settings.agent_workflow == "pydanticai":
+            if settings.agent_workflow == "coordinated":
+                from runweave.agents.coordination import CoordinatedRunner
+
+                runner = CoordinatedRunner(
+                    model,
+                    ToolRegistry(
+                        health_tool,
+                        runbook_delay=settings.mock_runbook_delay_seconds,
+                        telemetry=telemetry,
+                    ),
+                    telemetry,
+                    budget_policy=settings.budget_policy(),
+                    content_policy=content_policy,
+                    max_steps=settings.agent_max_steps,
+                    completion_budget=settings.agent_completion_tokens,
+                    step_timeout=settings.step_timeout_seconds,
+                    concurrency=settings.coordination_concurrency,
+                )
+            elif settings.agent_workflow == "pydanticai":
                 try:
                     from runweave.agents.workflow import PydanticDecisionModel, PydanticWorkflow
                 except ModuleNotFoundError as exc:

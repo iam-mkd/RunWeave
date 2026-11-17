@@ -2,7 +2,7 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 13 have code in place. Native Windows in-process tests and
+Milestones 1 through 14 have code in place. Native Windows in-process tests and
 the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
 checks remain open.
@@ -26,7 +26,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 11. Durable workflow checkpoints and replay
 - [x] 12. Human approvals and resumable waiting
 - [x] 13. Scoped persistent memory
-- [ ] 14. Typed multi-agent coordination
+- [x] 14. Typed multi-agent coordination
 - [ ] 15. Sandboxed code and authorized browser automation
 - [ ] 16. Shadow workflow comparison and release verification
 
@@ -633,6 +633,47 @@ Completion notes (2026-11-17):
 - **Done when** contract and evaluation tests cover successful handoffs, partial
   failure, cancellation, budget exhaustion, replay, and denial of unauthorized
   delegation. Compare quality and cost with the single-agent baseline.
+
+Completion notes (2026-11-17):
+- Added opt-in coordinated workflow with a fixed coordinator and exactly two
+  specialists. Typed requests bind run/role/service and a two-step limit; typed
+  outputs bind actual evidence to health observations or bounded runbook analysis.
+  Each specialist gets one tool definition and only its required parent permission.
+  agents:delegate is checked before dispatch; nested/model-directed expansion is
+  rejected. The coordinator exposes only finish and requires both fresh evidence IDs.
+- Independent branches run in an owned TaskGroup when reservation bounds permit;
+  otherwise they run sequentially. They share parent budget, deadline, cancellation,
+  provider limits, and trace context. Both branches are required: a partial failure
+  records the successful sibling and a sanitized failure, without fabricating a
+  partial result or repeating delegation. Normal success uses five steps and three
+  model calls. No new dependency, execution runtime, or database migration was added.
+- Added independent proposal/result checkpoints, stable correlation, read-receipt
+  reuse, and bounded lease-fenced compare-and-swap merges without holding an
+  application lock across I/O. Recovery reuses committed branches and final
+  decisions; unknown inference can still repeat and consume budget. Saved limits
+  survive default changes. Current identity/content checks and branch correlation
+  are revalidated. All workers must be upgraded before selecting the new workflow.
+- Coordinator merge supports scoped recall; specialists receive no memory or
+  effect authority. Existing sandbox approval resumes after merge without repeating
+  inference. Coordinated evidence retains its workflow provenance when explicitly
+  saved as memory. Contracts, limits, and reproduction are in docs/coordination.md.
+- Validation passed: 207 offline tests with 85 PostgreSQL cases skipped there;
+  all 85 passed separately on disposable PostgreSQL 18. Seven new database cases
+  cover process termination at proposals, both specialist completions, merge, and
+  done; atomic/stale/cancelled branch writes; and memory plus approval integration.
+  Unit tests prove overlap, partial failure, shared-budget exhaustion/fallback,
+  cancellation, parent deadlines, trace parentage, invalid correlation, and denied
+  delegation. Ruff lint/format, strict mypy (79 files), and offline lock checks passed.
+- All three reference evaluators passed the same 13 cases and 68 assertions.
+  Seeded severity regressions for baseline and coordinated paths exited 1 as expected.
+  A paired healthy/degraded comparison preserved quality and three requests each,
+  with conservative coordinated input estimates 6770/6758 versus baseline 10171/10164.
+  Synthetic $1/$2-per-million input/output rates give about one-third lower estimated
+  cost; this is not live billing or a live-model quality claim. Timings are two
+  illustrative samples per workflow. The report records host/configuration/source
+  hashes in evaluations/coordination-comparison.json. CI is configured to reproduce
+  the new reports; hosted CI, live inference, Docker/startup checks, and the prior
+  event-loop lag target remain unverified/open.
 
 ### 15. Sandboxed code and authorized browser automation
 

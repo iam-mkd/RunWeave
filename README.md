@@ -171,6 +171,12 @@ membership. Recall is historical, untrusted data with bounded retention and
 context use. See the [memory guide](docs/memory.md) for migration 0006, scopes,
 provenance, deletion, and examples.
 
+Milestone 14 adds `RUNWEAVE_AGENT_WORKFLOW=coordinated`: a fixed coordinator with
+one scoped health specialist and one scoped runbook specialist. Independent
+handoffs overlap within the shared budget and resume committed branches after
+restart. See the [coordination guide](docs/coordination.md) for required scopes,
+failure policy, checkpoint compatibility, and baseline quality/cost comparisons.
+
 ## Configuration
 
 Milestone 10 adds shared model-request, input/output-token, context, and estimated
@@ -293,17 +299,22 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-17 all 191 offline tests passed with native Windows asyncio and both optional
-workflow/evaluation extras installed. The 78 opt-in PostgreSQL tests were skipped
+On 2026-11-17 all 207 offline tests passed with native Windows asyncio and both optional
+workflow/evaluation extras installed. The 85 opt-in PostgreSQL tests were skipped
 in that suite and all passed separately on disposable PostgreSQL 18. Coverage includes
 worker termination at checkpoint/effect boundaries for both workflows, approval
 restart and sandbox-commit recovery, scoped memory across process restart,
 provenance, deletion/expiry, memory injection boundaries, concurrent quotas,
-authorization revocation, owner/project isolation, and migration. Both offline
+authorization revocation, owner/project isolation, coordinated branch replay and
+trace/cancellation/budget boundaries, and migration. All three offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.
 Uvicorn startup/shutdown and container verification remain pending.
+The paired coordination comparison preserves fixture quality with three model
+requests per workflow and about one-third fewer conservatively estimated input
+tokens. Its prices are synthetic and its timing samples are illustrative; see
+[the comparison limits](docs/coordination.md#verification-and-comparison).
 
 ## Current boundaries
 

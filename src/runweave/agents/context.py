@@ -1,6 +1,7 @@
 import json
 
 from runweave.agents.contracts import Evidence, IncidentRequest, IncidentResult, ToolExchange
+from runweave.agents.handoffs import COORDINATOR_PROMPT, SPECIALIST_PROMPTS, current_role
 from runweave.budgets import BudgetExceeded, BudgetPolicy
 from runweave.memory import MEMORY_INSTRUCTIONS, current_recall, recalled_payload
 from runweave.tools.registry import RUNBOOK, tool_definition
@@ -24,8 +25,16 @@ def model_payload(
 ) -> dict[str, object]:
     recalled = recalled_payload()
     recall = current_recall()
+    role = current_role()
+    instructions = (
+        COORDINATOR_PROMPT
+        if role == "coordinator"
+        else SPECIALIST_PROMPTS[role]
+        if role
+        else SYSTEM_PROMPT
+    )
     messages: list[dict[str, object]] = [
-        {"role": "system", "content": SYSTEM_PROMPT + (MEMORY_INSTRUCTIONS if recall else "")},
+        {"role": "system", "content": instructions + (MEMORY_INSTRUCTIONS if recall else "")},
         {"role": "user", "content": incident.model_dump_json()},
     ]
     if recalled:
@@ -65,7 +74,7 @@ def model_payload(
     return {
         "model": model,
         "messages": messages,
-        "tools": [*tools, finish],
+        "tools": [*tools] if role in ("health", "runbook") else [*tools, finish],
         "tool_choice": "required",
         "parallel_tool_calls": False,
         "max_completion_tokens": output_limit,

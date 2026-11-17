@@ -2,6 +2,8 @@
 
 Milestone 11 keeps the PostgreSQL lease scheduler as the sole execution owner.
 Both the baseline loop and Pydantic Graph use the same typed triage boundaries.
+The later [coordinated workflow](coordination.md) adds two independently committed
+branches to these checkpoints under the same lease scheduler and replay owner.
 PydanticAI's supported [durable execution integrations](https://ai.pydantic.dev/durable_execution/)
 were evaluated: introducing another workflow runtime would require transferring
 scheduling, retry, and replay ownership. The existing fenced scheduler already

@@ -45,7 +45,7 @@ class FactProvenance(BaseModel):
     run_id: UUID
     evidence_id: str = Field(min_length=1, max_length=100)
     source_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    workflow: Literal["baseline", "pydanticai"]
+    workflow: Literal["baseline", "pydanticai", "coordinated"]
     prompt_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
     checkpoint_sequence: int = Field(ge=0)
     observed_at: AwareDatetime

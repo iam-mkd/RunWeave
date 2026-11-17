@@ -29,7 +29,7 @@ from runweave.telemetry import Telemetry
 from runweave.tools.contracts import HealthObservation, HealthQuery
 from runweave.tools.registry import HEALTH, RUNBOOK, ToolRegistry
 
-Workflow = Literal["baseline", "pydanticai"]
+Workflow = Literal["baseline", "pydanticai", "coordinated"]
 Regression = Literal["severity", "evidence", "claims", "secret", "tool"]
 EVALUATOR_VERSION = "triage-checks-v2"
 CANARY = "RW_PRIVATE_CANARY_73f09"
@@ -83,12 +83,15 @@ class FixtureHealth:
 
 
 class FixtureTools(ToolRegistry):
-    def __init__(self, fixture: Fixture) -> None:
+    def __init__(self, fixture: Fixture, delay: float = 0) -> None:
         super().__init__(FixtureHealth(fixture))
         self.fixture = fixture
         self.executed: list[str] = []
+        self.delay = delay
 
     async def execute(self, call: ToolCall, incident: IncidentRequest) -> Evidence:
+        if self.delay:
+            await asyncio.sleep(self.delay)
         evidence = await super().execute(call, incident)
         self.executed.append(call.name)
         if call.name == RUNBOOK:
@@ -136,15 +139,21 @@ class FixtureModel(FakeAgentModel):
         return decision
 
 
-async def execute_fixture(fixture: Fixture, workflow: Workflow) -> Observation:
+async def execute_fixture(
+    fixture: Fixture, workflow: Workflow, *, tool_delay: float = 0
+) -> Observation:
     model = FixtureModel(fixture)
-    tools = FixtureTools(fixture)
+    tools = FixtureTools(fixture, tool_delay)
     telemetry = Telemetry()
     content_policy = ContentPolicy(fixture.protected_values)
     expected_errors: tuple[type[Exception], ...] = (ValueError,)
     try:
         runner: AgentExecutor
-        if workflow == "pydanticai":
+        if workflow == "coordinated":
+            from runweave.agents.coordination import CoordinatedRunner
+
+            runner = CoordinatedRunner(model, tools, telemetry, content_policy=content_policy)
+        elif workflow == "pydanticai":
             from pydantic_ai.exceptions import UnexpectedModelBehavior
 
             from runweave.agents.workflow import PydanticDecisionModel, PydanticWorkflow
@@ -169,7 +178,11 @@ async def execute_fixture(fixture: Fixture, workflow: Workflow) -> Observation:
             with principal_scope(fixture.principal):
                 result = await runner.run(fixture.incident)
             return Observation(
-                result=result, executed=tuple(tools.executed), proposals=tuple(model.proposals)
+                result=result,
+                executed=tuple(sorted(tools.executed, key=lambda s: s != HEALTH))
+                if workflow == "coordinated"
+                else tuple(tools.executed),
+                proposals=tuple(model.proposals),
             )
         except expected_errors as error:
             messages = [str(error)]
@@ -179,7 +192,9 @@ async def execute_fixture(fixture: Fixture, workflow: Workflow) -> Observation:
                 cause = cause.__cause__
             return Observation(
                 error="\n".join(messages),
-                executed=tuple(tools.executed),
+                executed=tuple(sorted(tools.executed, key=lambda s: s != HEALTH))
+                if workflow == "coordinated"
+                else tuple(tools.executed),
                 proposals=tuple(model.proposals),
             )
     finally:
@@ -297,7 +312,9 @@ async def evaluate(workflow: Workflow, regression: Regression | None = None) -> 
         "schema_version": "eval-report-v1",
         "workflow": workflow,
         **hashes,
-        "prompt_version": "fake-policy-v1",
+        "prompt_version": "coordinated-policy-v1"
+        if workflow == "coordinated"
+        else "fake-policy-v1",
         "model_version": "fake-v1",
         "fixture_version": fixtures.version,
         "fixture_sha256": digest,
@@ -319,6 +336,8 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
     source_names = ["runner.py", "triage.py", "fake.py"]
     if workflow == "pydanticai":
         source_names.append("workflow.py")
+    if workflow == "coordinated":
+        source_names.extend(["coordination.py", "handoffs.py"])
     return {
         "workflow_sha256": hashlib.sha256(
             b"".join(agent_files.joinpath(name).read_bytes() for name in source_names)
@@ -357,7 +376,9 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run offline deterministic Pydantic Evals")
-    parser.add_argument("--workflow", choices=["baseline", "pydanticai"], default="baseline")
+    parser.add_argument(
+        "--workflow", choices=["baseline", "pydanticai", "coordinated"], default="baseline"
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument(
         "--seed-regression", choices=["severity", "evidence", "claims", "secret", "tool"]

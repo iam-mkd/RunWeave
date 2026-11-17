@@ -4,6 +4,8 @@ Milestone 13 stores historical observations in PostgreSQL. Memory is opt-in and
 uses exact service/scope filtering, newest-first ordering, and bounded retrieval.
 It adds no embeddings, semantic index, provider calls, or automatic model writes.
 Both workflows retain their current health/runbook tools and evidence checks.
+The later [coordinated workflow](coordination.md) can recall facts at its merge
+boundary; its specialists have no memory authority.
 
 ## Upgrade and permissions
 

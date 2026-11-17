@@ -1,0 +1,166 @@
+{
+  "budget_policy": {
+    "context_tokens": 16384,
+    "estimator": "utf8-bytes-v1",
+    "evidence_bytes": 2048,
+    "input_nanos_per_token": 1000,
+    "max_cost_nanos": 50000000,
+    "max_input_tokens": 100000,
+    "max_output_tokens": 2048,
+    "max_requests": 20,
+    "model": "fake-v1",
+    "output_nanos_per_token": 2000,
+    "price_version": "synthetic-comparison-v1",
+    "version": "budget-v1"
+  },
+  "coordination_concurrency": 2,
+  "fixture_sha256": "7ae23a90681bb22a791c2b8aed42f9de8433b92e5e3514595d40999efe54a996",
+  "host": {
+    "cpu_count": 16,
+    "machine": "AMD64",
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.9 | packaged by Anaconda, Inc. | (main, Oct 21 2025, 19:09:58) [MSC v.1929 64 bit (AMD64)]"
+  },
+  "input_estimator": "conservative UTF-8 bytes",
+  "input_usd_per_million": 1,
+  "limitations": "Two illustrative latency samples per workflow; fake model and synthetic prices. Not a provider quality, production capacity, or billing measurement.",
+  "model": "fake-v1",
+  "output_usd_per_million": 2,
+  "pairs": [
+    {
+      "case": "healthy",
+      "measurements": {
+        "baseline": {
+          "elapsed_seconds": 0.05751860002055764,
+          "quality": {
+            "evidence": true,
+            "observed_health": true,
+            "outcome": true,
+            "proposal_scope": true,
+            "secret_absent": true,
+            "severity": true,
+            "tool_choice": true,
+            "unsupported_claims": true
+          },
+          "severity": "low",
+          "usage": {
+            "blocked": false,
+            "estimated_cost_usd": "0.010177",
+            "estimator": "utf8-bytes-v1",
+            "input_tokens": 10171,
+            "model": "fake-v1",
+            "output_tokens": 3,
+            "price_version": "synthetic-comparison-v1",
+            "requests": 3,
+            "uncertain_requests": 3
+          }
+        },
+        "coordinated": {
+          "elapsed_seconds": 0.033009200007654727,
+          "quality": {
+            "evidence": true,
+            "observed_health": true,
+            "outcome": true,
+            "proposal_scope": true,
+            "secret_absent": true,
+            "severity": true,
+            "tool_choice": true,
+            "unsupported_claims": true
+          },
+          "severity": "low",
+          "usage": {
+            "blocked": false,
+            "estimated_cost_usd": "0.006776",
+            "estimator": "utf8-bytes-v1",
+            "input_tokens": 6770,
+            "model": "fake-v1",
+            "output_tokens": 3,
+            "price_version": "synthetic-comparison-v1",
+            "requests": 3,
+            "uncertain_requests": 3
+          }
+        }
+      }
+    },
+    {
+      "case": "degraded",
+      "measurements": {
+        "baseline": {
+          "elapsed_seconds": 0.059369900001911446,
+          "quality": {
+            "evidence": true,
+            "observed_health": true,
+            "outcome": true,
+            "proposal_scope": true,
+            "secret_absent": true,
+            "severity": true,
+            "tool_choice": true,
+            "unsupported_claims": true
+          },
+          "severity": "medium",
+          "usage": {
+            "blocked": false,
+            "estimated_cost_usd": "0.01017",
+            "estimator": "utf8-bytes-v1",
+            "input_tokens": 10164,
+            "model": "fake-v1",
+            "output_tokens": 3,
+            "price_version": "synthetic-comparison-v1",
+            "requests": 3,
+            "uncertain_requests": 3
+          }
+        },
+        "coordinated": {
+          "elapsed_seconds": 0.032511800003703684,
+          "quality": {
+            "evidence": true,
+            "observed_health": true,
+            "outcome": true,
+            "proposal_scope": true,
+            "secret_absent": true,
+            "severity": true,
+            "tool_choice": true,
+            "unsupported_claims": true
+          },
+          "severity": "medium",
+          "usage": {
+            "blocked": false,
+            "estimated_cost_usd": "0.006764",
+            "estimator": "utf8-bytes-v1",
+            "input_tokens": 6758,
+            "model": "fake-v1",
+            "output_tokens": 3,
+            "price_version": "synthetic-comparison-v1",
+            "requests": 3,
+            "uncertain_requests": 3
+          }
+        }
+      }
+    }
+  ],
+  "passed": true,
+  "prices": "synthetic, not provider billing",
+  "schema_version": "coordination-comparison-v1",
+  "source_hashes": {
+    "baseline": {
+      "approval_sha256": "d29a67faa755a541b43af21f578ff88ffb0c3ec89ade4a7e4c045c58aca06218",
+      "budget_sha256": "534bebfe7431f41e5612de39bd79a3a7ea85aecfbfd372e1163899957e2092d6",
+      "checkpoint_sha256": "c3611a2e5a4960ba3949ca0fe3172f57ae48069cb999dc8b3c04ad3a340985fb",
+      "evaluator_sha256": "0b38e57d43b3b6fc24910050d1d16b951d4f5bee86aa1b253436ea57c0782eb6",
+      "memory_sha256": "a5f2efa667da4c40a13d2e58c09b09ae75ffd3c5888e04d34a4ec62561aafe71",
+      "tool_policy_sha256": "575877f2f379f17469f25ea088e268a0698ad41bd8312e05c188cf2282f53edf",
+      "workflow_sha256": "163c290fd0ca009a0dfe5b5880a18c2cf5fe64e06afd0fffda31076f5b725845"
+    },
+    "coordinated": {
+      "approval_sha256": "d29a67faa755a541b43af21f578ff88ffb0c3ec89ade4a7e4c045c58aca06218",
+      "budget_sha256": "534bebfe7431f41e5612de39bd79a3a7ea85aecfbfd372e1163899957e2092d6",
+      "checkpoint_sha256": "c3611a2e5a4960ba3949ca0fe3172f57ae48069cb999dc8b3c04ad3a340985fb",
+      "evaluator_sha256": "0b38e57d43b3b6fc24910050d1d16b951d4f5bee86aa1b253436ea57c0782eb6",
+      "memory_sha256": "a5f2efa667da4c40a13d2e58c09b09ae75ffd3c5888e04d34a4ec62561aafe71",
+      "tool_policy_sha256": "575877f2f379f17469f25ea088e268a0698ad41bd8312e05c188cf2282f53edf",
+      "workflow_sha256": "e7fe609cf2aac49f999591e61eb88b85ae0c41ec435c80e9f7827e05a7035565"
+    }
+  },
+  "tool_delay_seconds": 0.02,
+  "workload": "paired healthy/degraded fixtures, one job at a time"
+}

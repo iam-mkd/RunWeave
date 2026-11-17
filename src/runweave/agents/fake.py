@@ -18,9 +18,14 @@ class FakeAgentModel:
         completion_budget: int,
     ) -> ModelDecision:
         if len(history) < 2:
+            name = (HEALTH, RUNBOOK)[len(history)]
+            if len(tools) == 1:
+                function = tools[0].get("function")
+                if isinstance(function, dict) and function.get("name") in (HEALTH, RUNBOOK):
+                    name = str(function["name"])
             call = ToolCall(
                 id=f"mock-{len(history)}",
-                name=(HEALTH, RUNBOOK)[len(history)],
+                name=name,
                 arguments=HealthQuery(service=incident.service).model_dump_json(),
             )
             return ModelDecision(call, completion_tokens=1)

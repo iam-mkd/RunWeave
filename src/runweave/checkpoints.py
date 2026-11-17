@@ -16,10 +16,11 @@ from runweave.agents.contracts import (
     ToolCall,
     ToolExchange,
 )
+from runweave.agents.handoffs import COORDINATOR_PROMPT, SPECIALIST_PROMPTS, HandoffState, Role
 from runweave.budgets import BudgetPolicy, BudgetState
 from runweave.memory import MEMORY_INSTRUCTIONS
 
-Workflow = Literal["baseline", "pydanticai"]
+Workflow = Literal["baseline", "pydanticai", "coordinated"]
 Node = Literal["decide", "collect", "finish", "done"]
 
 
@@ -33,14 +34,34 @@ class WorkflowIdentity(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     workflow: Workflow
-    version: Literal["triage-v1"] = "triage-v1"
-    prompt_version: Literal["triage-prompt-v1", "triage-memory-prompt-v1"] = "triage-prompt-v1"
+    version: Literal["triage-v1", "coordinated-v1"] = "triage-v1"
+    prompt_version: Literal[
+        "triage-prompt-v1",
+        "triage-memory-prompt-v1",
+        "coordinated-prompt-v1",
+        "coordinated-memory-prompt-v1",
+    ] = "triage-prompt-v1"
     prompt_sha256: str = Field(min_length=64, max_length=64)
     tools_version: Literal["triage-tools-v1"] = "triage-tools-v1"
     model: str = Field(min_length=1, max_length=100)
 
 
 def workflow_identity(workflow: Workflow, model: str, *, memory: bool = False) -> WorkflowIdentity:
+    if workflow == "coordinated":
+        return WorkflowIdentity(
+            workflow=workflow,
+            model=model,
+            version="coordinated-v1",
+            prompt_version="coordinated-memory-prompt-v1" if memory else "coordinated-prompt-v1",
+            prompt_sha256=hashlib.sha256(
+                (
+                    COORDINATOR_PROMPT
+                    + SPECIALIST_PROMPTS["health"]
+                    + SPECIALIST_PROMPTS["runbook"]
+                    + (MEMORY_INSTRUCTIONS if memory else "")
+                ).encode()
+            ).hexdigest(),
+        )
     return WorkflowIdentity(
         workflow=workflow,
         model=model,
@@ -64,9 +85,29 @@ class TriageCheckpoint(BaseModel):
     next_node: Node = "decide"
     action: ToolCall | IncidentResult | None = None
     usage: BudgetState
+    branches: dict[Role, HandoffState] = Field(default_factory=dict, max_length=2)
 
     @model_validator(mode="after")
     def validate_boundary(self) -> "TriageCheckpoint":
+        if any(role != branch.request.role for role, branch in self.branches.items()):
+            raise ValueError("Invalid branch role")
+        if self.branches and self.identity.workflow != "coordinated":
+            raise ValueError("Unexpected branch state")
+        if self.identity.workflow == "coordinated" and self.next_node in ("finish", "done"):
+            if set(self.branches) != {"health", "runbook"} or any(
+                branch.stage != "succeeded" or branch.output is None
+                for branch in self.branches.values()
+            ):
+                raise ValueError("Incomplete coordinated result")
+            roles: tuple[Role, Role] = ("health", "runbook")
+            exchanges = []
+            for role in roles:
+                output = self.branches[role].output
+                if output is None:
+                    raise ValueError("Incomplete coordinated result")
+                exchanges.append(output.exchange)
+            if self.history != exchanges:
+                raise ValueError("Inconsistent coordinated evidence")
         kinds: dict[Node, type[object]] = {
             "decide": type(None),
             "collect": ToolCall,

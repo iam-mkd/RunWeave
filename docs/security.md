@@ -70,6 +70,7 @@ the identity established by the selected provider.
 | Recall private/project facts | `memory:read` and subject ownership/project membership |
 | Save committed evidence to memory | `memory:write`, `runs:read`, source ownership, project membership if shared |
 | Delete a memory fact | `memory:delete` and tenant/writer ownership |
+| Execute the coordinated workflow | `agents:delegate` plus both health/runbook tool scopes |
 
 Foreign and unknown run IDs both return 404. The request body uses the incident
 schema, which forbids ownership and permission fields. Internal snapshots carry
@@ -91,6 +92,13 @@ from their own successful run. Recall is untrusted historical data and cannot
 grant tool authority. Credentials are checked on write and recall. Context
 budgets include the full memory envelope; facts are revalidated before dispatch
 and are excluded from replayable checkpoint/tool caches.
+
+The [coordinated workflow](coordination.md) has exactly two closed specialist
+roles. Each receives only its own tool definition and the intersection of its
+required permission with the parent's scopes. Neither receives delegation,
+memory, ticket, or approval authority. The coordinator exposes only finish at
+merge, and retains the existing final evidence checks. Role/run correlation and
+current permissions are revalidated on checkpoint reuse.
 
 `RUNWEAVE_TENANT_MAX_UNFINISHED` defaults to 1,000. It bounds queued and running
 and approval-waiting jobs across all subjects in one tenant. Terminal transitions release quota.
