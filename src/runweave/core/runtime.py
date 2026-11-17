@@ -19,6 +19,7 @@ from runweave.storage.engine import postgres_engine
 from runweave.storage.postgres import PostgresRuns
 from runweave.telemetry import Telemetry
 from runweave.tools.fake import FakeHealthTool, fake_health_response
+from runweave.tools.isolated import IsolatedTools
 from runweave.tools.registry import ToolRegistry
 from runweave.tools.retry import RetryingHealthTool
 
@@ -30,6 +31,7 @@ class Runtime:
     scheduler: RunBackend
     telemetry: Telemetry
     content_policy: ContentPolicy
+    isolated: IsolatedTools | None = None
 
 
 @asynccontextmanager
@@ -58,6 +60,7 @@ async def open_runtime(
             (
                 settings.groq_api_key.get_secret_value(),
                 settings.auth_signing_key.get_secret_value(),
+                settings.sandbox_fixture_credential.get_secret_value(),
                 *settings.auth_test_identities.keys(),
                 *(value.get_secret_value() for value in settings.protected_values),
             )
@@ -78,7 +81,9 @@ async def open_runtime(
                 concurrency=settings.groq_concurrency,
                 requests_per_minute=settings.groq_requests_per_minute,
             )
+        isolated = IsolatedTools(settings, content_policy)
         try:
+            await isolated.start()
             runner: AgentExecutor
             if settings.agent_workflow == "coordinated":
                 from runweave.agents.coordination import CoordinatedRunner
@@ -141,7 +146,7 @@ async def open_runtime(
                         PostgresRuns(engine), run_executor, settings, telemetry, content_policy
                     )
                     async with durable.running():
-                        yield Runtime(client, runner, durable, telemetry, content_policy)
+                        yield Runtime(client, runner, durable, telemetry, content_policy, isolated)
                 finally:
                     await engine.dispose()
             else:
@@ -163,7 +168,13 @@ async def open_runtime(
                 )
                 async with scheduler.running():
                     yield Runtime(
-                        client, runner, MemoryBackend(scheduler), telemetry, content_policy
+                        client,
+                        runner,
+                        MemoryBackend(scheduler),
+                        telemetry,
+                        content_policy,
+                        isolated,
                     )
         finally:
+            await isolated.close()
             await telemetry.close()

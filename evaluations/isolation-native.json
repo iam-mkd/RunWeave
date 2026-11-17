@@ -1,0 +1,98 @@
+{
+  "browser_demo": {
+    "kind": "browser",
+    "policy_version": "isolated-tools-v1",
+    "result": {
+      "blocked": 0,
+      "text": "RunWeave browser fixture",
+      "visited": [
+        "https://fixtures.runweave.invalid/"
+      ]
+    },
+    "session_id": "071a687414c24d6a84d40401f73ca1d1"
+  },
+  "browser_seccomp_sha256": "77cdaf463cf5a605278debc2cfe13d5b09c1d5331fc3d4599b8f9466741c85e4",
+  "cleanup_confirmed": true,
+  "docker_version": "29.9.2",
+  "kernel": "6.6.87.2-microsoft-standard-WSL2",
+  "passed": true,
+  "policy_version": "isolated-tools-v1",
+  "python_demo": {
+    "kind": "python",
+    "policy_version": "isolated-tools-v1",
+    "result": 6,
+    "session_id": "ef063f3dddd14f42a13f48bc1ffd68a3"
+  },
+  "source_sha256": {
+    "sandbox/Dockerfile.browser": "d1a91002da6c610c8a797fcb12f50bfcdc6c708d3db2197dc1641f593e969a12",
+    "sandbox/Dockerfile.python": "1ef901e64b41d36e4f25c156949813540b2bac7a1b535ab54f3c557933aaef28",
+    "sandbox/browser_worker.py": "1f5fa9a3685baafb4eada2ee5af822dfa41aade4beba1018f3ca1684e8a5e875",
+    "sandbox/python_worker.py": "dd5eb62c91dee0faf9668bdc01c7e6714f93b3ff989acb88e359ef4f0f256a03",
+    "src/runweave/tools/browser_fixtures.py": "6769618f697024b7f7f3a5915cb124f1d7741f034b517c1f7f34ce199850d6ad",
+    "src/runweave/tools/container_runtime.py": "4bd8b993668cedde3a12fd86e971ebf01f4c4daef8e8a68a9bfd8cb77ae7b702",
+    "src/runweave/tools/isolated.py": "069936c89288345c31a04d267a4697348e0f6b55f70f8e248a441c94a73e5ad7",
+    "src/runweave/tools/isolation_checks.py": "1c15428dcd2ef43f5bc270b7d4c718b0095d08f2452fe06e5d3f8a4d841ca119",
+    "src/runweave/tools/python_policy.py": "3aaa5f6c5ff2fa6dc06cfe8cfa3dfe7407cb27de4e78caae23a4f8f4a18ab8b0"
+  },
+  "verified_at_utc": "2026-11-17T17:21:42.726875+00:00",
+  "workers": {
+    "browser": {
+      "image": "sha256:5fe2e5aff9e26af1711ad48c8959c62e9d990c948be1937285b195ac5a1cc8c5",
+      "kernel_checks": {
+        "caps": true,
+        "chroot_denied": true,
+        "cpu": 1.0,
+        "environment": [
+          "HOME",
+          "HOSTNAME",
+          "LANG",
+          "LC_ALL",
+          "PATH",
+          "PLAYWRIGHT_BROWSERS_PATH"
+        ],
+        "file_limit": 8388608,
+        "memory": 805306368,
+        "network_blocked": true,
+        "no_host": true,
+        "no_privileges": true,
+        "no_socket": true,
+        "pids": 128,
+        "readonly": true,
+        "seccomp": true,
+        "tmp_write": true,
+        "uid": 1000
+      },
+      "limits_verified": true
+    },
+    "python": {
+      "image": "sha256:4aed618bd2bc2080a4fd9b350282ff70c376410ecefbe0a2a89073d1b6ddeb12",
+      "kernel_checks": {
+        "caps": true,
+        "chroot_denied": true,
+        "cpu": 0.5,
+        "environment": [
+          "GPG_KEY",
+          "HOME",
+          "HOSTNAME",
+          "LANG",
+          "PATH",
+          "PYTHONDONTWRITEBYTECODE",
+          "PYTHON_SHA256",
+          "PYTHON_VERSION"
+        ],
+        "file_limit": 65536,
+        "memory": 67108864,
+        "network_blocked": true,
+        "no_host": true,
+        "no_privileges": true,
+        "no_socket": true,
+        "pids": 16,
+        "readonly": true,
+        "seccomp": true,
+        "tmp_write": true,
+        "uid": 65532
+      },
+      "limits_verified": true
+    }
+  }
+}

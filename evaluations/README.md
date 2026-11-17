@@ -58,6 +58,12 @@ for the measurement limits; these are not live billing or provider-quality resul
 
 ## Regression gate and provenance
 
+Milestone 15's separate [native isolation evidence](isolation-native.json) records
+the verified worker image IDs, kernel controls, source hashes and both controlled
+tool demonstrations. Reproduce it with `scripts/verify-isolation.ps1`; see the
+[isolation guide](../docs/isolation.md). It is independent of the workflow-quality
+reports and uses no live inference or external website credentials.
+
 ```powershell
 uv run --no-sync python -m runweave.evaluation.suite --seed-regression severity --output target/evals/seeded.json
 ```

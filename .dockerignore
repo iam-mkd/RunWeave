@@ -5,6 +5,10 @@
 !uv.lock
 !src/
 !src/**
+!sandbox/
+!sandbox/*.py
+!sandbox/Dockerfile.*
+!sandbox/requirements-browser.txt
 **/__pycache__/
 **/*.pyc
 **/*.egg-info/

@@ -1,0 +1,31 @@
+name: Native isolated tools (opt-in)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked --extra workflow --extra eval
+      - run: docker build -f sandbox/Dockerfile.python -t runweave-python:m15 .
+      - run: docker build -f sandbox/Dockerfile.browser -t runweave-browser:m15 .
+      - name: Verify actual runtime and demonstrate both tools
+        run: |
+          export TEST_SANDBOX_PYTHON_IMAGE=$(docker image inspect --format '{{.Id}}' runweave-python:m15)
+          export TEST_SANDBOX_BROWSER_IMAGE=$(docker image inspect --format '{{.Id}}' runweave-browser:m15)
+          uv run --no-sync pytest tests/test_native_isolation.py -q
+          uv run --no-sync python scripts/check-isolation.py --python-image "$TEST_SANDBOX_PYTHON_IMAGE" --browser-image "$TEST_SANDBOX_BROWSER_IMAGE" --output target/isolation/demo-proof.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-isolation
+          path: target/isolation/*.json

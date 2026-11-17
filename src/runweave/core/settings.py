@@ -59,6 +59,26 @@ class Settings(BaseSettings):
     model_price_version: str = Field(default="", max_length=100)
     agent_workflow: Literal["baseline", "pydanticai", "coordinated"] = "baseline"
     coordination_concurrency: Literal[1, 2] = 2
+    isolated_tools_enabled: bool = False
+    isolated_tools_concurrency: int = Field(default=2, ge=1, le=8)
+    sandbox_python_image: str = Field(default="", pattern=r"^(sha256:[a-f0-9]{64})?$")
+    sandbox_browser_image: str = Field(default="", pattern=r"^(sha256:[a-f0-9]{64})?$")
+    browser_allowed_origins: tuple[Literal["https://fixtures.runweave.invalid"], ...] = ()
+    sandbox_fixture_credential: SecretStr = Field(default_factory=lambda: SecretStr(""))
+
+    @model_validator(mode="after")
+    def require_isolation_policy(self) -> "Settings":
+        if self.isolated_tools_enabled and (
+            not self.sandbox_python_image
+            or not self.sandbox_browser_image
+            or not self.browser_allowed_origins
+        ):
+            raise ValueError(
+                "Configure immutable worker images and approved fixture origins "
+                "before enabling isolated tools"
+            )
+        return self
+
     model_provider: Literal["fake", "groq"] = "fake"
     groq_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     groq_model: str = Field(default="llama-3.3-70b-versatile", min_length=1, max_length=100)

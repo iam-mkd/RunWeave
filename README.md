@@ -10,6 +10,11 @@ Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
 
 ## Quick start (PowerShell)
 
+Milestone 15 adds opt-in disposable Python and read-only Chromium tools. See the
+[isolation guide](docs/isolation.md) for native verification, configuration,
+API examples, limits and the controlled fixture scope. Both tools stay disabled
+by default and verify the target Docker runtime before accepting work.
+
 Install Python 3.13 and uv, then from this folder:
 
 ```powershell

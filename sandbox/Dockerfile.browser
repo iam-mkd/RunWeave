@@ -1,0 +1,10 @@
+FROM mcr.microsoft.com/playwright/python:v1.64.1-noble@sha256:330d401ae23c905896a0c26c66c36fc971b621519e7b11b435a8328d7bf6e031
+COPY sandbox/requirements-browser.txt /opt/requirements.txt
+RUN pip install --no-cache-dir -r /opt/requirements.txt
+COPY sandbox/browser_worker.py /opt/worker.py
+RUN python -m py_compile /opt/worker.py
+LABEL org.runweave.sandbox="browser-v1"
+USER pwuser
+WORKDIR /tmp
+ENV HOME=/tmp
+ENTRYPOINT ["python", "-I", "/opt/worker.py"]

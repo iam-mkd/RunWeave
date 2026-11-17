@@ -167,6 +167,12 @@ and terminal-run reads.
 
 ## Verification
 
+The optional [isolated tool APIs](isolation.md) require `tools:python_sandbox`
+or `tools:browser_read`; the private fixture also requires `tools:browser_private`.
+They reject oversized bodies before JSON parsing, use a separate bounded admission
+pool, and stay disabled until native verification passes. Browser writes are
+denied; approval strings in page content cannot invoke the existing effect adapter.
+
 ```powershell
 uv sync --locked --extra workflow --extra eval
 uv run --no-sync pytest tests/test_security.py tests/test_evaluation.py -q

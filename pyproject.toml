@@ -52,6 +52,7 @@ cache-keys = [
 ]
 
 [tool.setuptools.package-data]
+"runweave" = ["sandbox_assets/*.json", "sandbox_assets/*LICENSE", "sandbox_assets/*.md"]
 "runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 
 [tool.pytest.ini_options]
@@ -70,4 +71,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests", "benchmarks"]
+files = ["src", "tests", "benchmarks", "scripts/check-isolation.py"]

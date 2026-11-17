@@ -2,10 +2,11 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 14 have code in place. Native Windows in-process tests and
+Milestones 1 through 15 have code in place. Native Windows in-process tests and
 the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
-checks remain open.
+checks for the main service remain open. Milestone 15's disposable Python and
+Chromium workers have separately passed native Docker isolation checks.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -27,7 +28,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 12. Human approvals and resumable waiting
 - [x] 13. Scoped persistent memory
 - [x] 14. Typed multi-agent coordination
-- [ ] 15. Sandboxed code and authorized browser automation
+- [x] 15. Sandboxed code and authorized browser automation
 - [ ] 16. Shadow workflow comparison and release verification
 
 ## Goal
@@ -689,6 +690,41 @@ Completion notes (2026-11-17):
   network denial, cross-session leakage, malicious pages, redirect and
   subresource blocking, and cleanup after timeout or cancellation. Demonstrate
   both tools on controlled fixtures. Disable them until their policy is configured.
+
+Implementation and verification (2026-11-17):
+- Delivered the Python and browser slices as independent disposable Linux worker
+  images and typed `/v1/tools/python` and `/v1/tools/browser` endpoints. The triage
+  model registry keeps its existing read tools. Python allows restricted data
+  processing; imports, reflection, filesystem access and arbitrary shell are denied.
+- Both workers drop capabilities, run non-root with read-only roots, have no host
+  mounts or network access, and enforce CPU, memory, process, file, output and wall
+  limits. Immutable trusted image IDs and approved-origin configuration are required.
+  Startup verifies actual kernel controls, resource exhaustion and successful worker
+  operation. Cleanup uncertainty disables admissions and fails readiness.
+- Chromium's own sandbox remains enabled. The pinned upstream seccomp profile has
+  one documented chroot allowance for Chromium's nested user namespace; an outer
+  chroot is still denied by native verification. The host-only fixture broker never
+  forwards its credential and supplies only the authorized tenant's private fixture.
+- Initial browser scope is read-only controlled fixtures at one approved origin,
+  backed by an in-memory HTTP resource bundle. Redirects, foreign subresources,
+  arbitrary URLs and all browser writes are denied. No browser effect adapter is
+  enabled; the milestone 12 ticket adapter retains approval and idempotency controls.
+  Any future browser write adapter must use that durable effect protocol. These are
+  explicit API tools, not automatic additions to model prompts or durable workflows.
+- Final offline suite: 237 passed, 99 opt-in native/PostgreSQL cases skipped.
+  All 85 PostgreSQL cases passed separately, with the disposable cluster stopped
+  and removed. All 14 native isolation cases passed on Docker Desktop's Linux engine
+  29.9.2 / WSL2 kernel 6.6.87.2, including cancellation during creation and execution,
+  browser session separation, egress/redirect denial and resource exhaustion.
+  The complete `scripts/verify-isolation.ps1` build/test/demo command passed;
+  no worker containers remained. Both controlled demos passed. Evidence with image
+  IDs, kernel checks and source hashes is in `evaluations/isolation-native.json`.
+- Ruff lint/format, strict mypy (89 files) and the offline lock check passed.
+  All three reference evaluations passed 13 cases / 68 assertions each; a seeded
+  coordinated severity regression exited 1 as expected. No paid inference ran.
+  The new native CI workflow is manual opt-in and has not run on hosted CI.
+  Broader main-service container/startup, load and release checks remain open for
+  milestone 16; this does not claim production or VM-grade isolation.
 
 ### 16. Shadow workflow comparison and release verification
 

@@ -22,6 +22,9 @@ ALL_SCOPES = frozenset(
         "memory:write",
         "memory:delete",
         "agents:delegate",
+        "tools:python_sandbox",
+        "tools:browser_read",
+        "tools:browser_private",
     }
 )
 

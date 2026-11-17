@@ -1,0 +1,9 @@
+FROM python:3.13-slim-bookworm@sha256:a5a7017efc5969e00ae2b91c8eb0631049a569652aa4ffc4501769049ae45c72
+ENV PYTHONDONTWRITEBYTECODE=1
+COPY src/runweave/tools/python_policy.py /usr/local/lib/python3.13/site-packages/runweave_python_policy.py
+COPY sandbox/python_worker.py /opt/worker.py
+RUN python -m py_compile /opt/worker.py
+LABEL org.runweave.sandbox="python-v1"
+USER 65532:65532
+WORKDIR /tmp
+ENTRYPOINT ["python", "-I", "/opt/worker.py"]

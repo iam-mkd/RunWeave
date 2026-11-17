@@ -170,7 +170,7 @@
   "schema_version": "eval-report-v1",
   "seeded_regression": null,
   "task_failures": [],
-  "tool_policy_sha256": "575877f2f379f17469f25ea088e268a0698ad41bd8312e05c188cf2282f53edf",
+  "tool_policy_sha256": "033b0718aa8334debde92d8731372007177931aa1453ed4d769baa8ee6450e28",
   "workflow": "coordinated",
   "workflow_sha256": "e7fe609cf2aac49f999591e61eb88b85ae0c41ec435c80e9f7827e05a7035565"
 }

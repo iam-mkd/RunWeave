@@ -25,3 +25,4 @@ Thumbs.db
 Desktop.ini
 target/evals/
 target/pytest-*/
+target/isolation/
