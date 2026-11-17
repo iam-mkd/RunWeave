@@ -24,8 +24,10 @@ _FINISH_ATTEMPT = """
 """
 
 if TYPE_CHECKING:
+    from runweave.core.settings import Settings
     from runweave.storage.approvals import PostgresApprovals, PostgresTicketGate
     from runweave.storage.checkpoints import PostgresCheckpoints
+    from runweave.storage.memory import PostgresMemory
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class PostgresRuns:
             await conn.execute(text("SELECT run_id FROM runweave_operations LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_approvals LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_sandbox_tickets LIMIT 0"))
+            await conn.execute(text("SELECT id FROM runweave_memory LIMIT 0"))
 
     async def admit(
         self,
@@ -188,6 +191,11 @@ class PostgresRuns:
 
         return PostgresApprovals(self._engine)
 
+    def memory(self, settings: "Settings", content_policy: ContentPolicy) -> "PostgresMemory":
+        from runweave.storage.memory import PostgresMemory
+
+        return PostgresMemory(self._engine, settings, content_policy)
+
     def ticket_gate(
         self,
         claim: Claim,
@@ -272,9 +280,11 @@ class PostgresRuns:
 
     async def maintain(self, *, retry_delay: float, history_ttl: float, history_max: int) -> None:
         from runweave.storage.approvals import expire_approvals
+        from runweave.storage.memory import prune_memory
 
         async with self._engine.begin() as conn:
             await expire_approvals(conn)
+            await prune_memory(conn)
             await conn.execute(
                 text("""
                 WITH candidates AS (

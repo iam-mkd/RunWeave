@@ -15,6 +15,7 @@ from runweave.agents.contracts import (
 )
 from runweave.budgets import current_reservation
 from runweave.deadline import check_budget
+from runweave.memory import refresh_recall
 
 GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 _MAX_RESPONSE_BYTES = 64 * 1024
@@ -79,7 +80,6 @@ class GroqAgentModel:
         completion_budget: int,
     ) -> ModelDecision:
         output_limit = min(512, completion_budget)
-        payload = model_payload(incident, history, tools, self._model, output_limit)
         async with self._slots:
             async with self._rate_lock:
                 loop = asyncio.get_running_loop()
@@ -89,6 +89,8 @@ class GroqAgentModel:
                 check_budget()
                 self._next_request = loop.time() + self._interval
 
+            await refresh_recall()
+            payload = model_payload(incident, history, tools, self._model, output_limit)
             body = bytearray()
             async with self._client.stream(
                 "POST",

@@ -62,7 +62,7 @@ and uploads the reports.
 Reports record workflow, fake prompt policy, model, fixture, evaluator, and
 framework versions. SHA-256 hashes identify workflow source, evaluator source,
 tool policy, fixture bytes, budget source, checkpoint/effect source, and approval
-source. The budget hash covers the ledger,
+source, and persistent memory source. The budget hash covers the ledger,
 model wrapper, and context preparation. Bump the corresponding version when behavior or
 expectations change. Compare reports from the same source bytes. Source newline
 conversion changes source hashes. Timing and raw outputs are omitted from the

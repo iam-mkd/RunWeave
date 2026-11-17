@@ -60,6 +60,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                 "0003_run_budgets.sql",
                 "0004_workflow_checkpoints.sql",
                 "0005_human_approvals.sql",
+                "0006_scoped_memory.sql",
             ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
@@ -123,7 +124,15 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
             )
             assert Principal.model_validate(legacy_principal) == LOCAL_PRINCIPAL.model_copy(
                 update={
-                    "scopes": LOCAL_PRINCIPAL.scopes - {"tools:create_ticket", "approvals:decide"}
+                    "scopes": frozenset(
+                        {
+                            "runs:submit",
+                            "runs:read",
+                            "runs:cancel",
+                            "tools:check_health",
+                            "tools:lookup_runbook",
+                        }
+                    )
                 }
             )
             legacy_outcome = (

@@ -67,6 +67,9 @@ the identity established by the selected provider.
 | Request/execute a sandbox ticket | `tools:create_ticket` |
 | Read an approval | `runs:read` and matching tenant/subject |
 | Decide an approval | `approvals:decide`, `runs:read`, and matching tenant/subject |
+| Recall private/project facts | `memory:read` and subject ownership/project membership |
+| Save committed evidence to memory | `memory:write`, `runs:read`, source ownership, project membership if shared |
+| Delete a memory fact | `memory:delete` and tenant/writer ownership |
 
 Foreign and unknown run IDs both return 404. The request body uses the incident
 schema, which forbids ownership and permission fields. Internal snapshots carry
@@ -80,6 +83,14 @@ Milestone 12 rechecks current identity before approved effects. The server-owned
 and recovered execution. Apply revocation to every replica. JWT authority remains
 bounded by admitted scopes and token expiry; there is no external introspection.
 Test mode also checks the current identity map. See [approval policy](approvals.md).
+
+Milestone 13 uses server-configured tenant/project memberships, exact service
+filters, expiry, and hard deletion for [persistent memory](memory.md). Callers
+cannot supply new fact content or provenance: writes copy committed evidence
+from their own successful run. Recall is untrusted historical data and cannot
+grant tool authority. Credentials are checked on write and recall. Context
+budgets include the full memory envelope; facts are revalidated before dispatch
+and are excluded from replayable checkpoint/tool caches.
 
 `RUNWEAVE_TENANT_MAX_UNFINISHED` defaults to 1,000. It bounds queued and running
 and approval-waiting jobs across all subjects in one tenant. Terminal transitions release quota.

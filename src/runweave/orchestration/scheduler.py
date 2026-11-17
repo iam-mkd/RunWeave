@@ -69,6 +69,8 @@ class Scheduler:
         self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
     ) -> RunSnapshot:
         principal.require("runs:submit")
+        if incident.memory is not None:
+            raise AdmissionRejected("MEMORY_REQUIRES_POSTGRES")
         if incident.create_ticket:
             raise AdmissionRejected("DURABLE_APPROVAL_REQUIRED")
         self._content_policy.check(incident.model_dump_json())

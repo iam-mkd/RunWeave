@@ -10,6 +10,7 @@ from runweave.checkpoints import CheckpointError, checkpoint_scope
 from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
 from runweave.identity import IdentityProvider
+from runweave.memory import MemoryRejected, memory_source_scope
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.orchestration.scheduler import AdmissionRejected
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
@@ -39,6 +40,7 @@ class DurableScheduler:
         self._in_progress = 0
         self._content_policy = content_policy or ContentPolicy()
         self.approvals = store.approvals()
+        self.memory = store.memory(settings, self._content_policy)
         self._identity = IdentityProvider(settings)
 
     @property
@@ -49,6 +51,8 @@ class DurableScheduler:
         self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
     ) -> RunSnapshot:
         principal.require("runs:submit")
+        if incident.memory is not None:
+            self.memory.authorize(principal, incident.memory, "memory:read")
         if incident.create_ticket:
             principal.require("tools:create_ticket")
             try:
@@ -189,6 +193,7 @@ class DurableScheduler:
             principal_scope(authorize()),
             budget_scope(self._store.ledger(claim)),
             checkpoint_scope(self._store.checkpoints(claim)),
+            memory_source_scope(self.memory, authorize),
             ticket_scope(
                 self._store.ticket_gate(
                     claim,
@@ -241,7 +246,7 @@ class DurableScheduler:
                     RunStatus.FAILED,
                     error=RunError(
                         code=exc.code
-                        if isinstance(exc, (BudgetExceeded, CheckpointError))
+                        if isinstance(exc, (BudgetExceeded, CheckpointError, MemoryRejected))
                         else "RUN_FAILED",
                         message="Agent execution failed",
                     ),

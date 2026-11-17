@@ -347,6 +347,11 @@ def source_hashes(workflow: Workflow) -> dict[str, str]:
             + files("runweave").joinpath("identity.py").read_bytes()
             + files("runweave.api").joinpath("approvals.py").read_bytes()
         ).hexdigest(),
+        "memory_sha256": hashlib.sha256(
+            files("runweave").joinpath("memory.py").read_bytes()
+            + files("runweave.storage").joinpath("memory.py").read_bytes()
+            + files("runweave.api").joinpath("memory.py").read_bytes()
+        ).hexdigest(),
     }
 
 

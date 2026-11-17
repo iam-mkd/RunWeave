@@ -2,6 +2,7 @@ import json
 
 from runweave.agents.contracts import Evidence, IncidentRequest, IncidentResult, ToolExchange
 from runweave.budgets import BudgetExceeded, BudgetPolicy
+from runweave.memory import MEMORY_INSTRUCTIONS, current_recall, recalled_payload
 from runweave.tools.registry import RUNBOOK, tool_definition
 
 FINISH = "finish_triage"
@@ -21,10 +22,16 @@ def model_payload(
     model: str,
     output_limit: int,
 ) -> dict[str, object]:
+    recalled = recalled_payload()
+    recall = current_recall()
     messages: list[dict[str, object]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": SYSTEM_PROMPT + (MEMORY_INSTRUCTIONS if recall else "")},
         {"role": "user", "content": incident.model_dump_json()},
     ]
+    if recalled:
+        messages.append(
+            {"role": "user", "content": json.dumps({"untrusted_recalled_facts": recalled})}
+        )
     for exchange in history:
         call = exchange.call
         messages.extend(
@@ -94,6 +101,13 @@ def compact_context(
     count = estimated_tokens(
         model_payload(incident, tuple(compacted), tools, policy.model, output_limit)
     )
+    recall = current_recall()
+    while count + output_limit > policy.context_tokens and recall is not None and recall.facts:
+        recall.facts.pop()
+        changed = True
+        count = estimated_tokens(
+            model_payload(incident, tuple(compacted), tools, policy.model, output_limit)
+        )
     # Compact oldest free text first. Keep instructions, arguments, IDs and whole call/result pairs.
     for index, exchange in enumerate(compacted):
         if count + output_limit <= policy.context_tokens:

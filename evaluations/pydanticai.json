@@ -1,6 +1,6 @@
 {
   "approval_sha256": "d29a67faa755a541b43af21f578ff88ffb0c3ec89ade4a7e4c045c58aca06218",
-  "budget_sha256": "14d26e67ea5f2bf650afb7dafed39655e3f2f794f004552d0e1621b6d5d982d4",
+  "budget_sha256": "885aa53cdad0002a06fe6d6bf4ae2bf9debd7c2d1c0486ebba7db4ed303c0783",
   "cases": [
     {
       "assertions": {
@@ -149,11 +149,12 @@
       "name": "unauthorized-tool"
     }
   ],
-  "checkpoint_sha256": "0a9e8281cd8917917090295f3ff81ddc63f1fe79eb29ecec4da635423053b9b6",
-  "evaluator_sha256": "54e9db45d2187ceb5f0f4e39b7aaf85e5d8a56d75d7d7c0b0cb3d697db5b22b0",
+  "checkpoint_sha256": "45e71f71f3f17fcce044b8535ece0491394bc7848cf85f0fe9ebbe915c01b146",
+  "evaluator_sha256": "2e76929ca237dd2434bd0a45c411ac98acadb8dc93b2a31206c7975492ab6722",
   "evaluator_version": "triage-checks-v2",
   "fixture_sha256": "7ae23a90681bb22a791c2b8aed42f9de8433b92e5e3514595d40999efe54a996",
   "fixture_version": "triage-fixtures-v2",
+  "memory_sha256": "b5251b1411e70c21323c01b1ed4f507b7dd5b758944805852d917200e46ac28b",
   "model_version": "fake-v1",
   "passed": true,
   "prompt_version": "fake-policy-v1",
@@ -169,7 +170,7 @@
   "schema_version": "eval-report-v1",
   "seeded_regression": null,
   "task_failures": [],
-  "tool_policy_sha256": "4c00bc4c7d299795dd9b6e3f3ad90bc0edfd2feae2ac2aa99983558c9fbad7a2",
+  "tool_policy_sha256": "971ab47ab805b123c29cbbc94a7c9c0beea17b49f0d10b40012791f53ef88fef",
   "workflow": "pydanticai",
-  "workflow_sha256": "3dbf3f9ca7ae750cf96f85b908d13badb1e56d8f26e44d08e4356b0ac994f19b"
+  "workflow_sha256": "4b53e4981b06a8fad9d35b80acafeb8f9c1f3799787630d0916ab309ad5659e0"
 }

@@ -5,7 +5,7 @@ from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from runweave.budgets import BudgetPolicy
-from runweave.security import Principal
+from runweave.security import IdentityName, Principal
 
 
 class Settings(BaseSettings):
@@ -74,6 +74,27 @@ class Settings(BaseSettings):
     durable_retry_delay_seconds: float = Field(default=0.5, ge=0.05, le=30)
     approval_ttl_seconds: float = Field(default=3600, ge=1, le=86400)
     approval_max_pending: int = Field(default=100, ge=1, le=10000)
+    memory_ttl_seconds: float = Field(default=604800, ge=1, le=2592000)
+    memory_max_records: int = Field(default=10000, ge=1, le=100000)
+    memory_max_per_tenant: int = Field(default=1000, ge=1, le=10000)
+    memory_max_per_scope: int = Field(default=100, ge=1, le=1000)
+    memory_recall_limit: int = Field(default=5, ge=1, le=20)
+    memory_recall_bytes: int = Field(default=4096, ge=128, le=16384)
+    memory_project_memberships: dict[IdentityName, dict[IdentityName, frozenset[IdentityName]]] = (
+        Field(default_factory=dict)
+    )
+
+    @model_validator(mode="after")
+    def bound_memory_memberships(self) -> "Settings":
+        projects = sum(len(projects) for projects in self.memory_project_memberships.values())
+        members = sum(
+            len(subjects)
+            for projects in self.memory_project_memberships.values()
+            for subjects in projects.values()
+        )
+        if len(self.memory_project_memberships) > 1000 or projects > 1000 or members > 1000:
+            raise ValueError("Configure at most 1000 memory tenants, projects, and memberships")
+        return self
 
     @model_validator(mode="after")
     def require_groq_key(self) -> "Settings":

@@ -164,6 +164,13 @@ exact bound decision. Waiting releases the worker lease and has a separate hard
 expiry. See the [approval guide](docs/approvals.md) for scopes, API examples,
 revocation, and migration 0005.
 
+Milestone 13 adds opt-in scoped memory backed by PostgreSQL. Explicitly save
+committed health/runbook evidence through `/v1/memory`, then use `"memory": {}`
+on a later run to recall private facts. Project sharing requires configured
+membership. Recall is historical, untrusted data with bounded retention and
+context use. See the [memory guide](docs/memory.md) for migration 0006, scopes,
+provenance, deletion, and examples.
+
 ## Configuration
 
 Milestone 10 adds shared model-request, input/output-token, context, and estimated
@@ -286,13 +293,13 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-16 all 184 offline tests passed with native Windows asyncio and both optional
-workflow/evaluation extras installed. The 49 opt-in PostgreSQL tests were skipped
-in that suite. A full 48-test database run and a final five-case authorization
-rerun (including one added case) passed on disposable PostgreSQL 18. Coverage includes
+On 2026-11-17 all 191 offline tests passed with native Windows asyncio and both optional
+workflow/evaluation extras installed. The 78 opt-in PostgreSQL tests were skipped
+in that suite and all passed separately on disposable PostgreSQL 18. Coverage includes
 worker termination at checkpoint/effect boundaries for both workflows, approval
-restart and sandbox-commit recovery, separate wait time, concurrent decisions,
-revocation, cancellation, expiry, owner isolation, and migration. Both offline
+restart and sandbox-commit recovery, scoped memory across process restart,
+provenance, deletion/expiry, memory injection boundaries, concurrent quotas,
+authorization revocation, owner/project isolation, and migration. Both offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.

@@ -60,7 +60,8 @@ actual window. Groq documents a 131,072-token window for the existing Llama mode
 [Groq model specification](https://console.groq.com/docs/model/llama-3.3-70b-versatile)
 
 Preparation bounds free-text runbook evidence with a deterministic UTF-8 prefix
-and truncation marker. If the request still exceeds the context limit, older
+and truncation marker. Whole recalled facts are then dropped oldest first if
+needed. If the request still exceeds the context limit, older
 runbook text is replaced with a compact marker first. Evidence IDs, structured
 health observations, tool names, arguments, complete call/result pairs, system
 instructions, and the incident remain available. Structured evidence that cannot
@@ -68,12 +69,12 @@ fit its byte limit causes preflight failure. The original observed history is
 kept for final evidence validation. Credential filtering checks full evidence
 before any context truncation.
 
-The current workflow injects health and runbook evidence. Persistent memory is
-scheduled for milestone 13 and must enter through this bounded preparation path.
+The workflow injects health/runbook evidence and optional persistent memory
+through this bounded preparation path.
 
 ## Reservations and reconciliation
 
-Memory transactions execute without yielding while changing the ledger.
+In-memory budget updates execute without yielding while changing the ledger.
 PostgreSQL transactions lock the run row, verify the current live lease, apply
 the reservation, and commit before model invocation. A competing task sees the
 already reserved amounts. The database transaction ends before provider I/O.
@@ -103,6 +104,12 @@ For an opt-in sandbox ticket, [approval waiting](approvals.md) pauses only the
 active run deadline. Waiting has its own absolute expiry; request/token/cost
 allowances and uncertain reservations are unchanged. Run snapshots expose the
 waiting timestamp and accumulated waiting seconds separately.
+
+Opt-in [persistent memory](memory.md) shares the same context and cumulative
+input-token/cost allowance. Serialized facts and provenance are counted before
+reservation. Whole older facts are dropped to fit; current evidence is preserved.
+Dispatch refresh can remove expired, deleted, or changed facts without increasing
+the reserved bound. Memory is never replayed from a checkpoint or tool receipt.
 
 ## API and telemetry
 

@@ -3,6 +3,7 @@ from typing import Annotated, Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
+from runweave.memory import MemorySelection
 from runweave.tools.contracts import ServiceName
 
 
@@ -11,6 +12,7 @@ class IncidentRequest(BaseModel):
 
     service: ServiceName
     create_ticket: bool = False
+    memory: MemorySelection | None = None
     description: Annotated[
         str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)
     ]

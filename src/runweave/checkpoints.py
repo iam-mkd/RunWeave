@@ -17,6 +17,7 @@ from runweave.agents.contracts import (
     ToolExchange,
 )
 from runweave.budgets import BudgetPolicy, BudgetState
+from runweave.memory import MEMORY_INSTRUCTIONS
 
 Workflow = Literal["baseline", "pydanticai"]
 Node = Literal["decide", "collect", "finish", "done"]
@@ -33,17 +34,20 @@ class WorkflowIdentity(BaseModel):
 
     workflow: Workflow
     version: Literal["triage-v1"] = "triage-v1"
-    prompt_version: Literal["triage-prompt-v1"] = "triage-prompt-v1"
+    prompt_version: Literal["triage-prompt-v1", "triage-memory-prompt-v1"] = "triage-prompt-v1"
     prompt_sha256: str = Field(min_length=64, max_length=64)
     tools_version: Literal["triage-tools-v1"] = "triage-tools-v1"
     model: str = Field(min_length=1, max_length=100)
 
 
-def workflow_identity(workflow: Workflow, model: str) -> WorkflowIdentity:
+def workflow_identity(workflow: Workflow, model: str, *, memory: bool = False) -> WorkflowIdentity:
     return WorkflowIdentity(
         workflow=workflow,
         model=model,
-        prompt_sha256=hashlib.sha256(SYSTEM_PROMPT.encode()).hexdigest(),
+        prompt_version="triage-memory-prompt-v1" if memory else "triage-prompt-v1",
+        prompt_sha256=hashlib.sha256(
+            (SYSTEM_PROMPT + (MEMORY_INSTRUCTIONS if memory else "")).encode()
+        ).hexdigest(),
     )
 
 
@@ -93,7 +97,7 @@ def initial_checkpoint(
     incident: IncidentRequest, workflow: Workflow, max_steps: int, policy: BudgetPolicy
 ) -> TriageCheckpoint:
     return TriageCheckpoint(
-        identity=workflow_identity(workflow, policy.model),
+        identity=workflow_identity(workflow, policy.model, memory=incident.memory is not None),
         incident=incident,
         steps_remaining=max_steps,
         tokens_remaining=policy.max_output_tokens,

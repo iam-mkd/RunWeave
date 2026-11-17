@@ -18,6 +18,9 @@ ALL_SCOPES = frozenset(
         "tools:lookup_runbook",
         "tools:create_ticket",
         "approvals:decide",
+        "memory:read",
+        "memory:write",
+        "memory:delete",
     }
 )
 

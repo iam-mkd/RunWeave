@@ -2,7 +2,7 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 12 have code in place. Native Windows in-process tests and
+Milestones 1 through 13 have code in place. Native Windows in-process tests and
 the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
 benchmark harness limitations are recorded below. Server startup and Docker
 checks remain open.
@@ -25,7 +25,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 10. Context, token, and cost budgets
 - [x] 11. Durable workflow checkpoints and replay
 - [x] 12. Human approvals and resumable waiting
-- [ ] 13. Scoped persistent memory
+- [x] 13. Scoped persistent memory
 - [ ] 14. Typed multi-agent coordination
 - [ ] 15. Sandboxed code and authorized browser automation
 - [ ] 16. Shadow workflow comparison and release verification
@@ -586,6 +586,40 @@ Completion notes (2026-11-16):
 - **Done when** a later run can recall an allowed fact after restart, expired
   or deleted facts stay out of prompts, cross-scope retrieval fails closed, and
   adversarial memory entries cannot change instructions or tool permissions.
+
+Completion notes (2026-11-17):
+- Added typed PostgreSQL health observations/runbook excerpts with immutable
+  provenance, content hashes, tenant/writer/project scope, expiry, hard deletion,
+  and bounded global/tenant/scope capacities. Explicit scoped API writes copy
+  committed evidence from the caller's successful run; callers/model outputs
+  cannot supply arbitrary fact content. Facts outlive ordinary source-run history
+  without losing copied provenance. Repeated live writes preserve ID and expiry.
+- Added opt-in private/project recall for both workflows. Project membership is
+  server-owned configuration and rechecked with current identity/scopes. Reads
+  use exact service/scope filters and bounded PostgreSQL retrieval; no semantic
+  index or additional dependency was needed. Sharing and owner deletion policy
+  are explicit; existing principals receive no new scopes during migration.
+- Memory enters a separate historical-data envelope with versioned instructions,
+  retaining all tool permissions, service restrictions, and fresh evidence checks.
+  Whole facts share context/input-token/cost budgets and are revalidated before
+  inference (including after Groq provider waits). Refresh only removes facts.
+  Recalled content is excluded from checkpoints/receipts so deletion and current
+  access policy apply on replay. Already dispatched requests/results retain their
+  ordinary history semantics. Details and configuration are in docs/memory.md.
+- Migration 0006 is additive and preserves existing jobs; stop workers before
+  upgrade. Maintenance removes expired facts in bounded batches. Downgrade
+  requires exporting retained memory and restoring a backup.
+- Validation: 191 offline tests passed with 78 database cases skipped there;
+  all 78 passed separately on disposable PostgreSQL 18, including 29 memory cases.
+  Tests cover process restart for both workflows, deleted-memory checkpoint
+  replay, expired/deleted prompt exclusion, source eviction, typed provenance,
+  private/project/tenant isolation, revoked access, concurrent quota enforcement,
+  credential rejection, malformed sources, and adversarial model proposals.
+- Ruff lint/format, strict mypy (74 files), and offline lock verification passed.
+  Both regenerated reference evaluations passed 13 cases and 68 assertions and
+  now hash memory source; the seeded severity regression exited 1 as expected.
+  No live provider calls were made. Hosted CI, container/startup verification,
+  and the previously recorded load event-loop lag target remain open.
 
 ### 14. Typed multi-agent coordination
 

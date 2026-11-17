@@ -64,7 +64,9 @@ class TriageSteps:
         if store is None:
             return TriageState(incident, max_steps, completion_budget)
         saved = await store.load()
-        if saved.identity != workflow_identity(workflow, self.budget_policy.model):
+        if saved.identity != workflow_identity(
+            workflow, self.budget_policy.model, memory=incident.memory is not None
+        ):
             raise CheckpointError("CHECKPOINT_WORKFLOW_UNSUPPORTED")
         if saved.incident != incident:
             raise CheckpointError("CHECKPOINT_INVALID")
