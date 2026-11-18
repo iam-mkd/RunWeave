@@ -1192,6 +1192,15 @@ Implementation notes, pull request B (2026-11-18):
   overspend before forwarding; passthrough is tested against a mocked upstream
   only; and saved keys never appear in API responses, logs, or the browser.
 
+Decisions with the owner (2026-11-18): deliver in three pull requests (A: proxy
+endpoints with streaming, per-run proxy tokens, mock mode, budgets and timeline
+steps, proven with the official SDKs and PydanticAI; B: seeded fault profiles,
+passthrough against a mocked upstream, provider limits; C: Settings screen, OS
+credential store, model calls and faults in Run detail). Keys entered in the UI are
+stored with the `keyring` library (Windows Credential Manager, macOS Keychain, Linux
+Secret Service); where no store exists, the UI points to environment variables.
+PydanticAI is the framework that proves unmodified compatibility.
+
 ### 22. Testing CLI, reports, screens, and public alpha
 
 - `runweave init` scaffolds a Python or TypeScript agent stub, a `runweave.toml`,

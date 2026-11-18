@@ -242,3 +242,37 @@ async def test_capacity_is_bounded_with_a_retryable_status() -> None:
     assert busy.status_code == 503
     assert busy.headers["retry-after"] == "1"
     assert busy.json()["error"]["code"] == "AGENT_BUSY"
+
+
+class Seen(BaseModel):
+    token: str | None
+    openai: str | None
+    anthropic: str | None
+
+
+@agent(name="proxy-probe", version="1", input=Ask, output=Seen)
+async def proxy_probe(input: Ask, ctx: RunContext) -> Seen:
+    proxy = ctx.proxy
+    return Seen(
+        token=proxy.token if proxy else None,
+        openai=proxy.openai_base_url if proxy else None,
+        anthropic=proxy.anthropic_base_url if proxy else None,
+    )
+
+
+@pytest.mark.asyncio
+async def test_the_proxy_binding_reaches_the_context_only_when_sent() -> None:
+    binding = {
+        "token": "rwp_" + "a" * 43,
+        "openai_base_url": "http://127.0.0.1:8000/llm/v1",
+        "anthropic_base_url": "http://127.0.0.1:8000/llm",
+    }
+    transport = httpx.ASGITransport(app=create_agent_app(proxy_probe))
+    async with httpx.AsyncClient(transport=transport, base_url="http://agent") as http:
+        bound = await post(http, "proxy-probe", envelope(proxy=binding))
+        unbound = await post(http, "proxy-probe", envelope())
+    assert bound.json()["output"] == {
+        "token": binding["token"], "openai": binding["openai_base_url"],
+        "anthropic": binding["anthropic_base_url"],
+    }
+    assert unbound.json()["output"] == {"token": None, "openai": None, "anthropic": None}

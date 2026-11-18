@@ -52,7 +52,9 @@ eval = [
 
 [dependency-groups]
 dev = [
+    "anthropic>=2.10,<3",
     "mypy>=1.14,<2",
+    "openai>=3.55,<4",
     "psutil>=7.2,<8",
     "pytest>=8.3,<10",
     "pytest-asyncio>=0.25,<2",
