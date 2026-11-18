@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { afterEach, test, vi } from 'vitest';
 import { api, approvalBody, clearRecent, isRunId, readRecent, rememberRun, terminal } from '../src/api.js';
 
 const id = '71bb412e-77f9-42a1-a8bf-751d39ecefad';
+
+afterEach(() => vi.restoreAllMocks());
 
 test('recent IDs are bounded and invalid or unavailable browser storage is harmless', () => {
   let saved = JSON.stringify([id, id, '<script>', null, 123]);
@@ -28,9 +30,9 @@ test('approval posts preserve the server bindings without argument overrides', (
   });
 });
 
-test('API distinguishes mutations, propagates aborts and preserves admission errors', async (context) => {
+test('API distinguishes mutations, propagates aborts and preserves admission errors', async () => {
   const controller = new AbortController();
-  context.mock.method(globalThis, 'fetch', async (path, options) => {
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async (path, options) => {
     assert.equal(path, '/v1/runs');
     assert.equal(options.method, 'POST');
     assert.equal(options.signal, controller.signal);
