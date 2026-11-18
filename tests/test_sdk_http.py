@@ -272,7 +272,8 @@ async def test_the_proxy_binding_reaches_the_context_only_when_sent() -> None:
         bound = await post(http, "proxy-probe", envelope(proxy=binding))
         unbound = await post(http, "proxy-probe", envelope())
     assert bound.json()["output"] == {
-        "token": binding["token"], "openai": binding["openai_base_url"],
+        "token": binding["token"],
+        "openai": binding["openai_base_url"],
         "anthropic": binding["anthropic_base_url"],
     }
     assert unbound.json()["output"] == {"token": None, "openai": None, "anthropic": None}

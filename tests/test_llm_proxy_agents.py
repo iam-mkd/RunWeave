@@ -9,7 +9,6 @@ import json
 import os
 import shutil
 import socket
-import subprocess
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -29,11 +28,16 @@ from runweave.sdk import RunContext, agent
 ROOT = Path(__file__).resolve().parents[1]
 COMPAT = ROOT / "tests" / "proxy_compat"
 REQUIRE_ALL = os.environ.get("RUNWEAVE_CONTRACT_REQUIRE_ALL") == "1"
-FIXTURES = {"version": 1, "rules": [
-    {"when": {"contains": "weather", "has_tools": True},
-     "reply": {"tool_calls": [{"name": "lookup_weather", "arguments": {"city": "Paris"}}]}},
-    {"when": {"contains": "hello"}, "reply": {"text": "Hello from the RunWeave mock."}},
-]}
+FIXTURES = {
+    "version": 1,
+    "rules": [
+        {
+            "when": {"contains": "weather", "has_tools": True},
+            "reply": {"tool_calls": [{"name": "lookup_weather", "arguments": {"city": "Paris"}}]},
+        },
+        {"when": {"contains": "hello"}, "reply": {"text": "Hello from the RunWeave mock."}},
+    ],
+}
 
 
 class Ask(BaseModel):
@@ -109,29 +113,38 @@ async def test_python_http_agent_receives_its_proxy_binding(tmp_path: Path) -> N
 async def test_official_node_sdks_run_unmodified_through_the_proxy(tmp_path: Path) -> None:
     node = shutil.which("node")
     if not (node and (COMPAT / "node_modules" / "openai").is_dir()):
-        reason = "Install the Node SDKs: npm --prefix tests/proxy_compat ci (after building sdk/typescript)"
+        reason = (
+            "Build sdk/typescript, then install the Node SDKs: npm --prefix tests/proxy_compat ci"
+        )
         if REQUIRE_ALL:
             pytest.fail(reason)
         pytest.skip(reason)
-    process = subprocess.Popen(
-        [node, str(COMPAT / "agent.mjs")], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-        text=True, cwd=COMPAT,
+    process = await asyncio.create_subprocess_exec(
+        node,
+        str(COMPAT / "agent.mjs"),
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.DEVNULL,
+        cwd=COMPAT,
     )
     try:
         assert process.stdout is not None
-        line = await asyncio.wait_for(asyncio.to_thread(process.stdout.readline), 30)
+        line = (await asyncio.wait_for(process.stdout.readline(), 30)).decode()
         assert line.startswith("RUNWEAVE_AGENT_READY "), line
         agent_url = line.split()[1]
         async with runweave_server(tmp_path) as (url, client):
-            assert (await client.post("/v1/agents/http", json={"url": agent_url})).status_code == 201
+            assert (
+                await client.post("/v1/agents/http", json={"url": agent_url})
+            ).status_code == 201
             result = await run(client, "node-sdks")
     finally:
         process.kill()
-        process.wait(timeout=10)
+        await process.wait()
     assert result["status"] == "SUCCEEDED", result
     hello = "Hello from the RunWeave mock."
     data = result["result"]
-    assert (data["chat"], data["chatStream"], data["response"], data["responseStream"]) == (hello,) * 4
+    assert (data["chat"], data["chatStream"], data["response"], data["responseStream"]) == (
+        hello,
+    ) * 4
     assert (data["claude"], data["claudeStream"]) == (hello, hello)
     assert data["claudeStreamUsage"] > 0
     assert data["tool"] == {"name": "lookup_weather", "arguments": {"city": "Paris"}}

@@ -28,11 +28,29 @@ export interface Manifest {
   agents: AgentDescriptor[];
 }
 
+export interface ProxyBinding {
+  token: string;
+  openai_base_url: string;
+  anthropic_base_url: string;
+}
+
 export interface RunRequest {
   run_id: string;
   attempt: number;
   input: JsonObject;
   deadline_ms: number;
+  proxy: ProxyBinding | null;
+}
+
+const TOKEN_PATTERN = /^rwp_[A-Za-z0-9_-]{20,200}$/;
+
+function parseProxy(value: unknown): ProxyBinding | null | undefined {
+  if (value === undefined || value === null) return null;
+  if (!isObject(value)) return undefined;
+  const { token, openai_base_url: openai, anthropic_base_url: anthropic } = value;
+  if (typeof token !== 'string' || !TOKEN_PATTERN.test(token)) return undefined;
+  if (typeof openai !== 'string' || typeof anthropic !== 'string' || openai.length > 2048 || anthropic.length > 2048) return undefined;
+  return { token, openai_base_url: openai, anthropic_base_url: anthropic };
 }
 
 export interface StepRecord {
@@ -67,7 +85,9 @@ export function parseRunRequest(value: unknown): RunRequest | null {
   const { run_id: runId, attempt, input, deadline_ms: deadlineMs } = value;
   if (typeof runId !== 'string' || !UUID_PATTERN.test(runId)) return null;
   if (!isInteger(attempt, 1, 1000) || !isInteger(deadlineMs, 1, MAX_DEADLINE_MS) || !isObject(input)) return null;
-  return { run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs };
+  const proxy = parseProxy(value['proxy']);
+  if (proxy === undefined) return null;
+  return { run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs, proxy };
 }
 
 export function isUuid(value: string): boolean {

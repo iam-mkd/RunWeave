@@ -14,6 +14,7 @@ from typing import Any
 
 import anthropic
 import httpx
+import httpx2
 import openai
 import pytest
 from fastapi import FastAPI
@@ -31,22 +32,29 @@ APP: dict[str, FastAPI] = {}
 
 
 def transport() -> httpx.AsyncClient:
+    """The test's own client into the app (RunWeave's API uses httpx)."""
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=APP["app"]), base_url="http://test")
 
 
 def openai_client(ctx: RunContext) -> openai.AsyncOpenAI:
     assert ctx.proxy is not None
     return openai.AsyncOpenAI(
-        api_key=ctx.proxy.token, base_url=ctx.proxy.openai_base_url,
-        http_client=transport(), max_retries=0,
+        api_key=ctx.proxy.token,
+        base_url=ctx.proxy.openai_base_url,
+        # The OpenAI and Anthropic SDKs are built on httpx2.
+        http_client=httpx2.AsyncClient(transport=httpx2.ASGITransport(app=APP["app"])),
+        max_retries=0,
     )
 
 
 def anthropic_client(ctx: RunContext) -> anthropic.AsyncAnthropic:
     assert ctx.proxy is not None
     return anthropic.AsyncAnthropic(
-        api_key=ctx.proxy.token, base_url=ctx.proxy.anthropic_base_url,
-        http_client=transport(), max_retries=0,
+        api_key=ctx.proxy.token,
+        base_url=ctx.proxy.anthropic_base_url,
+        # Anthropic's SDK is built on httpx2, so it needs httpx2's ASGI transport.
+        http_client=httpx2.AsyncClient(transport=httpx2.ASGITransport(app=APP["app"])),
+        max_retries=0,
     )
 
 
@@ -90,8 +98,10 @@ async def chat_text(ctx: RunContext) -> dict[str, Any]:
 async def chat_stream(ctx: RunContext) -> dict[str, Any]:
     client = openai_client(ctx)
     stream = await client.chat.completions.create(
-        model="gpt-anything", messages=[{"role": "user", "content": "hello"}],
-        stream=True, stream_options={"include_usage": True},
+        model="gpt-anything",
+        messages=[{"role": "user", "content": "hello"}],
+        stream=True,
+        stream_options={"include_usage": True},
     )
     parts: list[str] = []
     usage = None
@@ -108,17 +118,28 @@ async def chat_stream(ctx: RunContext) -> dict[str, Any]:
 @scenario
 async def chat_tools(ctx: RunContext) -> dict[str, Any]:
     client = openai_client(ctx)
-    tools: Any = [{"type": "function", "function": {
-        "name": "lookup_weather", "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
-    }}]
+    tools: Any = [
+        {
+            "type": "function",
+            "function": {
+                "name": "lookup_weather",
+                "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+            },
+        }
+    ]
     messages: Any = [{"role": "user", "content": "weather in Paris?"}]
     first = await client.chat.completions.create(model="m", messages=messages, tools=tools)
     call = first.choices[0].message.tool_calls[0]  # type: ignore[index]
-    messages += [first.choices[0].message.model_dump(exclude_none=True),
-                 {"role": "tool", "tool_call_id": call.id, "content": "sunny"}]
+    messages += [
+        first.choices[0].message.model_dump(exclude_none=True),
+        {"role": "tool", "tool_call_id": call.id, "content": "sunny"},
+    ]
     second = await client.chat.completions.create(model="m", messages=messages, tools=tools)
     streamed = await client.chat.completions.create(
-        model="m", messages=[{"role": "user", "content": "weather in Paris?"}], tools=tools, stream=True,
+        model="m",
+        messages=[{"role": "user", "content": "weather in Paris?"}],
+        tools=tools,
+        stream=True,
     )
     pieces: dict[int, dict[str, str]] = {}
     async for chunk in streamed:
@@ -133,7 +154,9 @@ async def chat_tools(ctx: RunContext) -> dict[str, Any]:
         "name": call.function.name,  # type: ignore[union-attr]
         "arguments": json.loads(call.function.arguments),  # type: ignore[union-attr]
         "final": second.choices[0].message.content,
-        "streamed": [{"name": p["name"], "arguments": json.loads(p["arguments"])} for p in pieces.values()],
+        "streamed": [
+            {"name": p["name"], "arguments": json.loads(p["arguments"])} for p in pieces.values()
+        ],
     }
 
 
@@ -141,8 +164,13 @@ async def chat_tools(ctx: RunContext) -> dict[str, Any]:
 async def responses_api(ctx: RunContext) -> dict[str, Any]:
     client = openai_client(ctx)
     plain = await client.responses.create(model="m", input="hello there")
-    tools: Any = [{"type": "function", "name": "lookup_weather",
-                   "parameters": {"type": "object", "properties": {"city": {"type": "string"}}}}]
+    tools: Any = [
+        {
+            "type": "function",
+            "name": "lookup_weather",
+            "parameters": {"type": "object", "properties": {"city": {"type": "string"}}},
+        }
+    ]
     called = await client.responses.create(model="m", input="weather in Paris?", tools=tools)
     calls = [item for item in called.output if item.type == "function_call"]
     events: list[str] = []
@@ -155,7 +183,7 @@ async def responses_api(ctx: RunContext) -> dict[str, Any]:
     return {
         "text": plain.output_text,
         "usage": plain.usage.model_dump() if plain.usage else None,
-        "call": {"name": calls[0].name, "arguments": json.loads(calls[0].arguments)},  # type: ignore[union-attr]
+        "call": {"name": calls[0].name, "arguments": json.loads(calls[0].arguments)},
         "stream_text": "".join(text),
         "events": events,
     }
@@ -167,9 +195,16 @@ async def anthropic_messages(ctx: RunContext) -> dict[str, Any]:
     plain = await client.messages.create(
         model="claude-anything", max_tokens=200, messages=[{"role": "user", "content": "hello"}]
     )
-    tools: Any = [{"name": "lookup_weather", "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}}}]
+    tools: Any = [
+        {
+            "name": "lookup_weather",
+            "input_schema": {"type": "object", "properties": {"city": {"type": "string"}}},
+        }
+    ]
     called = await client.messages.create(
-        model="claude-anything", max_tokens=200, tools=tools,
+        model="claude-anything",
+        max_tokens=200,
+        tools=tools,
         messages=[{"role": "user", "content": "weather in Paris?"}],
     )
     tool_use = next(block for block in called.content if block.type == "tool_use")
@@ -179,7 +214,9 @@ async def anthropic_messages(ctx: RunContext) -> dict[str, Any]:
         streamed_text = "".join([text async for text in stream.text_stream])
         final = await stream.get_final_message()
     async with client.messages.stream(
-        model="claude-anything", max_tokens=200, tools=tools,
+        model="claude-anything",
+        max_tokens=200,
+        tools=tools,
         messages=[{"role": "user", "content": "weather in Paris?"}],
     ) as stream:
         streamed_tool = await stream.get_final_message()
@@ -203,8 +240,14 @@ async def pydantic_ai(ctx: RunContext) -> dict[str, Any]:
     from pydantic_ai.providers.anthropic import AnthropicProvider
     from pydantic_ai.providers.openai import OpenAIProvider
 
-    chat = Agent(OpenAIChatModel("gpt-anything", provider=OpenAIProvider(openai_client=openai_client(ctx))))
-    claude = Agent(AnthropicModel("claude-anything", provider=AnthropicProvider(anthropic_client=anthropic_client(ctx))))
+    chat = Agent(
+        OpenAIChatModel("gpt-anything", provider=OpenAIProvider(openai_client=openai_client(ctx)))
+    )
+    claude = Agent(
+        AnthropicModel(
+            "claude-anything", provider=AnthropicProvider(anthropic_client=anthropic_client(ctx))
+        )
+    )
     result = await chat.run("hello")
     async with chat.run_stream("hello") as streamed:
         streamed_text = await streamed.get_output()
@@ -218,10 +261,14 @@ async def budget(ctx: RunContext) -> dict[str, Any]:
     replies = []
     for _ in range(3):
         try:
-            response = await client.chat.completions.create(model="m", messages=[{"role": "user", "content": "hi"}])
+            response = await client.chat.completions.create(
+                model="m", messages=[{"role": "user", "content": "hi"}]
+            )
             replies.append(response.choices[0].message.content)
         except openai.APIStatusError as error:
-            replies.append(f"{error.status_code}:{error.body['code'] if isinstance(error.body, dict) else ''}")
+            replies.append(
+                f"{error.status_code}:{error.body['code'] if isinstance(error.body, dict) else ''}"
+            )
     return {"replies": replies}
 
 
@@ -235,8 +282,10 @@ FIXTURES = {
     "version": 1,
     "rules": [
         {"when": {"last_role": "tool"}, "reply": {"text": "It is sunny in Paris."}},
-        {"when": {"contains": "weather", "has_tools": True},
-         "reply": {"tool_calls": [{"name": "lookup_weather", "arguments": {"city": "Paris"}}]}},
+        {
+            "when": {"contains": "weather", "has_tools": True},
+            "reply": {"tool_calls": [{"name": "lookup_weather", "arguments": {"city": "Paris"}}]},
+        },
         {"when": {"contains": "hello"}, "reply": {"text": "Hello from the RunWeave mock."}},
     ],
 }
@@ -247,14 +296,18 @@ async def runweave(tmp_path: Path, **settings: Any) -> AsyncIterator[httpx.Async
     fixtures = tmp_path / "fixtures.json"
     fixtures.write_text(json.dumps(FIXTURES), encoding="utf-8")
     config = Settings(proxy_mock_fixtures=fixtures, proxy_public_url="http://test", **settings)
-    app = create_app(config, agents=[PythonAgent.from_function(proxy_user, target="tests:proxy_user")])
+    app = create_app(
+        config, agents=[PythonAgent.from_function(proxy_user, target="tests:proxy_user")]
+    )
     APP["app"] = app
     async with app.router.lifespan_context(app), transport() as client:
         yield client
 
 
 async def run(client: httpx.AsyncClient, name: str) -> dict[str, Any]:
-    response = await client.post("/v1/runs", json={"agent": "proxy-user", "input": {"scenario": name}})
+    response = await client.post(
+        "/v1/runs", json={"agent": "proxy-user", "input": {"scenario": name}}
+    )
     assert response.status_code == 202, response.text
     url = response.json()["status_url"]
     async with asyncio.timeout(20):
@@ -266,7 +319,9 @@ async def run(client: httpx.AsyncClient, name: str) -> dict[str, Any]:
 
 
 @pytest.mark.asyncio
-async def test_chat_completions_are_deterministic_and_metered(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
+async def test_chat_completions_are_deterministic_and_metered(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     caplog.set_level(logging.DEBUG)
     async with runweave(tmp_path) as client:
         result = await run(client, "chat_text")
@@ -303,7 +358,11 @@ async def test_fixture_tool_calls_round_trip_and_stream(tmp_path: Path) -> None:
     async with runweave(tmp_path) as client:
         result = await run(client, "chat_tools")
     data = result["result"]["data"]
-    assert (data["finish"], data["name"], data["arguments"]) == ("tool_calls", "lookup_weather", {"city": "Paris"})
+    assert (data["finish"], data["name"], data["arguments"]) == (
+        "tool_calls",
+        "lookup_weather",
+        {"city": "Paris"},
+    )
     assert data["final"] == "It is sunny in Paris."
     assert data["streamed"] == [{"name": "lookup_weather", "arguments": {"city": "Paris"}}]
 
@@ -329,10 +388,16 @@ async def test_anthropic_messages_text_tools_and_streaming(tmp_path: Path) -> No
     data = result["result"]["data"]
     assert (data["text"], data["stop"]) == ("Hello from the RunWeave mock.", "end_turn")
     assert data["usage"]["input_tokens"] > 0
-    assert data["tool"] == {"name": "lookup_weather", "input": {"city": "Paris"}, "stop": "tool_use"}
+    assert data["tool"] == {
+        "name": "lookup_weather",
+        "input": {"city": "Paris"},
+        "stop": "tool_use",
+    }
     assert data["stream_text"] == "Hello from the RunWeave mock." and data["stream_usage"] > 0
     assert data["stream_tool"] == {"name": "lookup_weather", "input": {"city": "Paris"}}
-    titles = {step["detail"].split(" · ")[0] for step in result["steps"] if step["title"] == "Model call"}
+    titles = {
+        step["detail"].split(" · ")[0] for step in result["steps"] if step["title"] == "Model call"
+    }
     assert titles == {"messages"}
 
 
@@ -376,13 +441,16 @@ async def test_tokens_are_bound_to_one_running_run(tmp_path: Path) -> None:
             "/llm/v1/chat/completions", json=body, headers={"Authorization": f"Bearer {token}"}
         )
         claude = await client.post(
-            "/llm/v1/messages", json={"model": "c", "max_tokens": 5, "messages": body["messages"]},
+            "/llm/v1/messages",
+            json={"model": "c", "max_tokens": 5, "messages": body["messages"]},
             headers={"x-api-key": token},
         )
     assert token.startswith("rwp_") and len(token) > 40
     assert env == {
-        "OPENAI_BASE_URL": "http://test/llm/v1", "OPENAI_API_KEY": token,
-        "ANTHROPIC_BASE_URL": "http://test/llm", "ANTHROPIC_API_KEY": token,
+        "OPENAI_BASE_URL": "http://test/llm/v1",
+        "OPENAI_API_KEY": token,
+        "ANTHROPIC_BASE_URL": "http://test/llm",
+        "ANTHROPIC_API_KEY": token,
     }
     for response in (missing, wrong, expired):
         assert response.status_code == 401
@@ -400,7 +468,8 @@ async def test_tokens_are_bound_to_one_running_run(tmp_path: Path) -> None:
 async def test_proxy_requests_are_size_limited(tmp_path: Path) -> None:
     async with runweave(tmp_path, proxy_request_max_bytes=4096) as client:
         response = await client.post(
-            "/llm/v1/chat/completions", content=b"x" * 10000,
+            "/llm/v1/chat/completions",
+            content=b"x" * 10000,
             headers={"Content-Type": "application/json", "Authorization": "Bearer rwp_x"},
         )
     assert response.status_code == 413

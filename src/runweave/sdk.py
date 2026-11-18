@@ -11,7 +11,7 @@ import logging
 import re
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, TypeVar
 from uuid import UUID
 
@@ -123,6 +123,25 @@ def agent(
     return decorate
 
 
+@dataclass(frozen=True)
+class ModelProxy:
+    """The run's binding to RunWeave's LLM proxy. Point your model SDK at these URLs and
+    use `token` as its API key; RunWeave meters, budgets and records every call."""
+
+    token: str = field(repr=False)
+    openai_base_url: str
+    anthropic_base_url: str
+
+    def env(self) -> dict[str, str]:
+        """Environment variables the official SDKs read, for subprocesses you start."""
+        return {
+            "OPENAI_BASE_URL": self.openai_base_url,
+            "OPENAI_API_KEY": self.token,
+            "ANTHROPIC_BASE_URL": self.anthropic_base_url,
+            "ANTHROPIC_API_KEY": self.token,
+        }
+
+
 class RunContext:
     """What a running agent may know and do. Created by RunWeave for each attempt."""
 
@@ -134,10 +153,12 @@ class RunContext:
         attempt: int = 1,
         max_steps: int = 50,
         content_policy: ContentPolicy | None = None,
+        proxy: ModelProxy | None = None,
     ) -> None:
         self.run_id = run_id
         self.agent = agent
         self.attempt = attempt
+        self.proxy = proxy
         self._max_steps = max_steps
         self._steps = 0
         self._policy = content_policy or ContentPolicy()

@@ -19,6 +19,7 @@ from runweave.orchestration.admission import (
 )
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus, RunSummary
 from runweave.orchestration.registry import RunRegistry
+from runweave.proxy.bindings import ProxyBindings, bind_run
 from runweave.sdk import AgentError, RunContext
 from runweave.security import (
     LOCAL_PRINCIPAL,
@@ -52,6 +53,7 @@ class Scheduler:
         content_policy: ContentPolicy | None = None,
         budget_policy: BudgetPolicy | None = None,
         output_max_bytes: int = 65536,
+        proxy: ProxyBindings | None = None,
     ) -> None:
         if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0 or tenant_limit < 1:
             raise ValueError("Scheduler limits must be positive")
@@ -78,6 +80,7 @@ class Scheduler:
         self._content_policy = content_policy or ContentPolicy()
         self._budget_policy = budget_policy or BudgetPolicy()
         self._output_max_bytes = output_max_bytes
+        self._proxy = proxy
 
     @property
     def ready(self) -> bool:
@@ -288,18 +291,30 @@ class Scheduler:
             definition = self._agents.get(snapshot.agent)
             if definition is None:
                 raise AdmissionRejected("AGENT_UNAVAILABLE")
-            context = RunContext(
-                run_id=run_id,
-                agent=snapshot.agent,
-                max_steps=definition.info.max_steps,
-                content_policy=self._content_policy,
-            )
+            ledger = self._registry.budget(run_id)
+            steps = self._registry.step_log(run_id)
             with (
                 principal_scope(snapshot.principal),
-                budget_scope(self._registry.budget(run_id)),
-                step_scope(self._registry.step_log(run_id)),
+                budget_scope(ledger),
+                step_scope(steps),
+                bind_run(
+                    self._proxy,
+                    run_id=run_id,
+                    attempt=1,
+                    agent=snapshot.agent,
+                    ledger=ledger,
+                    steps=steps,
+                    expires_at=deadline,
+                ) as proxy,
                 self._telemetry.span("agent.run", run_id=run_id),
             ):
+                context = RunContext(
+                    run_id=run_id,
+                    agent=snapshot.agent,
+                    max_steps=definition.info.max_steps,
+                    content_policy=self._content_policy,
+                    proxy=proxy,
+                )
                 async with deadline_scope(deadline, RUN_DEADLINE):
                     snapshot.principal.require("runs:submit")
                     self._content_policy.check(input_json(parsed))

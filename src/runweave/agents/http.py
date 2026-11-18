@@ -33,6 +33,7 @@ from runweave.http_contract import (
     AgentDescriptor,
     ErrorResponse,
     Manifest,
+    ProxyBinding,
     RunRequest,
     RunResponse,
     cancel_path,
@@ -265,6 +266,13 @@ class HttpAgent:
             attempt=context.attempt,
             input=input.model_dump(mode="json"),
             deadline_ms=max(1, min(MAX_DEADLINE_MS, deadline_ms)),
+            proxy=None
+            if context.proxy is None
+            else ProxyBinding(
+                token=context.proxy.token,
+                openai_base_url=context.proxy.openai_base_url,
+                anthropic_base_url=context.proxy.anthropic_base_url,
+            ),
         )
         url = self._base_url + run_path(self.info.name)
         try:

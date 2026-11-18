@@ -1,6 +1,6 @@
 import {
   DETAIL_LIMIT, NAME_PATTERN, STEP_EVENT_CAP, TITLE_LIMIT, VERSION_PATTERN, clip, isObject,
-  type ErrorLocation, type JsonObject, type JsonSchema, type StepRecord,
+  type ErrorLocation, type JsonObject, type JsonSchema, type ProxyBinding, type StepRecord,
 } from './contract.js';
 
 /** A classified failure whose code RunWeave may show in run snapshots. */
@@ -40,6 +40,15 @@ export class RunAborted extends Error {
   }
 }
 
+/** The run's binding to RunWeave's LLM proxy: use `token` as the API key with these URLs. */
+export interface ModelProxy {
+  readonly token: string;
+  readonly openaiBaseUrl: string;
+  readonly anthropicBaseUrl: string;
+  /** Environment variables the official SDKs read, for subprocesses you start. */
+  env(): Record<string, string>;
+}
+
 export interface RunContext {
   readonly runId: string;
   readonly agent: string;
@@ -54,7 +63,9 @@ export interface RunContext {
   step<T>(title: string, fn: () => Promise<T> | T, options?: { detail?: string }): Promise<T>;
   /** Logs with protected values redacted, at most 1,000 characters. */
   log(message: string): void;
-  /** Model usage; null until the RunWeave LLM proxy meters calls. */
+  /** Point your OpenAI or Anthropic SDK here; null when RunWeave sent no proxy binding. */
+  readonly proxy: ModelProxy | null;
+  /** Model usage is metered by RunWeave and shown on the run; not readable here yet. */
   usage(): null;
 }
 
@@ -130,6 +141,22 @@ export interface ContextParts {
   signal: AbortSignal;
   redactor: Redactor;
   logger: (line: string) => void;
+  proxy: ProxyBinding | null;
+}
+
+function modelProxy(binding: ProxyBinding | null): ModelProxy | null {
+  if (!binding) return null;
+  const proxy = {
+    token: binding.token,
+    openaiBaseUrl: binding.openai_base_url,
+    anthropicBaseUrl: binding.anthropic_base_url,
+    env: () => ({
+      OPENAI_BASE_URL: binding.openai_base_url, OPENAI_API_KEY: binding.token,
+      ANTHROPIC_BASE_URL: binding.anthropic_base_url, ANTHROPIC_API_KEY: binding.token,
+    }),
+  };
+  Object.defineProperty(proxy, 'env', { enumerable: false });
+  return Object.freeze(proxy);
 }
 
 export function createContext(parts: ContextParts): { context: RunContext; steps: StepRecord[] } {
@@ -141,6 +168,7 @@ export function createContext(parts: ContextParts): { context: RunContext; steps
     agent: parts.agent,
     attempt: parts.attempt,
     signal: parts.signal,
+    proxy: modelProxy(parts.proxy),
     remainingMs,
     remainingSeconds: () => remainingMs() / 1000,
     async step(title, fn, options = {}) {
