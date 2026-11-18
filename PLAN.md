@@ -886,6 +886,31 @@ after milestone 22.
 - **Done when** hosted CI passes tests, Ruff, and strict mypy on 3.11, 3.12, and
   3.13 from a clean checkout, and the license audit is recorded.
 
+Implementation notes (2026-11-18):
+- The owner authorized milestone 17, with test-first changes delivered on a
+  branch and pull request for owner review.
+- Started with failing release-metadata tests (`tests/test_project_metadata.py`):
+  supported Python versions, static-check targets, Apache-2.0 metadata and
+  files, project documents, documented scripts, and CI coverage. The existing
+  suite failed to import on 3.11 because of PEP 695 type parameters in the
+  budget ledger; those now use a module-level `TypeVar`.
+- Added LICENSE (canonical Apache-2.0 text), NOTICE, CONTRIBUTING, SECURITY,
+  CHANGELOG, and `docs/licenses.md`. The audit found no GPL-family dependencies;
+  `certifi` (runtime) and `pathspec` (dev) are MPL-2.0 and need their license
+  text in binary distributions.
+- Fixed open dependency advisories: OpenTelemetry 1.45.2, vite 7.3.8, and
+  esbuild 0.28.2. `picomatch` (build tooling via vite) has no patched release;
+  it is recorded as an accepted dev-only advisory in SECURITY.md.
+- Added `.github/workflows/ci.yml`: Python 3.11–3.13 on Linux and Windows, and a
+  dependency audit job (pip-audit on all Python requirement sets; npm audit
+  blocking for shipped frontend packages, reporting for tooling).
+- Local Windows validation on 3.11.15, 3.12.13, and 3.13.9: 264 passed and 100
+  opt-in cases skipped on each; Ruff, formatting, and strict mypy (99 files)
+  clean; frontend tests and build pass. PostgreSQL and native isolation suites
+  were not rerun locally; the PostgreSQL suite runs in the offline evaluation
+  workflow. Hosted CI first runs on the milestone pull request; check this
+  milestone off only after it passes.
+
 ### 18. Developer UI design system and mockups
 
 - Define the information architecture: sidebar navigation for Agents, Runs,
