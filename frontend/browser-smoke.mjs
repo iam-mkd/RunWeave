@@ -26,6 +26,18 @@ let output = '';
 server.stdout.on('data', (chunk) => { output = (output + chunk).slice(-16384); });
 server.stderr.on('data', (chunk) => { output = (output + chunk).slice(-16384); });
 const base = `http://127.0.0.1:${port}`;
+// A real HTTP agent (the contract fixture) for the Connect flow.
+const httpAgent = spawn(python, [join(root, 'tests', 'contract', 'python_agent.py')], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+const httpAgentUrl = new Promise((resolveUrl, rejectUrl) => {
+  let buffer = '';
+  httpAgent.stdout.on('data', (chunk) => {
+    buffer += chunk;
+    const match = /RUNWEAVE_AGENT_READY (\S+)/.exec(buffer);
+    if (match) resolveUrl(match[1]);
+  });
+  httpAgent.on('exit', () => rejectUrl(new Error('The HTTP fixture agent exited')));
+  setTimeout(() => rejectUrl(new Error('The HTTP fixture agent did not start')), 30000);
+});
 const hostile = '<img src=x onerror="window.__injected=true">';
 let browser;
 
@@ -164,6 +176,35 @@ try {
   await page.getByRole('button', { name: 'I restarted RunWeave' }).click();
   await page.getByRole('link', { name: 'Run a smoke test' }).waitFor();
 
+  // Connect an HTTP agent from the UI, run it, then remove it.
+  const agentUrl = await httpAgentUrl;
+  await page.goto(`${base}/#/setup`);
+  await page.getByRole('radio', { name: /HTTP endpoint/ }).check();
+  await page.getByRole('button', { name: 'Continue' }).click();
+  await page.getByRole('textbox', { name: 'Agent URL', exact: true }).fill('http://169.254.169.254/latest');
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await page.getByRole('alert').filter({ hasText: 'loopback' }).waitFor();
+  await page.getByRole('textbox', { name: 'Agent URL', exact: true }).fill(`${agentUrl}/`);
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await page.getByRole('cell', { name: 'contract-echo', exact: true }).waitFor();
+  await page.getByText(`runweave serve --http-agent ${agentUrl}`, { exact: true }).waitFor();
+  await noOverflow(page, 'connect http');
+  await page.getByRole('button', { name: 'Register agents' }).click();
+  await page.getByRole('link', { name: 'Run contract-echo' }).click();
+  await page.getByRole('textbox', { name: 'Text', exact: true }).fill(`remote ${hostile}`);
+  await page.getByRole('button', { name: 'Start run' }).click();
+  await page.locator('.run-state .status.succeeded').waitFor();
+  await page.getByText('Echo', { exact: true }).first().waitFor();
+  await page.locator('section[aria-labelledby="output-title"] .json-block').filter({ hasText: 'remote' }).waitFor();
+  assert.equal(await page.evaluate(() => window.__injected), undefined);
+  await page.goto(`${base}/#/agents`);
+  const row = page.getByRole('row').filter({ has: page.getByRole('link', { name: 'contract-echo', exact: true }) });
+  await row.getByText('HTTP endpoint').waitFor();
+  await page.screenshot({ path: join(artifacts, 'agents-http.png'), fullPage: true });
+  await row.getByRole('button', { name: 'Remove' }).click();
+  await row.getByRole('button', { name: 'Confirm remove' }).click();
+  await page.getByRole('link', { name: 'contract-echo', exact: true }).waitFor({ state: 'detached' });
+
   // Durable approval bindings against an intercepted fixture.
   const fixtureId = '11111111-1111-4111-8111-111111111111';
   const approval = {
@@ -223,10 +264,11 @@ try {
   assert.deepEqual(darkPage.errors, []);
   await dark.close();
 
-  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, approval bindings, mobile overflow, safe text, both themes.');
+  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, approval bindings, mobile overflow, safe text, both themes.');
   console.log(`Screenshots: ${artifacts}`);
 } finally {
   if (browser) await browser.close();
+  if (httpAgent.exitCode === null) httpAgent.kill();
   if (server.exitCode === null) {
     const closed = once(server, 'exit');
     server.kill();
