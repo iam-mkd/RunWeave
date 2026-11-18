@@ -19,7 +19,7 @@ from runweave.steps import STEP_EVENT_CAP, StepEvent
 
 _COLUMNS = (
     "id, status, submitted_at, started_at, finished_at, result, error, principal, budget, "
-    "approval_wait_started_at, approval_wait_seconds, agent, agent_version, steps"
+    "approval_wait_started_at, approval_wait_seconds, agent, agent_version, steps, incident"
 )
 _OWNER = "principal->>'tenant' = :tenant AND principal->>'subject' = :subject"
 _FINISH_ATTEMPT = """
@@ -52,6 +52,7 @@ def snapshot(row: RowMapping) -> RunSnapshot:
     fields = {key: row[key] for key in _COLUMNS.split(", ") if key != "budget"}
     fields["usage"] = BudgetState.model_validate(row["budget"]).summary() if row["budget"] else None
     fields["steps"] = tuple(fields["steps"] or ())
+    fields["input"] = fields.pop("incident")
     return RunSnapshot.model_validate({**fields, "status_url": f"/v1/runs/{row['id']}"})
 
 
