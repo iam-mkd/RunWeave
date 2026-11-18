@@ -9,18 +9,25 @@ async def run(input: MyInput, ctx: RunContext) -> MyOutput: ...
 import inspect
 import logging
 import re
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass
 from typing import Any, TypeVar
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from runweave.budgets import BudgetSummary, current_ledger
 from runweave.deadline import remaining_budget
 from runweave.security import ContentPolicy
-from runweave.steps import DETAIL_LIMIT, TITLE_LIMIT, clip, record_step
+from runweave.steps import (
+    DETAIL_LIMIT,
+    TITLE_LIMIT,
+    StepStatus,
+    clip,
+    record_finished_step,
+    record_step,
+)
 
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,39}$")
@@ -47,6 +54,20 @@ class AgentOutputInvalid(AgentError):
 
 class AgentOutputTooLarge(AgentError):
     code = "AGENT_OUTPUT_TOO_LARGE"
+
+
+class AgentUnavailable(AgentError):
+    code = "AGENT_UNAVAILABLE"
+
+
+def validation_errors(error: ValidationError, limit: int = 20) -> list[dict[str, Any]]:
+    """Locations, types and messages describe the schema; submitted values are never echoed."""
+    return [
+        {"loc": list(item["loc"]), "type": item["type"], "msg": item["msg"]}
+        for item in error.errors(include_url=False, include_input=False, include_context=False)[
+            :limit
+        ]
+    ]
 
 
 @dataclass(frozen=True)
@@ -146,6 +167,21 @@ class RunContext:
         return record_step(
             clip(self._policy.redact(title), TITLE_LIMIT) or "Step", clip(redacted, DETAIL_LIMIT)
         )
+
+    async def add_finished_steps(
+        self, steps: Sequence[tuple[str, str | None, StepStatus, float]]
+    ) -> None:
+        """Record steps an agent ran elsewhere (title, detail, status, duration in ms)."""
+        if self._steps + len(steps) > self._max_steps:
+            raise StepLimitExceeded()
+        for title, detail, status, duration_ms in steps:
+            self._steps += 1
+            await record_finished_step(
+                clip(self._policy.redact(title), TITLE_LIMIT) or "Step",
+                clip(self._policy.redact(detail), DETAIL_LIMIT) if detail is not None else None,
+                status,
+                duration_ms,
+            )
 
     def log(self, message: str) -> None:
         text = self._policy.redact(str(message))[:LOG_LIMIT]

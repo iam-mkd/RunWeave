@@ -40,7 +40,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 16. Shadow workflow comparison and release verification
 - [x] 17. Open-source foundation and Python 3.11+ support
 - [x] 18. Developer UI design system and mockups
-- [ ] 19. Generic run core, Python agent adapter, and core screens
+- [x] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
@@ -1067,6 +1067,11 @@ Implementation notes, pull request B (2026-11-18):
   violations or page errors), the prototype check, 299 offline Python tests, Ruff,
   strict mypy (111 files), `npm audit --omit=dev` (0 vulnerabilities), and all three
   reference evaluations (13 cases each, every assertion passing).
+- Completed 2026-11-18: the owner reviewed and merged pull request #5 (merge
+  commit 54e8c74). Hosted CI passed on the pull request and on `main`: the Python
+  3.11–3.13 Linux/Windows jobs, the dependency audit, the offline evaluation
+  workflow with its PostgreSQL suite, and the React workspace checks, including
+  the rewritten browser smoke test on Linux.
 
 ### 20. HTTP agent adapter and TypeScript SDK
 
@@ -1083,6 +1088,48 @@ Implementation notes, pull request B (2026-11-18):
   agents and covers success, timeout, cancellation, malformed and oversized
   responses, 5xx classification, and redirect denial, and an HTTP agent can be
   connected and run from the UI.
+
+Decisions with the owner (2026-11-18): register HTTP agents both from the UI at
+runtime (kept until the server stops) and at startup (`--http-agent URL`); no code
+is imported either way. Deliver in two pull requests (A: contract, adapter, Python
+agent-side wrapper and the shared contract suite; B: TypeScript SDK joining that
+suite, and the Agents/Connect screens).
+
+Implementation notes, pull request A (2026-11-18):
+- Test first: `tests/test_http_agents.py` (adapter), `tests/test_sdk_http.py`
+  (agent-side wrapper), `tests/test_http_agents_api.py` (registration),
+  `tests/test_http_contract_suite.py` with its fixture spec in `tests/contract/`, new
+  CLI cases, and a PostgreSQL case, all written before the code.
+- `runweave.http_contract` holds the `runweave.agent/v1` models shared by both sides;
+  `contracts/agent-http-v1.openapi.json` is generated from them and a test fails on
+  drift (`python -m runweave.http_contract` regenerates it).
+- `agents/http.py`: loopback-only destinations unless allowed at startup (credentials,
+  query and fragment rejected), no redirects, streamed size limits, retries only for
+  connect failures and 429/502/503/504 within the deadline with one idempotency key,
+  fixed error codes for everything else, and a one-second best-effort cancel call on
+  cancellation or timeout. HTTP agents' JSON Schemas are checked at discovery and
+  validate input (fixed messages, never submitted values) and output with `jsonschema`.
+- The catalog accepts runtime HTTP registrations (`POST /v1/agents/http`, `/check`,
+  `DELETE /v1/agents/{name}`; new `agents:manage` scope; bounded bodies and count);
+  startup agents come from `--http-agent` or `RUNWEAVE_HTTP_AGENTS`, and an unreachable
+  one stops startup with its code. Offline mode routes only loopback and allowed hosts
+  to the network.
+- `runweave.sdk_http` and `runweave serve-agent` serve `@agent` functions over the
+  contract with the same `RunContext`: envelope and input validation, body and
+  concurrency limits, idempotent dedupe, cancellation by call or disconnect, and
+  error codes without internal detail.
+- The contract suite runs end to end through RunWeave against a Python fixture agent
+  in a subprocess: discovery, success with steps, validation, timeout and cancellation
+  reaching the agent, malformed, oversized, redirect, 5xx and unavailable responses,
+  and retry counts. The TypeScript fixture joins it in pull request B.
+- Validation: the full suite with PostgreSQL 18 passed (499 passed; 14 Docker-only
+  native isolation cases skipped), including a durable HTTP agent run with persisted
+  remote steps and stale-input rejection. After a final fix that rejects non-local
+  schema references at discovery, offline suites passed on Python 3.11 and 3.13 (414
+  each). Ruff, formatting and strict mypy (120 files) passed; 57 Vitest tests,
+  the production build and the browser smoke test passed; all three reference
+  evaluations passed (13 cases each). This milestone stays unchecked until pull
+  request B.
 
 ### 21. LLM proxy and fault injection
 

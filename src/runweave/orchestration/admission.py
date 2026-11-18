@@ -5,10 +5,10 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from runweave.agents.catalog import TRIAGE_AGENT, AgentCatalog, RegisteredAgent
+from runweave.agents.catalog import TRIAGE_AGENT, AgentCatalog, RegisteredAgent, SchemaViolation
 from runweave.agents.contracts import IncidentRequest
 from runweave.orchestration.models import AgentRunRequest
-from runweave.sdk import AgentOutputTooLarge
+from runweave.sdk import AgentOutputTooLarge, validation_errors
 from runweave.security import ContentPolicy
 
 Submission = AgentRunRequest | IncidentRequest
@@ -30,16 +30,6 @@ class InvalidRunInput(Exception):
         super().__init__("Invalid agent input")
 
 
-def validation_errors(error: ValidationError, limit: int = 20) -> list[dict[str, Any]]:
-    # Locations, types and messages describe the schema; submitted values are never echoed.
-    return [
-        {"loc": list(item["loc"]), "type": item["type"], "msg": item["msg"]}
-        for item in error.errors(include_url=False, include_input=False, include_context=False)[
-            :limit
-        ]
-    ]
-
-
 def resolve(catalog: AgentCatalog, submission: Submission) -> tuple[RegisteredAgent, BaseModel]:
     if isinstance(submission, IncidentRequest):
         name, payload = TRIAGE_AGENT, submission.model_dump(mode="json")
@@ -52,6 +42,8 @@ def resolve(catalog: AgentCatalog, submission: Submission) -> tuple[RegisteredAg
         return definition, definition.parse(payload)
     except ValidationError as error:
         raise InvalidRunInput(validation_errors(error)) from None
+    except SchemaViolation as error:
+        raise InvalidRunInput(error.errors) from None
 
 
 def input_json(value: BaseModel) -> str:

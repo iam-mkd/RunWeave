@@ -17,6 +17,16 @@ AgentTarget = Annotated[
 ]
 
 
+HostName = Annotated[
+    str,
+    StringConstraints(
+        pattern=r"^[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+        r"(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*$",
+        max_length=253,
+    ),
+]
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_prefix="RUNWEAVE_",
@@ -69,6 +79,18 @@ class Settings(BaseSettings):
     agent_workflow: Literal["baseline", "pydanticai", "coordinated"] = "baseline"
     # Python agents to import at startup as module:attribute. Never loaded from requests.
     agents: tuple[AgentTarget, ...] = Field(default=(), max_length=32)
+    # HTTP agents (runweave.agent/v1) discovered at startup; more can be added at runtime.
+    http_agents: tuple[Annotated[str, StringConstraints(max_length=2048)], ...] = Field(
+        default=(), max_length=16
+    )
+    # Non-loopback hosts HTTP agents may use. Loopback is always allowed.
+    http_agent_allowed_hosts: tuple[HostName, ...] = Field(default=(), max_length=16)
+    http_agent_max_registered: int = Field(default=32, ge=1, le=128)
+    http_agent_retry_attempts: int = Field(default=3, ge=1, le=5)
+    http_agent_retry_base_delay_seconds: float = Field(default=0.2, gt=0, le=5)
+    http_agent_retry_max_delay_seconds: float = Field(default=2.0, gt=0, le=30)
+    http_agent_response_max_bytes: int = Field(default=1048576, ge=4096, le=8388608)
+    http_agent_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
     run_request_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     agent_output_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     event_stream_max_subscribers: int = Field(default=64, ge=1, le=1024)
@@ -201,4 +223,12 @@ class Settings(BaseSettings):
             not 16 <= len(token) <= 512 for token in self.auth_test_identities
         ):
             raise ValueError("Configure at most 32 test tokens of 16 to 512 characters")
+        from runweave.agents.http import normalize_agent_url
+
+        self.http_agents = tuple(
+            dict.fromkeys(
+                normalize_agent_url(url, allowed_hosts=self.http_agent_allowed_hosts)
+                for url in self.http_agents
+            )
+        )
         return self

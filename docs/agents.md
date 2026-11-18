@@ -1,5 +1,8 @@
 # Run your own Python agent
 
+To run your agent in its own process or in another language, see
+[HTTP agents](http-agents.md).
+
 RunWeave runs your agent with bounded concurrency, a deadline, cancellation, a step
 timeline, input/output validation and run history. Write an async function, describe its
 input and output with Pydantic models, and start RunWeave with it.

@@ -1,0 +1,408 @@
+{
+  "components": {
+    "schemas": {
+      "AgentDescriptor": {
+        "properties": {
+          "description": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Description",
+            "type": "string"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "description": "JSON Schema (2020-12) for run input",
+            "title": "Input Schema",
+            "type": "object"
+          },
+          "max_steps": {
+            "default": 50,
+            "maximum": 200,
+            "minimum": 1,
+            "title": "Max Steps",
+            "type": "integer"
+          },
+          "name": {
+            "pattern": "^[a-z][a-z0-9-]{0,62}$",
+            "title": "Name",
+            "type": "string"
+          },
+          "output_schema": {
+            "additionalProperties": true,
+            "description": "JSON Schema (2020-12) for run output",
+            "title": "Output Schema",
+            "type": "object"
+          },
+          "version": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9.+_-]{0,39}$",
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "version",
+          "input_schema",
+          "output_schema"
+        ],
+        "title": "AgentDescriptor",
+        "type": "object"
+      },
+      "ErrorDetail": {
+        "properties": {
+          "code": {
+            "pattern": "^[A-Z][A-Z0-9_]{0,63}$",
+            "title": "Code",
+            "type": "string"
+          },
+          "errors": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "maxItems": 20,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Errors"
+          }
+        },
+        "required": [
+          "code"
+        ],
+        "title": "ErrorDetail",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorDetail"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "ErrorResponse",
+        "type": "object"
+      },
+      "Manifest": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentDescriptor"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Agents",
+            "type": "array"
+          },
+          "contract": {
+            "const": "runweave.agent/v1",
+            "title": "Contract",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract",
+          "agents"
+        ],
+        "title": "Manifest",
+        "type": "object"
+      },
+      "RunRequest": {
+        "properties": {
+          "attempt": {
+            "description": "2+ when RunWeave re-runs after lease loss",
+            "maximum": 1000,
+            "minimum": 1,
+            "title": "Attempt",
+            "type": "integer"
+          },
+          "deadline_ms": {
+            "description": "Milliseconds left in the run's deadline",
+            "maximum": 86400000,
+            "minimum": 1,
+            "title": "Deadline Ms",
+            "type": "integer"
+          },
+          "input": {
+            "additionalProperties": true,
+            "title": "Input",
+            "type": "object"
+          },
+          "run_id": {
+            "format": "uuid",
+            "title": "Run Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "run_id",
+          "attempt",
+          "input",
+          "deadline_ms"
+        ],
+        "title": "RunRequest",
+        "type": "object"
+      },
+      "RunResponse": {
+        "properties": {
+          "output": {
+            "additionalProperties": true,
+            "title": "Output",
+            "type": "object"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/StepRecord"
+            },
+            "maxItems": 200,
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "output"
+        ],
+        "title": "RunResponse",
+        "type": "object"
+      },
+      "StepRecord": {
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Detail"
+          },
+          "duration_ms": {
+            "maximum": 86400000,
+            "minimum": 0,
+            "title": "Duration Ms",
+            "type": "number"
+          },
+          "status": {
+            "enum": [
+              "succeeded",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status",
+          "duration_ms"
+        ],
+        "title": "StepRecord",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "Endpoints an HTTP agent serves so RunWeave can discover, run and cancel it. RunWeave never follows redirects, bounds response sizes, retries only connection failures and 429/502/503/504 (with the same Idempotency-Key), and closes the request when the run is cancelled or its deadline passes.",
+    "title": "RunWeave HTTP agent contract",
+    "version": "runweave.agent/v1"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/runweave/v1/agents": {
+      "get": {
+        "operationId": "listAgents",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Manifest"
+                }
+              }
+            },
+            "description": "Agent manifest"
+          }
+        },
+        "summary": "Describe the agents served at this base URL"
+      }
+    },
+    "/runweave/v1/agents/{name}/runs": {
+      "post": {
+        "operationId": "runAgent",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          },
+          {
+            "description": "The RunWeave run ID. Repeats of a key return the first result instead of running again.",
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunResponse"
+                }
+              }
+            },
+            "description": "Run output and timeline steps"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "The agent failed; codes in AGENT_DEADLINE_EXCEEDED, AGENT_OUTPUT_INVALID, AGENT_STEP_LIMIT, RUN_FAILED are reported to the run"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Busy; RunWeave retries after Retry-After"
+          }
+        },
+        "summary": "Run the agent once and return its validated output"
+      }
+    },
+    "/runweave/v1/agents/{name}/runs/{run_id}/cancel": {
+      "post": {
+        "operationId": "cancelRun",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "pattern": "^[a-z][a-z0-9-]{0,62}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Cancellation requested"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Contract error with a machine-readable code"
+          }
+        },
+        "summary": "Best-effort cancellation of an in-flight run"
+      }
+    }
+  }
+}

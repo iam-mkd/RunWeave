@@ -4,6 +4,8 @@ import { DataTable, ErrorState, LoadingState, PageHeader, Panel, StatTile } from
 import { percent } from '../format.js';
 import { href } from '../router.js';
 
+const connectionLabels = { 'built-in': 'Built-in example', python: 'Python callable', http: 'HTTP endpoint' };
+
 function stats(runs) {
   const byAgent = {};
   for (const run of runs) {
@@ -48,7 +50,7 @@ export function AgentsScreen() {
   const columns = [
     { key: 'name', label: 'Agent', render: (agent) => <div><a href={href({ screen: 'runs', params: { agent: agent.name } })}>{agent.name}</a>
       {agent.description && <div className="muted cell-note">{agent.description}</div>}</div> },
-    { key: 'kind', label: 'Connection', render: (agent) => <div>{agent.kind === 'built-in' ? 'Built-in example' : 'Python callable'}
+    { key: 'kind', label: 'Connection', render: (agent) => <div>{connectionLabels[agent.kind] ?? agent.kind}
       {agent.target && <div><code className="muted">{agent.target}</code></div>}</div> },
     { key: 'version', label: 'Version', render: (agent) => <span className="mono">{agent.version}</span> },
     { key: 'runs', label: 'Recent runs', numeric: true, render: (agent) => byAgent[agent.name]?.total ?? 0 },
