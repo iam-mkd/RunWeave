@@ -802,6 +802,27 @@ Implementation and verification (2026-11-18):
   Hosted CI and live inference have not run. Public exposure still requires the
   deployment gate; a frontend and subscription integrations remain outside scope.
 
+### Post-roadmap: local React workspace (2026-11-18)
+
+The project owner authorized a local React frontend after milestone 16. The UI
+serves the existing incident-triage workflow: submission, selected-run polling,
+cancellation, findings/evidence, usage, recent IDs and direct links. The FastAPI
+workspace launcher serves the built UI and APIs on one loopback origin, with Host
+and browser-origin restrictions. Default use requires no database; in-memory work
+still resets with the server. Browser storage retains only twelve recent IDs.
+Durable-only recall, ticket proposals and approval decisions appear only when an
+existing durable backend is configured. Database distribution and provider-account
+sign-in remain separate future work; this does not expand into a general-purpose
+coding agent. See docs/workspace.md for setup and verification.
+Verification: a clean npm lockfile install, production build and three frontend
+unit tests passed. Browser checks exercised the real offline launcher and APIs,
+cross-site link navigation, results, cancellation, refresh/history, expired IDs,
+admission errors, mobile overflow and untrusted text; approval and rejection
+bindings were checked against an intercepted durable fixture. The full Python
+suite passed 257 tests with 100 opt-in database/native cases skipped. Ruff,
+formatting, strict mypy (98 files) and lock checks passed. Hosted frontend CI is
+configured but unverified. No paid model calls or database migrations ran.
+
 ### PydanticAI references
 
 - [Groq provider](https://pydantic.dev/docs/ai/models/groq/)

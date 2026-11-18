@@ -26,3 +26,5 @@ Desktop.ini
 target/evals/
 target/pytest-*/
 target/isolation/
+frontend/node_modules/
+frontend/test-results/

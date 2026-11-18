@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 runweave-demo = "runweave.demo:main"
+runweave-workspace = "runweave.workspace:main"
 
 [project.optional-dependencies]
 workflow = [

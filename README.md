@@ -8,12 +8,31 @@ adds execution deadlines, retries for the read-only health tool, and graceful dr
 Milestone 4 adds a model-driven tool loop and an optional Groq adapter.
 Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
 
-## Quick start (PowerShell)
+## Local workspace
+
+RunWeave now includes a React UI for starting investigations, following run
+status, reviewing findings/evidence and cancelling work. No database is required
+for the default offline demo.
+
+![RunWeave local React workspace](docs/images/workspace.png)
+
+```powershell
+uv sync --locked
+npm.cmd --prefix frontend ci
+npm.cmd --prefix frontend run build
+uv run --locked runweave-workspace --demo
+```
+
+Open **http://127.0.0.1:8000** and select **Load example**. Use `npm` instead of
+`npm.cmd` on macOS/Linux. See the [workspace guide](docs/workspace.md) for local
+development, verification, provider configuration boundaries and storage behavior.
+
+## Backend quick start (PowerShell)
 
 The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),
 including a durable restart/recall/approval demo and native/container startup checks.
 See [architecture and operations](docs/architecture.md) for deployment, migration,
-rollback and the public deployment gate. A frontend remains outside this roadmap.
+rollback and the public deployment gate. The React workspace builds on that backend.
 
 Milestone 15 adds opt-in disposable Python and read-only Chromium tools. See the
 [isolation guide](docs/isolation.md) for native verification, configuration,

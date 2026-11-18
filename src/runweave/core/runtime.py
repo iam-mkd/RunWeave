@@ -6,7 +6,7 @@ import httpx
 
 from runweave.agents.contracts import AgentExecutor, AgentModel
 from runweave.agents.fake import FakeAgentModel
-from runweave.agents.groq import GroqAgentModel
+from runweave.agents.providers import ProviderAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.agents.triage import TriageSteps
 from runweave.core.settings import Settings
@@ -42,11 +42,12 @@ async def open_runtime(
     mock_transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[Runtime]:
     mock_transport = mock_transport or httpx.MockTransport(fake_health_response)
-    groq_enabled = settings.model_provider == "groq"
+    provider = settings.model_provider
+    live = provider != "fake"
     async with httpx.AsyncClient(
         base_url="https://mock-tools.invalid",
-        transport=None if groq_enabled else mock_transport,
-        mounts={"https://mock-tools.invalid": mock_transport} if groq_enabled else None,
+        transport=None if live else mock_transport,
+        mounts={"https://mock-tools.invalid": mock_transport} if live else None,
         timeout=httpx.Timeout(settings.http_timeout_seconds),
         limits=httpx.Limits(
             max_connections=settings.http_max_connections,
@@ -59,6 +60,7 @@ async def open_runtime(
         content_policy = ContentPolicy(
             (
                 settings.groq_api_key.get_secret_value(),
+                settings.model_api_key.get_secret_value(),
                 settings.auth_signing_key.get_secret_value(),
                 settings.sandbox_fixture_credential.get_secret_value(),
                 *settings.auth_test_identities.keys(),
@@ -73,13 +75,19 @@ async def open_runtime(
             telemetry=telemetry,
         )
         model: AgentModel = FakeAgentModel()
-        if groq_enabled:
-            model = GroqAgentModel(
+        if provider != "fake":
+            groq = provider == "groq"
+            model = ProviderAgentModel(
                 client,
-                settings.groq_api_key,
-                model=settings.groq_model,
-                concurrency=settings.groq_concurrency,
-                requests_per_minute=settings.groq_requests_per_minute,
+                settings.groq_api_key if groq else settings.model_api_key,
+                provider=provider,
+                model=settings.selected_model,
+                concurrency=settings.groq_concurrency if groq else settings.model_concurrency,
+                requests_per_minute=(
+                    settings.groq_requests_per_minute
+                    if groq
+                    else settings.model_requests_per_minute
+                ),
             )
         isolated = IsolatedTools(settings, content_policy)
         try:

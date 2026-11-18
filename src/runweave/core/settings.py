@@ -4,6 +4,7 @@ from typing import Literal
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from runweave.agents.provider_wire import Provider
 from runweave.budgets import BudgetPolicy
 from runweave.security import IdentityName, Principal
 
@@ -79,7 +80,11 @@ class Settings(BaseSettings):
             )
         return self
 
-    model_provider: Literal["fake", "groq"] = "fake"
+    model_provider: Provider = "fake"
+    model_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    model_name: str = Field(default="", max_length=100)
+    model_concurrency: int = Field(default=2, ge=1, le=32)
+    model_requests_per_minute: int = Field(default=30, ge=1, le=600)
     groq_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     groq_model: str = Field(default="llama-3.3-70b-versatile", min_length=1, max_length=100)
     groq_concurrency: int = Field(default=2, ge=1, le=32)
@@ -125,19 +130,33 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def require_provider_configuration(self) -> "Settings":
+        if self.model_provider not in ("fake", "groq") and (
+            not self.model_api_key.get_secret_value().strip() or not self.model_name.strip()
+        ):
+            raise ValueError("Set RUNWEAVE_MODEL_API_KEY and RUNWEAVE_MODEL_NAME")
+        return self
+
+    @property
+    def selected_model(self) -> str:
+        if self.model_provider == "fake":
+            return "fake-v1"
+        return self.groq_model if self.model_provider == "groq" else self.model_name.strip()
+
+    @model_validator(mode="after")
     def require_live_prices(self) -> "Settings":
-        if self.model_provider == "groq" and (
+        if self.model_provider != "fake" and (
             self.model_input_usd_per_million is None
             or self.model_output_usd_per_million is None
             or not self.model_price_version.strip()
         ):
-            raise ValueError("Configure versioned input and output prices before enabling Groq")
+            raise ValueError("Configure versioned input and output prices before enabling live AI")
         return self
 
     def budget_policy(self) -> BudgetPolicy:
-        live = self.model_provider == "groq"
+        live = self.model_provider != "fake"
         return BudgetPolicy(
-            model=self.groq_model if live else "fake-v1",
+            model=self.selected_model,
             price_version=self.model_price_version if live else "fake-free-v1",
             input_nanos_per_token=int((self.model_input_usd_per_million or 0) * 1000)
             if live
