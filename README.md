@@ -27,6 +27,19 @@ Open **http://127.0.0.1:8000** and select **Load example**. Use `npm` instead of
 `npm.cmd` on macOS/Linux. See the [workspace guide](docs/workspace.md) for local
 development, verification, provider configuration boundaries and storage behavior.
 
+## Run your own agent
+
+Decorate an async Python function with `@runweave.sdk.agent`, then start RunWeave with it:
+
+```powershell
+uv run --locked runweave serve --agent mypkg.agent:run
+```
+
+RunWeave validates its input and output, applies the run deadline and cancellation,
+records a step timeline, and exposes it through `/v1/agents`, `/v1/runs` (submit, list,
+poll, cancel) and a live `/v1/runs/{id}/events` stream. See the
+[agent guide](docs/agents.md) and the example in `examples/sample-agent`.
+
 ## Backend quick start (PowerShell)
 
 The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),
@@ -373,6 +386,9 @@ uv pip install -r requirements-durable.txt
 uv run --no-sync alembic upgrade head
 uv run --no-sync uvicorn runweave.app:create_app --factory --workers 1
 ```
+
+Migration 0007 adds agent identity and the step timeline to runs; existing rows become
+`incident-triage` runs. Stop workers before upgrading.
 
 Use the existing `POST /v1/runs`, `GET /v1/runs/{id}`, and cancel routes. Keep the
 run ID across a process restart. PostgreSQL stores the incident, result, and

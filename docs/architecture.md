@@ -87,7 +87,7 @@ uv run --no-sync alembic current
 uv run --no-sync uvicorn runweave.app:create_app --factory --host 127.0.0.1 --port 8000 --workers 1
 ```
 
-The current migration head is `0006_scoped_memory`. Test migrations on a backup
+The current migration head is `0007_generic_agents`. Test migrations on a backup
 copy, stop old workers before upgrading, and run the same code/policy/auth settings
 on all durable workers. The release helper applies the SQL chain in a disposable
 schema; it does not migrate a developer's existing database. Legacy migration,
