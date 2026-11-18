@@ -22,6 +22,7 @@ Every run attempt gets its own proxy token. Use it as the API key:
 from openai import AsyncOpenAI
 from runweave.sdk import RunContext, agent
 
+
 @agent(name="my-agent", version="1.0.0", input=Question, output=Answer)
 async def run(input: Question, ctx: RunContext) -> Answer:
     client = AsyncOpenAI(api_key=ctx.proxy.token, base_url=ctx.proxy.openai_base_url)
