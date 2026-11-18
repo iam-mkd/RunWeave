@@ -38,7 +38,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 14. Typed multi-agent coordination
 - [x] 15. Sandboxed code and authorized browser automation
 - [x] 16. Shadow workflow comparison and release verification
-- [ ] 17. Open-source foundation and Python 3.11+ support
+- [x] 17. Open-source foundation and Python 3.11+ support
 - [ ] 18. Developer UI design system and mockups
 - [ ] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
@@ -910,6 +910,10 @@ Implementation notes (2026-11-18):
   were not rerun locally; the PostgreSQL suite runs in the offline evaluation
   workflow. Hosted CI first runs on the milestone pull request; check this
   milestone off only after it passes.
+- Completed 2026-11-18: the owner reviewed and merged pull request #2
+  (merge commit 888c5b7). Hosted CI passed on the pull request and on `main`:
+  all six Python 3.11–3.13 Linux/Windows jobs, the dependency audit, the offline
+  evaluation workflow with its PostgreSQL suite, and the React workspace checks.
 
 ### 18. Developer UI design system and mockups
 
@@ -942,6 +946,40 @@ Implementation notes (2026-11-18):
   set plus shared components (navigation shell, table, badge, empty/error
   states) replace the current single-page styling with no loss of existing
   workspace behavior.
+
+Implementation notes (2026-11-18):
+- The owner authorized milestone 18 after merging milestone 17, with
+  test-first changes on a branch and pull request for review.
+- Wrote `docs/design-system.md` (principles, information architecture, tokens,
+  accessibility baseline, components, chart/table decision) and failing Vitest
+  suites before the code: token contrast in both themes, theme preference,
+  formatting, navigation, and component structure/escaping. Vitest 4.1.12 (MIT)
+  replaces `node --test` so JSX components can be tested; the existing API tests
+  moved over unchanged in substance.
+- Tokens are dark-first with a light theme, following the OS unless the user
+  picks one. Chart series and status colors come from the validated
+  data-visualization reference palette. A mutation check confirmed the contrast
+  test fails on a sub-4.5:1 text token.
+- Shared components: `AppShell` (sidebar, mobile drawer, skip link, connection,
+  theme switch), `PageHeader`, `Panel`, `StatusBadge` (icon + label + tone),
+  `DataTable` (caption, scoped headers, `aria-sort`), `StatTile`,
+  `KeyValueList`, `Timeline`, `LineChart` (crosshair, keyboard, legend, table
+  view), `Sparkline`, and empty/error/loading states. Charts use our own SVG;
+  uPlot is reconsidered in milestone 22 only if live charts need it.
+- The incident-triage workspace now uses the shell and components. The existing
+  browser smoke test passes unchanged (submission, results, cancellation,
+  refresh, mobile, untrusted text, queue errors, expired IDs, approvals, no CSP
+  violations or page errors). Production navigation lists only Runs.
+- A clickable prototype (`prototype.html`, synthetic fixtures, hash routing)
+  covers all nine planned screens plus New run. It builds separately to
+  `dist-prototype/` and never ships in the workspace bundle. A new Playwright
+  check serves it under the workspace CSP and visits every screen in both themes
+  at 1360 px and 390 px, exercising the chart tooltip and keyboard, a simulated
+  live load test, approval, the setup flow, and the mobile drawer.
+- Validation: 38 Vitest tests, production build, workspace browser smoke,
+  prototype check, Python workspace and metadata tests, and `npm audit
+  --omit=dev` (0 vulnerabilities) passed locally. Awaiting owner review of the
+  prototype before checking this milestone off.
 
 ### 19. Generic run core, Python agent adapter, and core screens
 

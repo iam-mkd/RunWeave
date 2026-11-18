@@ -26,3 +26,4 @@ Desktop.ini
 target/
 frontend/node_modules/
 frontend/test-results/
+frontend/dist-prototype/
