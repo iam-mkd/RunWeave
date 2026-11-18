@@ -1,0 +1,8 @@
+RunWeave
+Copyright 2026 The RunWeave Authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+Third-party components are distributed under their own licenses. See
+docs/licenses.md for the dependency license audit. The Playwright license used
+by the optional browser sandbox is in sandbox/PLAYWRIGHT-LICENSE.
