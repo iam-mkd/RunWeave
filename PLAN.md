@@ -39,7 +39,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 15. Sandboxed code and authorized browser automation
 - [x] 16. Shadow workflow comparison and release verification
 - [x] 17. Open-source foundation and Python 3.11+ support
-- [ ] 18. Developer UI design system and mockups
+- [x] 18. Developer UI design system and mockups
 - [ ] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
@@ -980,6 +980,9 @@ Implementation notes (2026-11-18):
   prototype check, Python workspace and metadata tests, and `npm audit
   --omit=dev` (0 vulnerabilities) passed locally. Awaiting owner review of the
   prototype before checking this milestone off.
+- Completed 2026-11-18: the owner reviewed the prototype (published and local),
+  approved the design, and merged pull request #3 (merge commit 8b67983). All 11
+  hosted checks passed, including the Vitest suite and the prototype check on Linux.
 
 ### 19. Generic run core, Python agent adapter, and core screens
 
