@@ -40,6 +40,11 @@ records a step timeline, and exposes it through `/v1/agents`, `/v1/runs` (submit
 poll, cancel) and a live `/v1/runs/{id}/events` stream. See the
 [agent guide](docs/agents.md) and the example in `examples/sample-agent`.
 
+Agents in their own process (any language) connect over HTTP with the versioned
+`runweave.agent/v1` contract: `runweave serve --http-agent http://127.0.0.1:9100`, or
+register them at runtime. Python agents can be served with
+`runweave serve-agent mypkg.agent:run`. See [HTTP agents](docs/http-agents.md).
+
 ## Backend quick start (PowerShell)
 
 The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),

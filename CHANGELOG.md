@@ -29,6 +29,14 @@ All notable changes to RunWeave are recorded here. The format follows
   generated from the agent's input schema) and Run detail (live server-sent updates
   with polling fallback, timeline, output, input, cancel, re-run, approvals).
 - Run snapshots include the validated `input`; run listings do not.
+- HTTP agents (milestone 20): the versioned `runweave.agent/v1` contract
+  (`contracts/agent-http-v1.openapi.json`), an adapter with loopback-only destinations,
+  no redirects, bounded responses, classified retries with an idempotency key, and
+  best-effort cancel calls. Register at startup (`runweave serve --http-agent URL`,
+  `RUNWEAVE_HTTP_AGENTS`) or at runtime (`POST /v1/agents/http`, `/check`,
+  `DELETE /v1/agents/{name}`, new `agents:manage` scope). `runweave serve-agent` and
+  `runweave.sdk_http` serve Python agents over the contract. See `docs/http-agents.md`.
+- New dependency: `jsonschema` (MIT), for HTTP agents' JSON Schemas.
 
 - Apache-2.0 LICENSE and NOTICE, CONTRIBUTING, SECURITY, and this changelog.
 - Dependency license audit in `docs/licenses.md`.
@@ -48,6 +56,10 @@ All notable changes to RunWeave are recorded here. The format follows
 - Python support widened from 3.13 only to 3.11 and newer. Ruff and mypy now
   target 3.11.
 - Package metadata declares the license and supported Python versions.
+- Offline mode still routes model and tool traffic to the local mocks; only loopback
+  hosts (and hosts in `RUNWEAVE_HTTP_AGENT_ALLOWED_HOSTS`) reach the network, for HTTP
+  agents.
+- `RunContext` can record steps that ran elsewhere (`add_finished_steps`).
 
 ### Security
 
