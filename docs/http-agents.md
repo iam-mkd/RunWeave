@@ -106,7 +106,7 @@ Registration errors: `AGENT_URL_NOT_ALLOWED` (422), `AGENT_UNREACHABLE`,
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /runweave/v1/agents` | Manifest: `{"contract": "runweave.agent/v1", "agents": [{name, version, description, input_schema, output_schema, max_steps}]}` (1–16 agents) |
-| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}` |
+| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms, proxy}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}`. `proxy` (`{token, openai_base_url, anthropic_base_url}`) is the run's [LLM proxy](llm-proxy.md) binding |
 | `POST /runweave/v1/agents/{name}/runs/{run_id}/cancel` | Best-effort cancellation; answer 202, or 404 for unknown runs |
 
 Schemas are JSON Schema 2020-12 with local references only (`#/$defs/...`, as Pydantic

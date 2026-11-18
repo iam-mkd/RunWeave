@@ -37,6 +37,9 @@ jobs:
       - name: Build the TypeScript SDK for the shared contract suite
         run: npm ci && npm run build
         working-directory: sdk/typescript
+      - name: Install the official Node SDKs for the proxy compatibility test
+        run: npm ci
+        working-directory: tests/proxy_compat
       - run: uv sync --locked --extra workflow --extra eval
       - run: uv run --no-sync pytest -q
         env:
@@ -92,6 +95,9 @@ jobs:
         run: npm audit --omit=dev --audit-level=low
       - name: Audit TypeScript SDK dependencies (build tooling only; it has no runtime dependencies)
         working-directory: sdk/typescript
+        run: npm audit --audit-level=low
+      - name: Audit the proxy compatibility test's Node SDKs (test-only)
+        working-directory: tests/proxy_compat
         run: npm audit --audit-level=low
       - name: Report frontend tooling advisories (accepted ones are listed in SECURITY.md)
         working-directory: frontend

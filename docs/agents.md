@@ -48,6 +48,7 @@ Rules the SDK enforces:
 | `ctx.step(title, detail=None)` | Async context manager that adds a timeline step; exceeding `max_steps` fails the run with `AGENT_STEP_LIMIT`. |
 | `ctx.log(message)` | Logs to the `runweave.agent` logger with configured secrets redacted and a 1,000-character limit. |
 | `await ctx.usage()` | The run's budget summary, when a budget is installed. |
+| `ctx.proxy` | The run's [LLM proxy](llm-proxy.md) binding: `token`, `openai_base_url`, `anthropic_base_url` and `env()`. Use it as your model SDK's API key and base URL. |
 
 Step titles and details are shown in the workspace and API, so keep secrets and raw
 customer data out of them. Configured protected values are redacted automatically.

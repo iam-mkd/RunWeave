@@ -1201,6 +1201,33 @@ stored with the `keyring` library (Windows Credential Manager, macOS Keychain, L
 Secret Service); where no store exists, the UI points to environment variables.
 PydanticAI is the framework that proves unmodified compatibility.
 
+Implementation notes, pull request A (2026-11-18):
+- Test first: `tests/test_llm_proxy.py` (official Python SDKs and PydanticAI against
+  mock mode in process), `tests/test_llm_proxy_agents.py` (HTTP agents in Python, and
+  the official Node SDKs in `tests/proxy_compat`, over a real socket), binding tests
+  for both agent-side SDKs, and a PostgreSQL case.
+- `runweave.proxy`: `/llm/v1/chat/completions`, `/llm/v1/responses` and
+  `/llm/v1/messages`, each with streaming in the provider's own event format, tool
+  calls and usage. A separate `/llm` prefix keeps the provider paths apart from
+  RunWeave's own `/v1` API.
+- Per-attempt proxy tokens (`rwp_…`, only hashes kept) are issued by both schedulers,
+  revoked at the end of the attempt or deadline, exposed as `ctx.proxy` (with
+  `env()`), and sent to HTTP agents in an optional `proxy` field of the run request
+  (the OpenAPI contract was regenerated; the Python wrapper and the TypeScript SDK
+  expose it). Unbound requests get 401 in each provider's error format.
+- Mock mode: fixture rules (checked at startup) or a fixed default reply, usage at four
+  bytes per token, IDs derived from the run.
+- Budgets: every call reserves before it is answered and settles after; a stream cut
+  short keeps its reservation; exhausted budgets answer 402, which SDKs do not retry.
+  Each call adds a "Model call" step with sizes and counts only. Prompts and
+  completions are never logged; request bodies are bounded.
+- Finding: the current OpenAI (3.x) and Anthropic (2.x) Python SDKs are built on
+  `httpx2`, so in-process test clients use its ASGI transport.
+- Validation: the full suite with PostgreSQL 18 passed (529 passed; 14 Docker-only
+  native isolation cases skipped) with the TypeScript contract fixture and Node SDKs
+  required; 439 passed on Python 3.11. Ruff, formatting and strict mypy (127 files),
+  26 TypeScript SDK tests and the browser smoke test passed.
+
 ### 22. Testing CLI, reports, screens, and public alpha
 
 - `runweave init` scaffolds a Python or TypeScript agent stub, a `runweave.toml`,

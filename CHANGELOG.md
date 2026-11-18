@@ -41,6 +41,13 @@ All notable changes to RunWeave are recorded here. The format follows
   dependencies): `defineAgent`, `serveAgents`, `createAgentHandler`, with the same
   context, limits, idempotency and cancellation behavior as the Python wrapper, plus
   `examples/http-agent-typescript`. The shared contract suite now runs against both SDKs.
+- LLM proxy, mock mode (milestone 21): OpenAI Chat Completions and Responses at
+  `/llm/v1` and Anthropic Messages at `/llm/v1/messages`, with streaming and tool calls.
+  Per-run proxy tokens (`ctx.proxy`, also sent to HTTP agents in the run request), budget
+  reservation before answering and settlement after, "Model call" timeline steps
+  without prompt text, and fixture-scripted deterministic replies
+  (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
+  for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
 - Workspace: connect HTTP agents from Connect (test the URL, see conflicts, register,
   copy the startup command) and remove runtime-registered agents on the Agents screen.
 
