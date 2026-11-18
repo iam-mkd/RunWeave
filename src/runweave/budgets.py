@@ -2,10 +2,12 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from decimal import Decimal
-from typing import Literal, Protocol
+from typing import Literal, Protocol, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
+
+ChangeResult = TypeVar("ChangeResult")
 
 
 class BudgetExceeded(ValueError):
@@ -85,7 +87,7 @@ class BudgetState(BaseModel):
 
 class BudgetLedger(Protocol):
     async def read(self) -> BudgetState: ...
-    async def update[T](self, change: Callable[[BudgetState], T]) -> T: ...
+    async def update(self, change: Callable[[BudgetState], ChangeResult]) -> ChangeResult: ...
 
 
 class MemoryBudget:
@@ -95,7 +97,7 @@ class MemoryBudget:
     async def read(self) -> BudgetState:
         return self.state.model_copy(deep=True)
 
-    async def update[T](self, change: Callable[[BudgetState], T]) -> T:
+    async def update(self, change: Callable[[BudgetState], ChangeResult]) -> ChangeResult:
         # No await inside this single-event-loop transaction, including concurrent branches.
         state = self.state.model_copy(deep=True)
         result = change(state)
