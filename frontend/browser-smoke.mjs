@@ -178,7 +178,8 @@ try {
 
   // Connect an HTTP agent from the UI, run it, then remove it.
   const agentUrl = await httpAgentUrl;
-  await page.goto(`${base}/#/setup`);
+  await page.goto(`${base}/#/agents`);
+  await page.getByRole('link', { name: 'Connect agent', exact: true }).click();
   await page.getByRole('radio', { name: /HTTP endpoint/ }).check();
   await page.getByRole('button', { name: 'Continue' }).click();
   await page.getByRole('textbox', { name: 'Agent URL', exact: true }).fill('http://169.254.169.254/latest');
@@ -188,6 +189,7 @@ try {
   await page.getByRole('button', { name: 'Test connection' }).click();
   await page.getByRole('cell', { name: 'contract-echo', exact: true }).waitFor();
   await page.getByText(`runweave serve --http-agent ${agentUrl}`, { exact: true }).waitFor();
+  await page.screenshot({ path: join(artifacts, 'connect-http.png'), fullPage: true });
   await noOverflow(page, 'connect http');
   await page.getByRole('button', { name: 'Register agents' }).click();
   await page.getByRole('link', { name: 'Run contract-echo' }).click();

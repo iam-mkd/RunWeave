@@ -85,7 +85,8 @@ describe('HttpAgentCheck', () => {
 describe('SetupScreen', () => {
   test('offers HTTP endpoints alongside Python callables', () => {
     const html = render(<SetupScreen />);
-    assert.match(html, /<input[^>]*value="http"(?![^>]*disabled)[^>]*>/);
-    assert.match(html, /<input[^>]*value="proxy"[^>]*disabled/);
+    const input = (value) => html.match(new RegExp(`<input[^>]*value="${value}"[^>]*>`))?.[0] ?? '';
+    assert.ok(input('http') && !input('http').includes('disabled'));
+    assert.ok(input('proxy').includes('disabled'));
   });
 });

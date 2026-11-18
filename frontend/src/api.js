@@ -27,17 +27,18 @@ export function approvalBody(approval, decision) {
   };
 }
 
-export async function api(path, { data, signal } = {}) {
+export async function api(path, { data, signal, method } = {}) {
   const response = await fetch(path, {
     signal,
     headers: data === undefined ? { Accept: 'application/json' } : {
       Accept: 'application/json',
       'Content-Type': 'application/json',
     },
-    method: data === undefined ? 'GET' : 'POST',
+    method: method ?? (data === undefined ? 'GET' : 'POST'),
     body: data === undefined ? undefined : JSON.stringify(data),
     cache: 'no-store',
   });
+  if (response.status === 204) return null;
   const body = await response.json().catch(() => null);
   if (!response.ok) {
     const detail = body?.detail;
@@ -56,6 +57,21 @@ const runStatuses = new Set(['QUEUED', 'RUNNING', 'WAITING_APPROVAL', 'SUCCEEDED
 
 export function listAgents(options) {
   return api('/v1/agents', options);
+}
+
+// The server validates and normalizes agent URLs (loopback only by default); the browser
+// only forwards what the developer typed.
+export function checkHttpAgent(url, options) {
+  return api('/v1/agents/http/check', { ...options, data: { url } });
+}
+
+export function registerHttpAgent(url, options) {
+  return api('/v1/agents/http', { ...options, data: { url } });
+}
+
+export async function removeAgent(name, options) {
+  if (!agentNamePattern.test(name ?? '')) throw new Error('Invalid agent name');
+  return api(`/v1/agents/${name}`, { ...options, method: 'DELETE' });
 }
 
 export function listRuns({ agent, status, limit = 50, before } = {}, options) {
