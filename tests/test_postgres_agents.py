@@ -136,6 +136,7 @@ async def test_durable_python_agent_persists_steps_lists_runs_and_recovers(
         listing = (await client.get("/v1/runs?agent=durable-echo")).json()
     assert run["status"] == "SUCCEEDED"
     assert run["result"] == {"text": "durable", "attempt": 1}
+    assert run["input"] == {"text": "durable"}
     assert [(step["title"], step["status"], step["attempt"]) for step in run["steps"]] == [
         ("Persisted step", "succeeded", 1)
     ]
