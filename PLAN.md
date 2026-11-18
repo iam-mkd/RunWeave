@@ -1089,6 +1089,12 @@ Implementation notes, pull request B (2026-11-18):
   responses, 5xx classification, and redirect denial, and an HTTP agent can be
   connected and run from the UI.
 
+Decisions with the owner (2026-11-18): register HTTP agents both from the UI at
+runtime (kept until the server stops) and at startup (`--http-agent URL`); no code
+is imported either way. Deliver in two pull requests (A: contract, adapter, Python
+agent-side wrapper and the shared contract suite; B: TypeScript SDK joining that
+suite, and the Agents/Connect screens).
+
 ### 21. LLM proxy and fault injection
 
 - Serve local `/v1/chat/completions`, `/v1/responses`, and Anthropic-compatible
