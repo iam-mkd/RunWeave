@@ -1,9 +1,10 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 
 import httpx
 
+from runweave.agents.catalog import AgentCatalog, RegisteredAgent
 from runweave.agents.contracts import AgentExecutor, AgentModel
 from runweave.agents.fake import FakeAgentModel
 from runweave.agents.providers import ProviderAgentModel
@@ -32,6 +33,7 @@ class Runtime:
     telemetry: Telemetry
     content_policy: ContentPolicy
     isolated: IsolatedTools | None = None
+    agents: AgentCatalog | None = None
 
 
 @asynccontextmanager
@@ -40,6 +42,7 @@ async def open_runtime(
     *,
     executor: AgentExecutor | None = None,
     mock_transport: httpx.AsyncBaseTransport | None = None,
+    agents: Sequence[RegisteredAgent] = (),
 ) -> AsyncIterator[Runtime]:
     mock_transport = mock_transport or httpx.MockTransport(fake_health_response)
     provider = settings.model_provider
@@ -147,19 +150,27 @@ async def open_runtime(
                     budget_policy=settings.budget_policy(),
                 )
             run_executor = executor if executor is not None else runner
+            catalog = AgentCatalog.with_triage(
+                run_executor,
+                version=settings.agent_workflow if executor is None else "custom",
+                max_steps=settings.agent_max_steps,
+                extra=agents,
+            )
             if settings.database_url is not None:
                 engine = postgres_engine(settings)
                 try:
                     durable = DurableScheduler(
-                        PostgresRuns(engine), run_executor, settings, telemetry, content_policy
+                        PostgresRuns(engine), catalog, settings, telemetry, content_policy
                     )
                     async with durable.running():
-                        yield Runtime(client, runner, durable, telemetry, content_policy, isolated)
+                        yield Runtime(
+                            client, runner, durable, telemetry, content_policy, isolated, catalog
+                        )
                 finally:
                     await engine.dispose()
             else:
                 scheduler = Scheduler(
-                    run_executor,
+                    catalog,
                     RunRegistry(
                         settings.history_max_records,
                         settings.history_ttl_seconds,
@@ -173,6 +184,7 @@ async def open_runtime(
                     tenant_limit=settings.tenant_max_unfinished,
                     content_policy=content_policy,
                     budget_policy=settings.budget_policy(),
+                    output_max_bytes=settings.agent_output_max_bytes,
                 )
                 async with scheduler.running():
                     yield Runtime(
@@ -182,6 +194,7 @@ async def open_runtime(
                         telemetry,
                         content_policy,
                         isolated,
+                        catalog,
                     )
         finally:
             await isolated.close()

@@ -37,6 +37,7 @@ dependencies = [
 
 [project.scripts]
 runweave-demo = "runweave.demo:main"
+runweave = "runweave.cli:main"
 runweave-workspace = "runweave.workspace:main"
 
 [project.optional-dependencies]
@@ -88,4 +89,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src", "tests", "benchmarks", "scripts/check-isolation.py", "scripts/check-container.py"]
+files = ["src", "tests", "benchmarks", "examples", "scripts/check-isolation.py", "scripts/check-container.py"]

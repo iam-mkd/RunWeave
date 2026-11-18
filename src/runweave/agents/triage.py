@@ -22,6 +22,7 @@ from runweave.checkpoints import (
 )
 from runweave.deadline import STEP_DEADLINE, deadline_scope
 from runweave.security import ContentPolicy
+from runweave.steps import record_step
 from runweave.telemetry import Telemetry
 from runweave.tools.registry import HEALTH, RUNBOOK, ToolRegistry
 
@@ -117,14 +118,15 @@ class TriageSteps:
         if state.steps_remaining <= 0 or state.tokens_remaining <= 0:
             raise ValueError(_BUDGET_EXHAUSTED)
         deadline = asyncio.get_running_loop().time() + self._step_timeout
-        with self._telemetry.step(tool=False):
-            async with deadline_scope(deadline, STEP_DEADLINE):
-                decision = await self._model.decide(
-                    state.incident,
-                    tuple(state.history),
-                    self._tools.definitions(),
-                    state.tokens_remaining,
-                )
+        async with record_step("Model decision"):
+            with self._telemetry.step(tool=False):
+                async with deadline_scope(deadline, STEP_DEADLINE):
+                    decision = await self._model.decide(
+                        state.incident,
+                        tuple(state.history),
+                        self._tools.definitions(),
+                        state.tokens_remaining,
+                    )
         if not 0 < decision.completion_tokens <= state.tokens_remaining:
             raise ValueError("Invalid completion token usage")
         self._content_policy.check(decision.action.model_dump_json())
@@ -149,9 +151,11 @@ class TriageSteps:
             self._validate_evidence(evidence)
             return evidence
 
-        with self._telemetry.step(tool=True):
-            async with deadline_scope(deadline, STEP_DEADLINE):
-                evidence = await replayable_read(call, execute)
+        # The tool name is allowlisted by validate() above, so it is safe to show.
+        async with record_step("Tool call", detail=call.name):
+            with self._telemetry.step(tool=True):
+                async with deadline_scope(deadline, STEP_DEADLINE):
+                    evidence = await replayable_read(call, execute)
         self._validate_evidence(evidence)
         state.history.append(ToolExchange(call, evidence))
         state.steps_remaining -= 1
@@ -166,8 +170,9 @@ class TriageSteps:
             raise ValueError("Tool evidence exceeds the size limit")
 
     async def finish(self, state: TriageState, result: IncidentResult) -> IncidentResult:
-        validated = validate_triage_result(state, result)
-        self._content_policy.check(validated.model_dump_json())
+        async with record_step("Validate result"):
+            validated = validate_triage_result(state, result)
+            self._content_policy.check(validated.model_dump_json())
         if state.incident.create_ticket:
             from runweave.approvals import current_ticket_gate
 

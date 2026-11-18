@@ -1,0 +1,14 @@
+[project]
+name = "runweave-sample-agent"
+version = "1.0.0"
+description = "A small deterministic agent that shows the RunWeave Python SDK"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+dependencies = ["runweave"]
+
+[build-system]
+requires = ["setuptools>=80,<85"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["sample_agent"]

@@ -39,7 +39,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 15. Sandboxed code and authorized browser automation
 - [x] 16. Shadow workflow comparison and release verification
 - [x] 17. Open-source foundation and Python 3.11+ support
-- [ ] 18. Developer UI design system and mockups
+- [x] 18. Developer UI design system and mockups
 - [ ] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
@@ -980,6 +980,9 @@ Implementation notes (2026-11-18):
   prototype check, Python workspace and metadata tests, and `npm audit
   --omit=dev` (0 vulnerabilities) passed locally. Awaiting owner review of the
   prototype before checking this milestone off.
+- Completed 2026-11-18: the owner reviewed the prototype (published and local),
+  approved the design, and merged pull request #3 (merge commit 8b67983). All 11
+  hosted checks passed, including the Vitest suite and the prototype check on Linux.
 
 ### 19. Generic run core, Python agent adapter, and core screens
 
@@ -1004,6 +1007,42 @@ Implementation notes (2026-11-18):
   cancellation, failure isolation, and schema rejection (422); the existing
   triage suites and reference evaluations still pass unchanged; and browser
   checks cover the new screens in both themes, including untrusted text.
+
+Decisions with the owner (2026-11-18): deliver in two pull requests (A: backend
+core and APIs; B: screens); register Python agents only at startup, never from a
+browser request; keep the legacy incident body working on `POST /v1/runs`.
+
+Implementation notes, pull request A (2026-11-18):
+- Test first: `tests/test_sdk.py`, `tests/test_agents_api.py`, `tests/test_cli.py`
+  and the opt-in `tests/test_postgres_agents.py` were written before the code.
+- `runweave.sdk` provides `@agent` (validated name, version, Pydantic input/output,
+  `max_steps`; async functions only) and `RunContext` (run ID, attempt, remaining
+  deadline, step timeline, redacted bounded logging, usage). `ContentPolicy.redact`
+  was added for logs and step text.
+- `agents/catalog.py` holds the registry: a `TriageAgent` adapter around the
+  unchanged triage runners plus `PythonAgent`s loaded from `module:attribute`
+  targets at startup (`runweave serve --agent`, `RUNWEAVE_AGENTS`). Duplicate or
+  reserved names and bad targets fail startup with a clear message.
+- The scheduler, registry, durable scheduler and PostgreSQL store use agent-neutral
+  envelopes: JSON input validated by the agent, JSON results, `agent` and
+  `agent_version` on snapshots. Triage-only admission (memory, approvals) and
+  checkpoints apply only to triage input. Classified failures expose fixed codes;
+  arbitrary exceptions stay `RUN_FAILED`. Output size and content are checked.
+- A shared step log (`steps.py`) records the timeline for SDK agents and the
+  triage model/tool/validation steps, capped at 200 events and best-effort.
+  Durable steps are written under the lease fence.
+- New APIs: `GET /v1/agents`, owner-scoped `GET /v1/runs` (filters, limit 1–100,
+  `before` cursor), and `GET /v1/runs/{id}/events` (server-sent events, bounded
+  subscribers and lifetime, heartbeats; durable mode polls at `db_poll_seconds`).
+  `POST /v1/runs` bodies are size-limited before parsing.
+- Migration 0007 adds `agent`, `agent_version`, `steps` and an owner/recency index;
+  existing rows become `incident-triage` runs.
+- Validation: the full suite with PostgreSQL 18 passed (386 passed; 14 Docker-only
+  native isolation cases skipped), including all prior PostgreSQL suites and the
+  new migration, persisted-step, listing, event-stream and lease-loss re-run tests.
+  Offline suites passed on Python 3.11 and 3.12 (298 each). Ruff, formatting and
+  strict mypy (111 files) passed. The workspace browser smoke test passed
+  unchanged. Pull request B (screens) follows; this milestone stays unchecked.
 
 ### 20. HTTP agent adapter and TypeScript SDK
 

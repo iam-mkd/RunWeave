@@ -61,6 +61,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                 "0004_workflow_checkpoints.sql",
                 "0005_human_approvals.sql",
                 "0006_scoped_memory.sql",
+                "0007_generic_agents.sql",
             ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
@@ -246,7 +247,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
         )
         assert await store.renew(claim, 3)
         completed = await store.finish(claim, RunStatus.SUCCEEDED, result=result)
-        assert completed is not None and completed.result == result
+        assert completed is not None and completed.result == result.model_dump(mode="json")
         assert completed.principal == LOCAL_PRINCIPAL
         assert completed.usage is not None
         assert (

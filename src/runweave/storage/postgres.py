@@ -1,20 +1,25 @@
+import json
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
+from pydantic import BaseModel
 from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from runweave.agents.contracts import IncidentRequest, IncidentResult
+from runweave.agents.catalog import TRIAGE_AGENT
+from runweave.agents.contracts import IncidentRequest
 from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState, ChangeResult
 from runweave.checkpoints import Workflow, initial_checkpoint
-from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
+from runweave.orchestration.models import RunError, RunSnapshot, RunStatus, RunSummary
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, TenantQuotaExceeded
+from runweave.steps import STEP_EVENT_CAP, StepEvent
 
 _COLUMNS = (
     "id, status, submitted_at, started_at, finished_at, result, error, principal, budget, "
-    "approval_wait_started_at, approval_wait_seconds"
+    "approval_wait_started_at, approval_wait_seconds, agent, agent_version, steps"
 )
 _OWNER = "principal->>'tenant' = :tenant AND principal->>'subject' = :subject"
 _FINISH_ATTEMPT = """
@@ -33,14 +38,20 @@ if TYPE_CHECKING:
 @dataclass(frozen=True)
 class Claim:
     snapshot: RunSnapshot
-    incident: IncidentRequest
+    input: dict[str, Any]
     token: UUID
     remaining_seconds: float
+    attempt: int = 1
+
+    @property
+    def incident(self) -> IncidentRequest:
+        return IncidentRequest.model_validate(self.input)
 
 
 def snapshot(row: RowMapping) -> RunSnapshot:
     fields = {key: row[key] for key in _COLUMNS.split(", ") if key != "budget"}
     fields["usage"] = BudgetState.model_validate(row["budget"]).summary() if row["budget"] else None
+    fields["steps"] = tuple(fields["steps"] or ())
     return RunSnapshot.model_validate({**fields, "status_url": f"/v1/runs/{row['id']}"})
 
 
@@ -58,10 +69,13 @@ class PostgresRuns:
             await conn.execute(text("SELECT run_id FROM runweave_approvals LIMIT 0"))
             await conn.execute(text("SELECT run_id FROM runweave_sandbox_tickets LIMIT 0"))
             await conn.execute(text("SELECT id FROM runweave_memory LIMIT 0"))
+            await conn.execute(
+                text("SELECT agent, agent_version, steps FROM runweave_runs LIMIT 0")
+            )
 
     async def admit(
         self,
-        incident: IncidentRequest,
+        input: BaseModel,
         *,
         capacity: int,
         run_seconds: float,
@@ -72,7 +86,16 @@ class PostgresRuns:
         budget_policy: BudgetPolicy | None = None,
         workflow: Workflow = "baseline",
         max_steps: int = 7,
+        agent: str = TRIAGE_AGENT,
+        agent_version: str | None = None,
     ) -> RunSnapshot | None:
+        policy = budget_policy or BudgetPolicy()
+        # Typed checkpoints and replay exist only for the built-in triage workflows.
+        checkpoint = (
+            initial_checkpoint(input, workflow, max_steps, policy).model_dump_json()
+            if agent == TRIAGE_AGENT and isinstance(input, IncidentRequest)
+            else None
+        )
         async with self._engine.begin() as conn:
             # Serialize admission across replicas. Worker transactions never take this lock.
             await conn.execute(text("SELECT pg_advisory_xact_lock(795940314, 1)"))
@@ -89,27 +112,27 @@ class PostgresRuns:
                 text(f"""
                 INSERT INTO runweave_runs
                     (id, incident, status, submitted_at, available_at, deadline_at,
-                     max_attempts, principal, budget, checkpoint)
+                     max_attempts, principal, budget, checkpoint, agent, agent_version)
                 SELECT :id, CAST(:incident AS jsonb), 'QUEUED', statement_timestamp(),
                     statement_timestamp(), statement_timestamp() + :timeout * interval '1 second',
                     :attempts, CAST(:principal AS jsonb), CAST(:budget AS jsonb),
-                    CAST(:checkpoint AS jsonb)
+                    CAST(:checkpoint AS jsonb), :agent, :agent_version
                 WHERE (SELECT count(*) FROM runweave_runs WHERE finished_at IS NULL) < :capacity
                   AND (SELECT count(*) FROM runweave_runs) < :max_rows
                 RETURNING {_COLUMNS}
             """),
                 dict(
                     id=uuid4(),
-                    incident=incident.model_dump_json(),
+                    incident=input.model_dump_json(),
                     timeout=run_seconds,
                     attempts=attempts,
                     capacity=capacity,
                     max_rows=capacity + history_max,
                     principal=principal.model_dump_json(),
-                    budget=BudgetState(policy=budget_policy or BudgetPolicy()).model_dump_json(),
-                    checkpoint=initial_checkpoint(
-                        incident, workflow, max_steps, budget_policy or BudgetPolicy()
-                    ).model_dump_json(),
+                    budget=BudgetState(policy=policy).model_dump_json(),
+                    checkpoint=checkpoint,
+                    agent=agent,
+                    agent_version=agent_version,
                 ),
             )
             row = result.mappings().one_or_none()
@@ -149,6 +172,7 @@ class PostgresRuns:
                     SELECT id, attempt, lease_token, clock_timestamp() FROM claimed
                 ) SELECT id, status, submitted_at, started_at, finished_at, result, error,
                     principal, budget, incident, approval_wait_started_at, approval_wait_seconds,
+                    agent, agent_version, steps, attempt,
                     extract(epoch FROM deadline_at - clock_timestamp()) AS remaining
                 FROM claimed
             """),
@@ -159,9 +183,10 @@ class PostgresRuns:
             return None
         return Claim(
             snapshot(row),
-            IncidentRequest.model_validate(row["incident"]),
+            dict(row["incident"]),
             token,
             float(row["remaining"]),
+            int(row["attempt"]),
         )
 
     async def renew(self, claim: Claim, seconds: float) -> bool:
@@ -177,6 +202,44 @@ class PostgresRuns:
                 {"id": claim.snapshot.id, "token": claim.token, "lease": seconds},
             )
             return result.first() is not None
+
+    async def list(
+        self,
+        principal: Principal,
+        *,
+        agent: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+        before: datetime | None = None,
+    ) -> list[RunSummary]:
+        conditions = [_OWNER]
+        params: dict[str, object] = {
+            "tenant": principal.tenant,
+            "subject": principal.subject,
+            "limit": limit,
+        }
+        if agent is not None:
+            conditions.append("agent = :agent")
+            params["agent"] = agent
+        if status is not None:
+            conditions.append("status = :status")
+            params["status"] = status.value
+        if before is not None:
+            conditions.append("submitted_at < :before")
+            params["before"] = before if before.tzinfo else before.replace(tzinfo=UTC)
+        async with self._engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    f"SELECT {_COLUMNS} FROM runweave_runs WHERE {' AND '.join(conditions)} "
+                    "ORDER BY submitted_at DESC, id DESC LIMIT :limit"
+                ),
+                params,
+            )
+            rows = result.mappings().all()
+        return [snapshot(row).summary() for row in rows]
+
+    def steps(self, claim: Claim) -> "PostgresStepLog":
+        return PostgresStepLog(self._engine, claim)
 
     def ledger(self, claim: Claim) -> "PostgresBudget":
         return PostgresBudget(self._engine, claim)
@@ -249,11 +312,15 @@ class PostgresRuns:
         claim: Claim,
         status: RunStatus,
         *,
-        result: IncidentResult | None = None,
+        result: BaseModel | dict[str, Any] | None = None,
         error: RunError | None = None,
     ) -> RunSnapshot | None:
         if not status.terminal:
             raise ValueError("finish requires a terminal status")
+        if isinstance(result, BaseModel):
+            encoded: str | None = result.model_dump_json()
+        else:
+            encoded = json.dumps(result) if result is not None else None
         return await self._finish(
             "status = 'RUNNING' AND lease_token = :token AND lease_until > clock_timestamp() "
             "AND (deadline_at > clock_timestamp() OR :status = 'TIMED_OUT')",
@@ -261,7 +328,7 @@ class PostgresRuns:
                 id=claim.snapshot.id,
                 token=claim.token,
                 status=status.value,
-                result=result.model_dump_json() if result else None,
+                result=encoded,
                 error=error.model_dump_json() if error else None,
             ),
         )
@@ -387,3 +454,54 @@ class PostgresBudget:
             if changed is None:
                 raise BudgetExceeded("BUDGET_LEASE_LOST")
         return result
+
+
+class PostgresStepLog:
+    """Appends timeline events fenced by the live lease. Best effort: never fails a run."""
+
+    def __init__(self, engine: AsyncEngine, claim: Claim) -> None:
+        self._engine = engine
+        self._claim = claim
+
+    async def begin(self, title: str, detail: str | None) -> StepEvent | None:
+        event = StepEvent(
+            index=0,
+            attempt=self._claim.attempt,
+            title=title,
+            detail=detail,
+            status="running",
+            started_at=datetime.now(UTC),
+        )
+        async with self._engine.begin() as conn:
+            index = await conn.scalar(
+                text("""
+                UPDATE runweave_runs SET steps = steps || jsonb_build_array(jsonb_set(
+                    CAST(:event AS jsonb), '{index}', to_jsonb(jsonb_array_length(steps))))
+                WHERE id = :id AND status = 'RUNNING' AND lease_token = :token
+                    AND jsonb_array_length(steps) < :cap
+                RETURNING jsonb_array_length(steps) - 1
+            """),
+                {
+                    "id": self._claim.snapshot.id,
+                    "token": self._claim.token,
+                    "event": event.model_dump_json(),
+                    "cap": STEP_EVENT_CAP,
+                },
+            )
+        return None if index is None else event.model_copy(update={"index": int(index)})
+
+    async def end(self, event: StepEvent) -> None:
+        async with self._engine.begin() as conn:
+            await conn.execute(
+                text("""
+                UPDATE runweave_runs
+                SET steps = jsonb_set(steps, ARRAY[CAST(:index AS text)], CAST(:event AS jsonb))
+                WHERE id = :id AND lease_token = :token AND jsonb_array_length(steps) > :index
+            """),
+                {
+                    "id": self._claim.snapshot.id,
+                    "token": self._claim.token,
+                    "index": event.index,
+                    "event": event.model_dump_json(),
+                },
+            )

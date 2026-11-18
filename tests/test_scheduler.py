@@ -206,7 +206,8 @@ async def test_deadline_includes_queue_wait_and_skips_expired_work(
         worker_count=1,
         queue_capacity=2,
         cleanup_interval=60,
-        run_timeout=0.05,
+        # Long enough for a loaded CI runner to start the first run before its deadline.
+        run_timeout=0.25,
         shutdown_grace=0,
     )
     queued_expired = asyncio.Event()
