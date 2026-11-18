@@ -71,4 +71,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests", "benchmarks", "scripts/check-isolation.py"]
+files = ["src", "tests", "benchmarks", "scripts/check-isolation.py", "scripts/check-container.py"]

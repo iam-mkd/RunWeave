@@ -1,5 +1,20 @@
 # RunWeave load and recovery report
 
+## Milestone 16 verification on November 18, 2026
+
+The latest native Windows sweep and ten-minute soak are recorded in
+[sweep-m16-windows.json](sweep-m16-windows.json) and
+[soak-m16-windows.json](soak-m16-windows.json). The 100-worker case completed 128
+runs in 1.366 s, versus 55.604 s sequentially, and reached 100 overlapping runs
+and tool steps. Status p95 was 2.679 ms; loop-lag p99 fell in the bucket ending
+at 250 ms. The soak completed 56,960 runs in 601.333 s, retained 128 records,
+and ended at 83.45 MiB RSS (78.22 start, 84.54 peak). Status p95 was 2.239 ms;
+the lag p99 bucket ended at 1,000 ms. The strict sub-50 ms target remains unmet.
+These are co-resident ASGI-driver/mock-I/O results, with other local verification
+activity during the soak; they do not establish live-network or provider capacity.
+Native Uvicorn TCP and main-container startup/shutdown checks now pass separately.
+See the [release guide](../docs/release.md) for commands, environment and evidence.
+
 ## Milestone 10 verification on November 15, 2026
 
 Both workflows completed all 128 synthetic runs with 100 workers, reaching 100

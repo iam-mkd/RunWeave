@@ -10,6 +10,11 @@ Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
 
 ## Quick start (PowerShell)
 
+The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),
+including a durable restart/recall/approval demo and native/container startup checks.
+See [architecture and operations](docs/architecture.md) for deployment, migration,
+rollback and the public deployment gate. A frontend remains outside this roadmap.
+
 Milestone 15 adds opt-in disposable Python and read-only Chromium tools. See the
 [isolation guide](docs/isolation.md) for native verification, configuration,
 API examples, limits and the controlled fixture scope. Both tools stay disabled

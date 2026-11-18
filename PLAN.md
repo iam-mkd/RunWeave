@@ -2,11 +2,14 @@
 
 Status: milestones 1–6 follow the accepted roadmap from 2026-11-05.
 Milestones 7–16 plan the expanded platform requested on 2026-11-14.
-Milestones 1 through 15 have code in place. Native Windows in-process tests and
-the disposable PostgreSQL recovery/security/budget checks passed locally. Earlier
-benchmark harness limitations are recorded below. Server startup and Docker
-checks for the main service remain open. Milestone 15's disposable Python and
-Chromium workers have separately passed native Docker isolation checks.
+Milestones 1 through 16 are implemented and locally verified as of 2026-11-18.
+Native Windows tests, disposable PostgreSQL recovery/security/approval checks,
+Uvicorn TCP startup/shutdown, the main service image and independent Python/browser
+worker checks passed. Earlier verification notes below are historical; milestone
+16 closes their native/startup/container gaps. The strict sub-50 ms loop-lag target
+remains unmet, hosted CI/live inference are unverified, and the coordinated shadow
+candidate is blocked from promotion by its cost gate. This is a local backend
+release, not a public-production or live-model capacity claim.
 
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
@@ -14,11 +17,11 @@ Work through the milestones in sequence, starting with milestone 1 when the
 user requests implementation. Update the checklist only after each milestone's
 completion criteria have been verified, and record material scope changes here.
 
-- [ ] 1. Foundation and contracts
-- [ ] 2. Bounded orchestration
-- [ ] 3. Recovery and lifecycle
-- [ ] 4. Agent behavior and tool safety
-- [ ] 5. Observability and reproducible load evidence
+- [x] 1. Foundation and contracts
+- [x] 2. Bounded orchestration
+- [x] 3. Recovery and lifecycle
+- [x] 4. Agent behavior and tool safety
+- [x] 5. Observability and reproducible load evidence
 - [x] 6. Durable recovery
 - [x] 7. PydanticAI integration and workflow parity
 - [x] 8. Automated agent evaluation and security fixtures
@@ -29,7 +32,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 13. Scoped persistent memory
 - [x] 14. Typed multi-agent coordination
 - [x] 15. Sandboxed code and authorized browser automation
-- [ ] 16. Shadow workflow comparison and release verification
+- [x] 16. Shadow workflow comparison and release verification
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -748,6 +751,56 @@ Implementation and verification (2026-11-17):
   candidate result with no external effects. Run the sandbox and browser checks
   independently. Keep live inference opt-in and apply the public deployment
   gate before exposing the service.
+
+Implementation and verification (2026-11-18):
+- Added explicit offline shadow replay with source-pinned primary/candidate
+  workflows, authorized immutable input/private-memory snapshots, independent
+  budgets and fresh contexts. Candidate work uses one worker, a bounded queue,
+  an overall deadline including queue wait, and no database or external-effect
+  adapters. Ticket proposals are simulated. Only the primary result is returned
+  as the user result. This is not automatic live-traffic shadowing.
+- Added per-pair evidence/outcome/latency/token/cost/safety differences and
+  explicit local promotion/rollback/selection checks. All required gates and
+  source/fixture identities are checked. The coordinated candidate preserves
+  result/safety parity but exceeds the per-case 105% cost threshold on three
+  rejected attack inputs, so promotion is blocked and baseline remains selected.
+  Two unsanitized credential fixtures are excluded before paired replay; both
+  full evaluators still pass all 13 cases / 68 assertions. Reports contain no raw
+  rejected payloads. Unit tests also prove candidate timeout, cancellation,
+  saturation, budget isolation, context separation, shutdown and pin mismatch.
+- The integrated PostgreSQL demo uses typed coordination, actual model recall
+  of scoped historical evidence, a real worker-process exit after a committed
+  branch, lease recovery, explicit approval, duplicate-decision idempotency,
+  traces and the persistent budget. It completes in three attempts with three
+  charged model requests and one controlled local ticket. A side-by-side replay
+  simulates tickets without changing memory or ticket counts. No external effects
+  or paid inference occur. Evidence: evaluations/release-demo.json.
+- Final offline suite: 250 passed; 100 opt-in database/native cases skipped.
+  All 86 PostgreSQL cases passed separately, including the integrated demo;
+  disposable databases were stopped and removed. All 14 Python/browser native
+  cases passed independently, followed by startup probes and both demonstrations.
+  Ruff lint/format, strict mypy (94 files), locked installation and offline lock
+  check passed. All three reference evaluations passed 13 cases / 68 assertions;
+  a seeded baseline severity regression exited 1 as expected.
+- Native Uvicorn with real loopback TCP passed readiness, eight admissions,
+  seven successes, one cancellation and graceful shutdown. The main service
+  image built from pinned base digests and passed real HTTP, non-root/no-mount
+  inspection, graceful exit 0 and confirmed container removal. These close the
+  earlier milestone 1-5 native and main-container verification gaps.
+- A native 1/10/50/100/128-worker sweep completed identical 128-run mock batches.
+  The 100-worker case reached 100 active runs/tool steps in 1.366 s versus
+  55.604 s sequentially. Its status p95 was 2.679 ms and lag p99 bucket ended
+  at 250 ms. A 601.333 s soak completed 56,960 successful runs, retained 128
+  records, and recorded RSS 78.22/84.54/83.45 MiB start/peak/end. Status p95 was
+  2.239 ms and lag p99 bucket ended at 1,000 ms. Fault outcomes matched expectations.
+  These co-resident mock-I/O measurements do not measure real provider/network
+  capacity; concurrent local verification activity is disclosed in docs/release.md.
+  The original strict sub-50 ms lag target remains visible and unmet.
+- Added clean-checkout reproduction, architecture/trust boundaries, state/failure
+  semantics, migrations, deployment and operations/rollback runbooks. CI records
+  the release demo and shadow gates; the native/container workflow remains opt-in.
+  Hosted CI and live inference have not run. Public exposure still requires the
+  deployment gate; a frontend and subscription integrations remain outside scope.
 
 ### PydanticAI references
 

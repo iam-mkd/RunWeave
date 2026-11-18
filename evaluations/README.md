@@ -58,6 +58,17 @@ for the measurement limits; these are not live billing or provider-quality resul
 
 ## Regression gate and provenance
 
+Milestone 16's [shadow report](shadow-comparison.json) compares pinned workflows
+using an isolated queue/budget and sanitized immutable snapshots. Both full
+evaluators pass, but the coordinated candidate is blocked from promotion by the
+per-case cost threshold on three rejected attack cases. The
+[durable release demo](release-demo.json) records actual worker termination,
+checkpoint reuse, private recall, approved ticket creation, trace/budget reporting,
+and a side-by-side replay that leaves ticket/memory rows unchanged. See the
+[release guide](../docs/release.md) for reproduction and explicit promotion/rollback.
+The [local verification manifest](release-verification.json) records check counts,
+remaining limits, source identities and hashes of the evidence artifacts.
+
 Milestone 15's separate [native isolation evidence](isolation-native.json) records
 the verified worker image IDs, kernel controls, source hashes and both controlled
 tool demonstrations. Reproduce it with `scripts/verify-isolation.ps1`; see the

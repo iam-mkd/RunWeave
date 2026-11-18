@@ -1,0 +1,8 @@
+{
+  "summary": "Synthetic triage for payments: Offline release demo. Mock service health is degraded. Check recent deployments and downstream errors. Compare latency and error rates against baseline before escalating. This is a synthetic runbook fixture.",
+  "severity": "medium",
+  "evidence_ids": [
+    "mock-health:payments",
+    "mock-runbook:triage-v1"
+  ]
+}

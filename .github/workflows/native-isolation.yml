@@ -7,6 +7,23 @@ permissions:
   contents: read
 
 jobs:
+  service-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - run: uv sync --locked
+      - run: docker build -t runweave-release:m16 .
+      - run: uv run --no-sync python scripts/check-container.py --output target/evals/container-smoke.json
+      - run: uv run --no-sync python -m benchmarks.socket_smoke --output target/evals/native-tcp.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: service-container
+          path: target/evals/*.json
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 15

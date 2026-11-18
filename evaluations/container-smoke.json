@@ -1,0 +1,42 @@
+{
+  "cleanup_confirmed": true,
+  "docker_engine": "29.9.2",
+  "fake_run": {
+    "approval_wait_seconds": 0.0,
+    "approval_wait_started_at": null,
+    "error": null,
+    "finished_at": "2026-11-18T07:36:38.708204Z",
+    "id": "523c593c-240a-4847-8946-50570b35c651",
+    "result": {
+      "evidence_ids": [
+        "mock-health:payments",
+        "mock-runbook:triage-v1"
+      ],
+      "severity": "medium",
+      "summary": "Synthetic triage for payments: Container fixture. Mock service health is degraded. Check recent deployments and downstream errors. Compare latency and error rates against baseline before escalating. This is a synthetic runbook fixture."
+    },
+    "started_at": "2026-11-18T07:36:38.692719Z",
+    "status": "SUCCEEDED",
+    "status_url": "/v1/runs/523c593c-240a-4847-8946-50570b35c651",
+    "submitted_at": "2026-11-18T07:36:38.691951Z",
+    "usage": {
+      "blocked": false,
+      "estimated_cost_usd": "0",
+      "estimator": "utf8-bytes-v1",
+      "input_tokens": 10238,
+      "model": "fake-v1",
+      "output_tokens": 3,
+      "price_version": "fake-free-v1",
+      "requests": 3,
+      "uncertain_requests": 3
+    }
+  },
+  "graceful_exit_code": 0,
+  "host_mounts": 0,
+  "image": "sha256:81cbf4cb66d76cb10ebdce192ce796c9f8d2cd3001a8bcc9b413f1845e261090",
+  "loopback_only": true,
+  "native_http": true,
+  "nonroot_user": "10001:10001",
+  "paid_model_calls": 0,
+  "passed": true
+}

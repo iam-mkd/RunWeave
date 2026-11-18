@@ -9,7 +9,7 @@
         "https://fixtures.runweave.invalid/"
       ]
     },
-    "session_id": "071a687414c24d6a84d40401f73ca1d1"
+    "session_id": "8f95f4f102404512afad34bdbf0ff497"
   },
   "browser_seccomp_sha256": "77cdaf463cf5a605278debc2cfe13d5b09c1d5331fc3d4599b8f9466741c85e4",
   "cleanup_confirmed": true,
@@ -21,7 +21,7 @@
     "kind": "python",
     "policy_version": "isolated-tools-v1",
     "result": 6,
-    "session_id": "ef063f3dddd14f42a13f48bc1ffd68a3"
+    "session_id": "ccfbd564979f464183ee2368f65164a4"
   },
   "source_sha256": {
     "sandbox/Dockerfile.browser": "d1a91002da6c610c8a797fcb12f50bfcdc6c708d3db2197dc1641f593e969a12",
@@ -34,7 +34,7 @@
     "src/runweave/tools/isolation_checks.py": "1c15428dcd2ef43f5bc270b7d4c718b0095d08f2452fe06e5d3f8a4d841ca119",
     "src/runweave/tools/python_policy.py": "3aaa5f6c5ff2fa6dc06cfe8cfa3dfe7407cb27de4e78caae23a4f8f4a18ab8b0"
   },
-  "verified_at_utc": "2026-11-17T17:21:42.726875+00:00",
+  "verified_at_utc": "2026-11-18T07:30:54.764787+00:00",
   "workers": {
     "browser": {
       "image": "sha256:5fe2e5aff9e26af1711ad48c8959c62e9d990c948be1937285b195ac5a1cc8c5",

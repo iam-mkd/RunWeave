@@ -13,6 +13,7 @@ jobs:
     env:
       PYDANTIC_AI_NO_BANNER: '1'
       TEST_RUNWEAVE_POSTGRES_URL: postgresql+asyncpg://runweave_test:synthetic-test-password@127.0.0.1:5432/postgres
+      TEST_RUNWEAVE_RELEASE_REPORT: ${{ github.workspace }}/target/evals/release-demo.json
     services:
       postgres:
         image: postgres:18
@@ -42,6 +43,14 @@ jobs:
           uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
           uv run --no-sync python -m runweave.evaluation.suite --workflow coordinated --output target/evals/coordinated.json
           uv run --no-sync python -m runweave.evaluation.coordination --output target/evals/coordination-comparison.json
+      - name: Record offline shadow gates without switching traffic
+        shell: bash
+        run: |
+          set +e
+          uv run --no-sync python -m runweave.evaluation.shadow --output target/evals/shadow.json
+          status=$?
+          if [ "$status" -ne 0 ] && [ "$status" -ne 1 ]; then exit "$status"; fi
+          uv run --no-sync python -c 'import json; r=json.load(open("target/evals/shadow.json")); assert r["gates"]["full_evaluation_passed"]'
       - name: Verify regression produces a failing exit status
         shell: bash
         run: |

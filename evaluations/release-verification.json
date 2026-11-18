@@ -1,0 +1,43 @@
+{
+  "checks": {
+    "evaluations": "3 workflows x 13 cases / 68 assertions",
+    "locked_install": "passed",
+    "main_container": "passed",
+    "mypy_files": 94,
+    "native_isolation_passed": 14,
+    "native_tcp": "passed",
+    "offline_lock_check": "passed",
+    "offline_opt_in_skipped": 100,
+    "offline_passed": 250,
+    "paid_calls": 0,
+    "postgres_passed": 86,
+    "ruff": "passed"
+  },
+  "evidence_sha256": {
+    "benchmarks/soak-m16-windows.json": "38ccdaab6583a830de5662a8c1d8aaa61b8d33430cf05f24669a6a84d0d554a0",
+    "benchmarks/sweep-m16-windows.json": "5ba0342a58bed36f3891d145c37ebd8652d5e2aa645a604366cb1f35fa93419a",
+    "evaluations/container-smoke.json": "5468c7e8f3d3eccefa1fb6202c081ce4db1983550f2886aa56164c3a13da97a6",
+    "evaluations/isolation-native.json": "43fcee12f93e3d94aad654e3a7fae38270972a41b20732d713afd68b1652c5a0",
+    "evaluations/native-tcp.json": "5b17e1dd91e5f72f8308e503a2f089f5c2f8903c9929f22dc20e54e9ca43843b",
+    "evaluations/offline-demo.json": "b1370014013c64a9a121daab73fd7d8ee512fae079f6867d331ae4c6f7535375",
+    "evaluations/release-demo.json": "1b21ef942c62fcafa57425d7b6749c387b94c111b285024f7f5e1dab980a495e",
+    "evaluations/shadow-comparison.json": "8bb132d06b9beb6a244de6f5ee51e03086b8fa81e7378398b4142e3320fdd556"
+  },
+  "hosted_ci": "not run",
+  "live_inference": "not run",
+  "promotion_eligible": false,
+  "schema_version": "local-release-verification-v1",
+  "scope": "Local offline backend release; operator-recorded evidence, not a signed attestation",
+  "source_sha256": {
+    "Dockerfile": "d8e48f4cce975778cb4fb7664c1d8e23584b40248872c5931e2de8632be977ae",
+    "benchmarks/socket_smoke.py": "360e074dd2f517eb8f7cdb4680d1f973bb23694e31a897510c2dbd20c7dfc488",
+    "pyproject.toml": "dfa537252aae550a4e26d9bebb17d9eed41ddc1b7540c150ec8a093c54fdc78f",
+    "scripts/check-container.py": "a94ac2c07c915f2fa59eec2038a46ffe0b8e9432210298520343d33f2075f759",
+    "src/runweave/evaluation/shadow.py": "fa06f13a1ac8e3ed62f8bffe6d6a4dc50f8774731e261cef25df3f9ea44750fe",
+    "tests/test_postgres_release.py": "237715a627a91de6bf432524778b00d7b5b9f09e886755ca74150c44660ebd7c",
+    "tests/test_shadow.py": "1f6a2a9567c27de2f782268dec20ccc368b2410b35dcaeac2708392acd621096",
+    "uv.lock": "ac9681205a64ca1f21601077e2c945835abeabbd19a694576c90b7c78c2f2d66"
+  },
+  "strict_loop_lag_target_met": false,
+  "verified_at_utc": "2026-11-18T07:45:58.174846+00:00"
+}

@@ -1,0 +1,122 @@
+{
+  "approved_ticket_count": 1,
+  "attempts": 3,
+  "committed_health_branch_reused": true,
+  "duplicate_approval_created_no_ticket": true,
+  "external_effects": 0,
+  "memory_count_unchanged_after_shadow": 1,
+  "model": "fake-v1",
+  "passed": true,
+  "primary_model_recall_events": 1,
+  "primary_usage_after_resume": {
+    "blocked": false,
+    "estimated_cost_usd": "0",
+    "estimator": "utf8-bytes-v1",
+    "input_tokens": 8085,
+    "model": "fake-v1",
+    "output_tokens": 3,
+    "price_version": "fake-free-v1",
+    "requests": 3,
+    "uncertain_requests": 3
+  },
+  "private_recall_fact_count": 1,
+  "schema_version": "release-demo-v1",
+  "shadow": {
+    "candidate": {
+      "elapsed_seconds": 0.05910989997209981,
+      "outcome": "succeeded",
+      "quality": {
+        "evidence": true,
+        "observed_health": true,
+        "outcome": true,
+        "proposal_scope": true,
+        "secret_absent": true,
+        "severity": true,
+        "tool_choice": true,
+        "unsupported_claims": true
+      },
+      "queue_wait_seconds": 2.8099981136620045e-05,
+      "result": {
+        "evidence_ids": [
+          "mock-health:payments",
+          "mock-runbook:triage-v1"
+        ],
+        "severity": "medium",
+        "summary": "Synthetic triage for payments: Synthetic release verification. Mock service health is degraded. Check recent deployments and downstream errors. Compare latency and error rates against baseline before escalating. This is a synthetic runbook fixture."
+      },
+      "simulated_effects": 1,
+      "usage": {
+        "blocked": false,
+        "estimated_cost_usd": "0.013925",
+        "estimator": "utf8-bytes-v1",
+        "input_tokens": 13919,
+        "model": "fake-v1",
+        "output_tokens": 3,
+        "price_version": "synthetic-shadow-v1",
+        "requests": 3,
+        "uncertain_requests": 3
+      }
+    },
+    "case": "durable-release",
+    "primary": {
+      "elapsed_seconds": 0.03988119994755834,
+      "outcome": "succeeded",
+      "quality": {
+        "evidence": true,
+        "observed_health": true,
+        "outcome": true,
+        "proposal_scope": true,
+        "secret_absent": true,
+        "severity": true,
+        "tool_choice": true,
+        "unsupported_claims": true
+      },
+      "queue_wait_seconds": 0.0,
+      "result": {
+        "evidence_ids": [
+          "mock-health:payments",
+          "mock-runbook:triage-v1"
+        ],
+        "severity": "medium",
+        "summary": "Synthetic triage for payments: Synthetic release verification. Mock service health is degraded. Check recent deployments and downstream errors. Compare latency and error rates against baseline before escalating. This is a synthetic runbook fixture."
+      },
+      "simulated_effects": 1,
+      "usage": {
+        "blocked": false,
+        "estimated_cost_usd": "0.008091",
+        "estimator": "utf8-bytes-v1",
+        "input_tokens": 8085,
+        "model": "fake-v1",
+        "output_tokens": 3,
+        "price_version": "synthetic-shadow-v1",
+        "requests": 3,
+        "uncertain_requests": 3
+      }
+    },
+    "snapshot_sha256": "e13038144dfb89f549b7b03512083e46377fa436812ed1ed0813be8d4017cde7"
+  },
+  "shadow_differences": {
+    "estimated_cost_usd": "0.005834",
+    "evidence_added": [],
+    "evidence_removed": [],
+    "input_tokens": 5834,
+    "latency_seconds": 0.019228700024541467,
+    "outcome_equal": true,
+    "output_tokens": 0,
+    "quality_regressions": []
+  },
+  "trace_ids": [
+    "0x6f2dac8fa2f09ebbcdd6efc2fa2748d7",
+    "0xab844577a8ddb3905ca2c07fa6d2832e",
+    "0xd1aecc8bdb363189b69e3c939a378e61"
+  ],
+  "trace_span_names": [
+    "agent.coordinator",
+    "agent.model",
+    "agent.run",
+    "agent.specialist.health",
+    "agent.specialist.runbook",
+    "agent.tool"
+  ],
+  "worker_crash_exit_code": 17
+}
