@@ -91,3 +91,9 @@ class ContentPolicy:
     def check(self, text: str) -> None:
         if any(secret in text for secret in self._secrets):
             raise PolicyDenied()
+
+    def redact(self, text: str) -> str:
+        # Longest first so an escaped encoding never leaves a partial secret behind.
+        for secret in sorted(self._secrets, key=len, reverse=True):
+            text = text.replace(secret, "[REDACTED]")
+        return text
