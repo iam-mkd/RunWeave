@@ -40,7 +40,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 16. Shadow workflow comparison and release verification
 - [x] 17. Open-source foundation and Python 3.11+ support
 - [x] 18. Developer UI design system and mockups
-- [ ] 19. Generic run core, Python agent adapter, and core screens
+- [x] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
@@ -1067,6 +1067,11 @@ Implementation notes, pull request B (2026-11-18):
   violations or page errors), the prototype check, 299 offline Python tests, Ruff,
   strict mypy (111 files), `npm audit --omit=dev` (0 vulnerabilities), and all three
   reference evaluations (13 cases each, every assertion passing).
+- Completed 2026-11-18: the owner reviewed and merged pull request #5 (merge
+  commit 54e8c74). Hosted CI passed on the pull request and on `main`: the Python
+  3.11–3.13 Linux/Windows jobs, the dependency audit, the offline evaluation
+  workflow with its PostgreSQL suite, and the React workspace checks, including
+  the rewritten browser smoke test on Linux.
 
 ### 20. HTTP agent adapter and TypeScript SDK
 
