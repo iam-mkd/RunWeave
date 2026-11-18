@@ -10,6 +10,7 @@ import { EvalsScreen, LoadTestsScreen, ShadowScreen } from './testing.jsx';
 import '../design/tokens.css';
 import '../design/base.css';
 import '../components/components.css';
+import '../screens/screens.css';
 import './prototype.css';
 
 const prototypeSections = sections.map((section) => ({ ...section, href: `#/${section.id}` }));
