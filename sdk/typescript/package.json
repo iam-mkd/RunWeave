@@ -1,0 +1,27 @@
+{
+  "name": "@runweave/agent",
+  "version": "0.1.0",
+  "description": "Serve agents over the RunWeave HTTP agent contract (runweave.agent/v1)",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || >=24"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "types": "./dist/index.d.ts",
+  "files": ["dist"],
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "typescript": "7.0.2"
+  }
+}
