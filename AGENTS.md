@@ -9,16 +9,17 @@ The next phase is an open-source (Apache-2.0) developer platform: developers
 install RunWeave and test their own agents for reliability under load, injected
 faults, and evaluation quality.
 
-Milestones 1 through 16 and the local React workspace are implemented. Milestones
-17 through 26 (developer platform) are planned in PLAN.md and are not yet
-authorized; implement each only when the user authorizes it. Work in small,
+Milestones 1 through 16 and the local React workspace are implemented. Milestone
+17 is authorized. Milestones 18 through 26 (developer platform) are planned in
+PLAN.md and are not yet authorized; implement each only when the user
+authorizes it. Work in small,
 reviewable milestones and follow the accepted scope and completion criteria in
 PLAN.md.
 
 ## Proposed stack
-- Python 3.13 development baseline; milestone 17 widens support to 3.11+. After
-  that, avoid syntax and APIs newer than 3.11. FastAPI, Uvicorn, Pydantic v2,
-  pydantic-settings.
+- Python 3.11 and newer (3.11, 3.12, and 3.13 tested in CI). Do not use syntax
+  or APIs newer than 3.11, such as PEP 695 type parameters. FastAPI, Uvicorn,
+  Pydantic v2, pydantic-settings.
 - asyncio for scheduling, bounded queues, timeouts, and cancellation.
 - One shared httpx.AsyncClient per application process.
 - uv for environment management and locking; Ruff and mypy for static checks.

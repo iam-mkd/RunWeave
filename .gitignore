@@ -23,8 +23,6 @@ dist/
 .DS_Store
 Thumbs.db
 Desktop.ini
-target/evals/
-target/pytest-*/
-target/isolation/
+target/
 frontend/node_modules/
 frontend/test-results/

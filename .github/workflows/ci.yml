@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Python ${{ matrix.python }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.11', '3.12', '3.13']
+    env:
+      PYDANTIC_AI_NO_BANNER: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --locked --extra workflow --extra eval
+      - run: uv run --no-sync pytest -q
+      - run: uv run --no-sync ruff check .
+      - run: uv run --no-sync ruff format --check .
+      - run: uv run --no-sync mypy
+
+  dependency-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - name: Audit Python dependencies with pip-audit
+        run: |
+          mkdir -p target/audit
+          uv export --locked --all-extras --all-groups --no-hashes --no-emit-project \
+            --format requirements-txt --output-file target/audit/requirements.txt
+          for requirements in target/audit/requirements.txt requirements-durable.txt sandbox/requirements-browser.txt; do
+            uvx --from pip-audit==2.10.1 pip-audit --no-deps --disable-pip -r "$requirements"
+          done
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Audit shipped frontend dependencies with npm audit
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=low
+      - name: Report frontend tooling advisories (accepted ones are listed in SECURITY.md)
+        working-directory: frontend
+        continue-on-error: true
+        run: npm audit --audit-level=low

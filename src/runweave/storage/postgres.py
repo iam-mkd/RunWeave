@@ -7,7 +7,7 @@ from sqlalchemy import RowMapping, text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
-from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState
+from runweave.budgets import BudgetExceeded, BudgetPolicy, BudgetState, ChangeResult
 from runweave.checkpoints import Workflow, initial_checkpoint
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, TenantQuotaExceeded
@@ -356,7 +356,7 @@ class PostgresBudget:
             raise BudgetExceeded("BUDGET_LEASE_LOST")
         return BudgetState.model_validate(raw)
 
-    async def update[T](self, change: Callable[[BudgetState], T]) -> T:
+    async def update(self, change: Callable[[BudgetState], ChangeResult]) -> ChangeResult:
         async with self._engine.begin() as conn:
             raw = await conn.scalar(
                 text("""

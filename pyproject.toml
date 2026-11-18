@@ -7,11 +7,27 @@ name = "runweave"
 version = "0.1.0"
 description = "Bounded asynchronous execution for I/O-bound AI agents"
 readme = "README.md"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Typing :: Typed",
+]
 dependencies = [
     "fastapi>=0.115,<1",
     "httpx>=0.28,<1",
-    "opentelemetry-sdk>=1.44,<2",
+    "opentelemetry-sdk>=1.45.2,<2",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
     "pyjwt==2.15.1",
@@ -62,7 +78,7 @@ asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 
 [tool.ruff]
-target-version = "py313"
+target-version = "py311"
 line-length = 100
 extend-exclude = [".uv-cache", ".uv-python"]
 
@@ -70,6 +86,6 @@ extend-exclude = [".uv-cache", ".uv-python"]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
 [tool.mypy]
-python_version = "3.13"
+python_version = "3.11"
 strict = true
 files = ["src", "tests", "benchmarks", "scripts/check-isolation.py", "scripts/check-container.py"]

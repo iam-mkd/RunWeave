@@ -39,7 +39,7 @@ Milestone 15 adds opt-in disposable Python and read-only Chromium tools. See the
 API examples, limits and the controlled fixture scope. Both tools stay disabled
 by default and verify the target Docker runtime before accepting work.
 
-Install Python 3.13 and uv, then from this folder:
+Install Python 3.11 or newer (3.11, 3.12, and 3.13 are tested) and uv, then from this folder:
 
 ```powershell
 uv sync --locked
@@ -328,9 +328,13 @@ uv run --no-sync ruff format --check .
 uv run --no-sync mypy
 ```
 
-On 2026-11-17 all 207 offline tests passed with native Windows asyncio and both optional
-workflow/evaluation extras installed. The 85 opt-in PostgreSQL tests were skipped
-in that suite and all passed separately on disposable PostgreSQL 18. Coverage includes
+On 2026-11-18 (milestone 17) the offline suite passed on native Windows with Python
+3.11, 3.12, and 3.13: 264 passed and 100 opt-in PostgreSQL/native-isolation cases
+skipped, with Ruff, formatting, and strict mypy (targeting 3.11) clean. CI runs the
+same checks on Linux and Windows for all three versions and audits Python and
+frontend dependencies. The PostgreSQL cases run in the offline evaluation workflow
+and through `scripts/verify-postgres.ps1`; the 86 database cases last passed on
+disposable PostgreSQL 18 at milestone 16. Coverage includes
 worker termination at checkpoint/effect boundaries for both workflows, approval
 restart and sandbox-commit recovery, scoped memory across process restart,
 provenance, deletion/expiry, memory injection boundaries, concurrent quotas,
@@ -339,8 +343,8 @@ trace/cancellation/budget boundaries, and migration. All three offline
 evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.
-Uvicorn startup/shutdown and container verification remain pending.
-The paired coordination comparison preserves fixture quality with three model
+Native Uvicorn startup/shutdown and the main container image were verified in
+milestone 16 (see [the release guide](docs/release.md)). The paired coordination comparison preserves fixture quality with three model
 requests per workflow and about one-third fewer conservatively estimated input
 tokens. Its prices are synthetic and its timing samples are illustrative; see
 [the comparison limits](docs/coordination.md#verification-and-comparison).
@@ -408,3 +412,12 @@ For an existing disposable database, use its connection URL instead.
 $env:TEST_RUNWEAVE_POSTGRES_URL = 'postgresql+asyncpg://user:password@127.0.0.1:5432/runweave_test'
 uv run --no-sync pytest tests/test_postgres_recovery.py -q
 ```
+
+## Contributing, security, and license
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the test-first workflow, and
+pull request checks. Report vulnerabilities privately as described in
+[SECURITY.md](SECURITY.md). Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+
+RunWeave is licensed under the [Apache License 2.0](LICENSE). Third-party
+dependency licenses are summarized in [docs/licenses.md](docs/licenses.md).
