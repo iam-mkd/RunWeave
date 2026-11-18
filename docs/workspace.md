@@ -7,7 +7,7 @@ existing incident-triage workflow; it is not a general-purpose coding/chat agent
 
 ## Start from a checkout
 
-Use Python 3.13, uv, and Node 22.12+ or 24+. From the repository root, in PowerShell:
+Use Python 3.11 or newer, uv, and Node 22.12+ or 24+. From the repository root, in PowerShell:
 
 ```powershell
 uv sync --locked
@@ -52,6 +52,13 @@ Open the Vite URL printed in that terminal. The dev server proxies `/v1` and
 with relative same-origin API requests and no permissive CORS configuration.
 Rebuild the frontend to update the page served on port 8000.
 
+The UI follows the [workspace design system](design-system.md): dark-first with
+a light theme (System / Dark / Light switch in the sidebar), shared components in
+`frontend/src/components/`, and tokens in `frontend/src/design/tokens.css`. To
+review the planned developer-platform screens with synthetic data, run
+`npm.cmd --prefix frontend run dev:prototype`. The prototype is built separately
+and never ships in the workspace bundle.
+
 The workspace launcher binds only to `127.0.0.1`, requires local auth mode,
 restricts the Host header, and rejects cross-origin browser API requests while
 allowing normal link navigation to the workspace page. Its content
@@ -66,7 +73,15 @@ npm.cmd --prefix frontend test
 npm.cmd --prefix frontend run build
 uv run --no-sync pytest tests/test_workspace.py -q
 npm.cmd --prefix frontend run test:browser
+npm.cmd --prefix frontend run build:prototype
+npm.cmd --prefix frontend run test:prototype
 ```
+
+Unit tests (Vitest) cover token contrast in both themes (WCAG 2.1 AA), theme
+preference handling, formatting, navigation, and component structure and
+escaping. The prototype check serves the built prototype under the workspace's
+content security policy and visits every screen in both themes at desktop and
+phone widths.
 
 The browser check starts and stops its own fake-mode FastAPI server on an
 ephemeral loopback port. It uses installed Microsoft Edge on Windows; elsewhere

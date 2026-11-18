@@ -8,6 +8,14 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Workspace design system (milestone 18): dark-first tokens with a light theme
+  and a System / Dark / Light switch, WCAG 2.1 AA contrast tests, and shared
+  components (app shell, tables, status badges, stat tiles, timeline, charts,
+  empty/error/loading states). See `docs/design-system.md`.
+- Clickable design prototype of the developer-platform screens with synthetic
+  data (`npm --prefix frontend run dev:prototype`), checked in CI.
+- Frontend unit tests now run on Vitest.
+
 - Apache-2.0 LICENSE and NOTICE, CONTRIBUTING, SECURITY, and this changelog.
 - Dependency license audit in `docs/licenses.md`.
 - CI workflow running tests, Ruff, and strict mypy on Python 3.11, 3.12, and
@@ -17,6 +25,8 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Changed
 
+- The incident-triage workspace uses the new navigation shell and components;
+  behavior is unchanged.
 - Python support widened from 3.13 only to 3.11 and newer. Ruff and mypy now
   target 3.11.
 - Package metadata declares the license and supported Python versions.
