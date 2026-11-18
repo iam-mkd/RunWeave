@@ -41,7 +41,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 17. Open-source foundation and Python 3.11+ support
 - [x] 18. Developer UI design system and mockups
 - [x] 19. Generic run core, Python agent adapter, and core screens
-- [ ] 20. HTTP agent adapter and TypeScript SDK
+- [x] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
 - [ ] 23. Approvals through the agent SDKs
@@ -1159,6 +1159,12 @@ Implementation notes, pull request B (2026-11-18):
   426 offline Python tests, Ruff, formatting and strict mypy (120 files), 60 Vitest
   tests, the production build and the browser smoke test (no CSP violations or page
   errors). Check this milestone off after the owner merges this pull request.
+- Completed 2026-11-18: the owner reviewed and merged pull requests #6 (a3f888a) and
+  #7 (merge commit 8af40f7). Hosted CI passed on both pull requests: the Python
+  3.11–3.13 Linux/Windows jobs (with the contract suite required against both SDKs),
+  the TypeScript SDK job on Node 22 and 24 (Linux and Windows), the dependency audit,
+  the offline evaluation workflow with its PostgreSQL suite, and the React workspace
+  checks including the HTTP connect/run/remove browser flow.
 
 ### 21. LLM proxy and fault injection
 
