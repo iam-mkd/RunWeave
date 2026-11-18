@@ -111,15 +111,17 @@ class RunRegistry:
         before: datetime | None = None,
     ) -> list[RunSummary]:
         self.prune()
+        # Entries are in admission order. Walking them newest first and sorting stably keeps
+        # admission order for runs that share a timestamp (common with coarse clocks).
         matches = [
             entry.snapshot
-            for entry in self._entries.values()
+            for entry in reversed(self._entries.values())
             if principal.owns(entry.snapshot.principal)
             and (agent is None or entry.snapshot.agent == agent)
             and (status is None or entry.snapshot.status == status)
             and (before is None or entry.snapshot.submitted_at < before)
         ]
-        matches.sort(key=lambda snapshot: (snapshot.submitted_at, str(snapshot.id)), reverse=True)
+        matches.sort(key=lambda snapshot: snapshot.submitted_at, reverse=True)
         return [snapshot.summary() for snapshot in matches[:limit]]
 
     def input(self, run_id: UUID) -> BaseModel | None:

@@ -1,8 +1,11 @@
+from datetime import UTC, datetime, tzinfo
+
 import pytest
 
 from runweave.agents.contracts import IncidentRequest, IncidentResult
 from runweave.orchestration.models import RunStatus
 from runweave.orchestration.registry import RunRegistry
+from runweave.security import LOCAL_PRINCIPAL
 
 
 def incident() -> IncidentRequest:
@@ -76,3 +79,21 @@ def test_claim_only_starts_a_queued_run_once() -> None:
     snapshot = registry.get(run.id)
     assert snapshot is not None and snapshot.started_at is not None
     assert run.status == RunStatus.QUEUED
+
+
+def test_listing_keeps_admission_order_for_identical_timestamps(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    instant = datetime(2026, 11, 18, 12, 0, tzinfo=UTC)
+
+    class FrozenClock(datetime):
+        @classmethod
+        def now(cls, tz: tzinfo | None = None) -> "FrozenClock":
+            return cls.fromtimestamp(instant.timestamp(), tz)
+
+    monkeypatch.setattr("runweave.orchestration.registry.datetime", FrozenClock)
+    registry = RunRegistry(10, 60)
+    ids = [registry.create(incident()).id for _ in range(5)]
+    listed = registry.list(LOCAL_PRINCIPAL)
+    assert [run.id for run in listed] == list(reversed(ids))
+    assert len({run.submitted_at for run in listed}) == 1
