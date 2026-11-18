@@ -38,7 +38,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 14. Typed multi-agent coordination
 - [x] 15. Sandboxed code and authorized browser automation
 - [x] 16. Shadow workflow comparison and release verification
-- [ ] 17. Open-source foundation and Python 3.11+ support
+- [x] 17. Open-source foundation and Python 3.11+ support
 - [ ] 18. Developer UI design system and mockups
 - [ ] 19. Generic run core, Python agent adapter, and core screens
 - [ ] 20. HTTP agent adapter and TypeScript SDK
@@ -910,6 +910,10 @@ Implementation notes (2026-11-18):
   were not rerun locally; the PostgreSQL suite runs in the offline evaluation
   workflow. Hosted CI first runs on the milestone pull request; check this
   milestone off only after it passes.
+- Completed 2026-11-18: the owner reviewed and merged pull request #2
+  (merge commit 888c5b7). Hosted CI passed on the pull request and on `main`:
+  all six Python 3.11–3.13 Linux/Windows jobs, the dependency audit, the offline
+  evaluation workflow with its PostgreSQL suite, and the React workspace checks.
 
 ### 18. Developer UI design system and mockups
 
