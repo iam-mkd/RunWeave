@@ -42,8 +42,9 @@ poll, cancel) and a live `/v1/runs/{id}/events` stream. See the
 
 Agents in their own process (any language) connect over HTTP with the versioned
 `runweave.agent/v1` contract: `runweave serve --http-agent http://127.0.0.1:9100`, or
-register them at runtime. Python agents can be served with
-`runweave serve-agent mypkg.agent:run`. See [HTTP agents](docs/http-agents.md).
+connect them from the workspace (Agents → Connect agent → HTTP endpoint). Serve Python
+agents with `runweave serve-agent mypkg.agent:run`, and Node agents with the TypeScript SDK
+in `sdk/typescript`. See [HTTP agents](docs/http-agents.md).
 
 ## Backend quick start (PowerShell)
 

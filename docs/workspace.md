@@ -7,7 +7,7 @@ with every registered agent, including your own Python agents (see the
 | Screen | What it does |
 | --- | --- |
 | Agents (`#/agents`) | Registered agents, their connection, version and recent success rate |
-| Connect (`#/setup`) | Generates the `runweave serve --agent …` command, detects the agent after restart, links to a smoke test |
+| Connect (`#/setup`) | Python: generates the `runweave serve --agent …` command and detects the agent after restart. HTTP: tests a loopback URL, registers its agents until the server stops, and shows the `--http-agent` startup command. Both link to a smoke test |
 | Runs (`#/runs`) | Your runs, newest first, filtered by agent and state; open any run by ID |
 | New run (`#/runs/new`) | A form generated from the agent's input JSON Schema (raw JSON for schemas it cannot represent) |
 | Run detail (`#/runs/<id>`) | Live status, step timeline, output, input, usage, cancel and re-run; approvals for durable triage runs |
@@ -105,7 +105,8 @@ Checks cover the Agents, Connect, Runs, New run and Run detail screens against a
 offline server with the sample agent loaded: generated forms, server-side validation
 errors on fields, live updates, triage findings, the SDK agent's timeline and re-run,
 cancellation, reload, old `?run=` links, mobile overflow, safe rendering of untrusted
-text, admission failures, expired IDs, setup detection and both themes.
+text, admission failures, expired IDs, setup detection, connecting, running and
+removing a real HTTP agent (the Python contract fixture) and both themes.
 The browser approval-binding scenario uses an intercepted durable API fixture;
 the existing PostgreSQL suite separately verifies actual approval persistence
 and effects. Screenshots are written to ignored `frontend/test-results/`.

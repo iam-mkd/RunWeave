@@ -57,6 +57,15 @@ BSD-3-Clause, and MPL-2.0 (pathspec).
 | vite, rollup, esbuild, postcss, nanoid, picocolors, fdir, picomatch, tinyglobby, source-map-js, @types/estree | Build tooling | MIT (picocolors: ISC; source-map-js: BSD-3-Clause) |
 | playwright, playwright-core | Browser smoke tests | Apache-2.0 |
 
+## TypeScript SDK (`sdk/typescript/package-lock.json`)
+
+The SDK has no runtime dependencies. Its build tooling is not distributed.
+
+| Package | Scope | License |
+| --- | --- | --- |
+| typescript (and its platform binaries) | Build tooling | Apache-2.0 |
+| @types/node, undici-types | Type declarations | MIT |
+
 ## Container base images
 
 | Image | Used by | Notes |

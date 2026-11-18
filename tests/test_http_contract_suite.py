@@ -63,7 +63,10 @@ def _start(command: list[str]) -> tuple[subprocess.Popen[str], str]:
 @pytest.fixture(scope="module", params=sorted(FIXTURES))
 def agent_url(request: pytest.FixtureRequest) -> Iterator[str]:
     if request.param == "typescript" and not (shutil.which("node") and TYPESCRIPT_SDK.is_file()):
-        reason = "Build the TypeScript SDK: npm --prefix sdk/typescript ci && npm --prefix sdk/typescript run build"
+        reason = (
+            "Build the TypeScript SDK: npm --prefix sdk/typescript ci "
+            "&& npm --prefix sdk/typescript run build"
+        )
         if REQUIRE_ALL:
             pytest.fail(reason)
         pytest.skip(reason)
