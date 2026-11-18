@@ -170,3 +170,77 @@ async def test_durable_python_agent_persists_steps_lists_runs_and_recovers(
                 await asyncio.sleep(0.05)
     assert recovered["result"] == {"text": "recovered", "attempt": 2}
     assert await store.get(response_id) is not None
+
+
+class Remote(BaseModel):
+    text: str
+
+
+@agent(name="durable-remote", version="1.0.0", input=Remote, output=Done)
+async def durable_remote(input: Remote, ctx: RunContext) -> Done:
+    async with ctx.step("Remote step", detail=input.text):
+        await asyncio.sleep(0.01)
+    return Done(text=input.text.upper(), attempt=ctx.attempt)
+
+
+@pytest.mark.asyncio
+async def test_durable_http_agent_persists_remote_steps_and_rejects_stale_input(
+    schema: tuple[str, str, AsyncEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from agent_server import agent_server
+
+    dsn, name, engine = schema
+    await apply(engine)
+    monkeypatch.setattr(
+        "runweave.core.runtime.postgres_engine", lambda settings: engine_for(dsn, name)
+    )
+    async with agent_server(durable_remote) as url:
+        settings = Settings(
+            database_url=SecretStr(dsn),
+            worker_count=1,
+            db_poll_seconds=0.05,
+            lease_seconds=1,
+            http_agents=(url,),
+        )
+        app = create_app(settings, agents=[])
+        async with (
+            app.router.lifespan_context(app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app), base_url="http://test"
+            ) as client,
+        ):
+            response = await client.post(
+                "/v1/runs", json={"agent": "durable-remote", "input": {"text": "remote"}}
+            )
+            assert response.status_code == 202, response.text
+            status_url = response.json()["status_url"]
+            await client.get(f"{status_url}/events")
+            run = (await client.get(status_url)).json()
+
+            # Input stored before the agent's schema changed is not sent to the agent.
+            stale = uuid4()
+            async with engine.begin() as conn:
+                await conn.execute(
+                    text("""
+                    INSERT INTO runweave_runs (id, incident, agent, agent_version, status,
+                        submitted_at, available_at, deadline_at, max_attempts, principal, budget)
+                    SELECT :id, '{"wrong":"shape"}'::jsonb, 'durable-remote', '1.0.0', 'QUEUED',
+                        now(), now(), now() + interval '30 seconds', 3, principal, budget
+                    FROM runweave_runs LIMIT 1
+                """),
+                    {"id": stale},
+                )
+            async with asyncio.timeout(10):
+                while True:
+                    rejected = (await client.get(f"/v1/runs/{stale}")).json()
+                    if rejected["status"] in {"FAILED", "SUCCEEDED"}:
+                        break
+                    await asyncio.sleep(0.05)
+    assert run["status"] == "SUCCEEDED", run
+    assert run["agent"] == "durable-remote"
+    assert run["result"] == {"text": "REMOTE", "attempt": 1}
+    assert [(s["title"], s["status"], s["attempt"]) for s in run["steps"]] == [
+        ("Remote step", "succeeded", 1)
+    ]
+    assert rejected["status"] == "FAILED"
+    assert rejected["error"]["code"] == "AGENT_INPUT_INCOMPATIBLE"

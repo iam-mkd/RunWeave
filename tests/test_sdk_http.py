@@ -72,13 +72,18 @@ async def client(**options: Any) -> AsyncIterator[httpx.AsyncClient]:
 
 def envelope(text: str = "hi", **overrides: Any) -> dict[str, Any]:
     body: dict[str, Any] = {
-        "run_id": str(uuid4()), "attempt": 1, "input": {"text": text}, "deadline_ms": 5000,
+        "run_id": str(uuid4()),
+        "attempt": 1,
+        "input": {"text": text},
+        "deadline_ms": 5000,
     }
     body.update(overrides)
     return body
 
 
-async def post(http: httpx.AsyncClient, name: str, body: Any, key: str | None = None) -> httpx.Response:
+async def post(
+    http: httpx.AsyncClient, name: str, body: Any, key: str | None = None
+) -> httpx.Response:
     headers = {"Idempotency-Key": key} if key else {}
     return await http.post(f"/runweave/v1/agents/{name}/runs", json=body, headers=headers)
 
@@ -88,7 +93,7 @@ def test_only_async_sdk_agents_with_unique_names_can_be_served() -> None:
         raise AssertionError
 
     with pytest.raises(TypeError):
-        create_agent_app(plain)  # type: ignore[arg-type]
+        create_agent_app(plain)
     with pytest.raises(ValueError):
         create_agent_app(echo, echo)
     with pytest.raises(ValueError):
@@ -157,7 +162,9 @@ async def test_invalid_input_errors_do_not_echo_values() -> None:
 async def test_non_json_and_oversized_bodies_are_rejected() -> None:
     async with client(max_body_bytes=1024) as http:
         garbage = await http.post(
-            "/runweave/v1/agents/echo/runs", content=b"{nope", headers={"Content-Type": "application/json"}
+            "/runweave/v1/agents/echo/runs",
+            content=b"{nope",
+            headers={"Content-Type": "application/json"},
         )
         large = await post(http, "echo", envelope("x", input={"text": "x" * 4000}))
     assert garbage.status_code == 400 and garbage.json()["error"]["code"] == "INVALID_REQUEST"
@@ -167,7 +174,9 @@ async def test_non_json_and_oversized_bodies_are_rejected() -> None:
 @pytest.mark.asyncio
 async def test_agent_deadline_is_reported_with_its_own_code() -> None:
     async with client() as http:
-        response = await post(http, "echo", envelope(input={"text": "slow", "delay": 5}, deadline_ms=100))
+        response = await post(
+            http, "echo", envelope(input={"text": "slow", "delay": 5}, deadline_ms=100)
+        )
     assert response.status_code == 500
     assert response.json()["error"]["code"] == "AGENT_DEADLINE_EXCEEDED"
 
@@ -178,7 +187,9 @@ async def test_same_idempotency_key_runs_once() -> None:
     body = envelope(input={"text": "once", "delay": 0.2})
     key = body["run_id"]
     async with client() as http:
-        first, second = await asyncio.gather(post(http, "echo", body, key), post(http, "echo", body, key))
+        first, second = await asyncio.gather(
+            post(http, "echo", body, key), post(http, "echo", body, key)
+        )
         third = await post(http, "echo", body, key)
     assert first.status_code == second.status_code == third.status_code == 200
     assert first.json() == second.json() == third.json()
@@ -201,7 +212,9 @@ async def test_cancel_call_cancels_the_running_agent() -> None:
     async with client() as http:
         running = asyncio.create_task(post(http, "echo", body, body["run_id"]))
         async with asyncio.timeout(5):
-            while "cancel-me" not in calls:
+            while True:
+                if "cancel-me" in calls:
+                    break
                 await asyncio.sleep(0.01)
         response = await http.post(f"/runweave/v1/agents/echo/runs/{body['run_id']}/cancel")
         result = await running

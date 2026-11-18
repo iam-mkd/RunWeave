@@ -7,6 +7,13 @@ import httpx
 from runweave.agents.catalog import AgentCatalog, RegisteredAgent
 from runweave.agents.contracts import AgentExecutor, AgentModel
 from runweave.agents.fake import FakeAgentModel
+from runweave.agents.http import (
+    AgentUrlNotAllowed,
+    HttpAgent,
+    HttpAgentConnector,
+    ManifestRejected,
+    RetryPolicy,
+)
 from runweave.agents.providers import ProviderAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.agents.triage import TriageSteps
@@ -34,6 +41,35 @@ class Runtime:
     content_policy: ContentPolicy
     isolated: IsolatedTools | None = None
     agents: AgentCatalog | None = None
+    connector: HttpAgentConnector | None = None
+
+
+def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
+    real = httpx.AsyncHTTPTransport(
+        limits=httpx.Limits(
+            max_connections=settings.http_max_connections,
+            max_keepalive_connections=settings.http_max_connections,
+        ),
+        trust_env=False,
+    )
+    hosts = ["127.0.0.1", "localhost", "[::1]", *settings.http_agent_allowed_hosts]
+    return {f"all://{host}": real for host in hosts}
+
+
+async def connect_startup_agents(
+    connector: HttpAgentConnector, urls: Sequence[str], *, limit: int
+) -> list[HttpAgent]:
+    """Discover configured HTTP agents; any failure stops startup with a clear message."""
+    found: list[HttpAgent] = []
+    for url in dict.fromkeys(urls):
+        try:
+            found.extend(await connector.connect(url, removable=False))
+        except (ManifestRejected, AgentUrlNotAllowed) as error:
+            code = getattr(error, "code", "AGENT_URL_NOT_ALLOWED")
+            raise RuntimeError(f"HTTP agent {url}: {code}: {error}") from None
+    if len(found) > limit:
+        raise RuntimeError(f"At most {limit} HTTP agents can be registered")
+    return found
 
 
 @asynccontextmanager
@@ -43,6 +79,7 @@ async def open_runtime(
     executor: AgentExecutor | None = None,
     mock_transport: httpx.AsyncBaseTransport | None = None,
     agents: Sequence[RegisteredAgent] = (),
+    http_agents: Sequence[str] | None = None,
 ) -> AsyncIterator[Runtime]:
     mock_transport = mock_transport or httpx.MockTransport(fake_health_response)
     provider = settings.model_provider
@@ -50,7 +87,9 @@ async def open_runtime(
     async with httpx.AsyncClient(
         base_url="https://mock-tools.invalid",
         transport=None if live else mock_transport,
-        mounts={"https://mock-tools.invalid": mock_transport} if live else None,
+        # Offline mode sends everything to the mock except HTTP agents, which are real
+        # processes on loopback (or explicitly allowed hosts).
+        mounts={"https://mock-tools.invalid": mock_transport} if live else _agent_mounts(settings),
         timeout=httpx.Timeout(settings.http_timeout_seconds),
         limits=httpx.Limits(
             max_connections=settings.http_max_connections,
@@ -150,11 +189,27 @@ async def open_runtime(
                     budget_policy=settings.budget_policy(),
                 )
             run_executor = executor if executor is not None else runner
+            connector = HttpAgentConnector(
+                client,
+                allowed_hosts=settings.http_agent_allowed_hosts,
+                retry=RetryPolicy(
+                    attempts=settings.http_agent_retry_attempts,
+                    base_delay=settings.http_agent_retry_base_delay_seconds,
+                    max_delay=settings.http_agent_retry_max_delay_seconds,
+                ),
+                max_response_bytes=settings.http_agent_response_max_bytes,
+                connect_timeout=settings.http_agent_connect_timeout_seconds,
+            )
+            remote = await connect_startup_agents(
+                connector,
+                settings.http_agents if http_agents is None else http_agents,
+                limit=settings.http_agent_max_registered,
+            )
             catalog = AgentCatalog.with_triage(
                 run_executor,
                 version=settings.agent_workflow if executor is None else "custom",
                 max_steps=settings.agent_max_steps,
-                extra=agents,
+                extra=[*agents, *remote],
             )
             if settings.database_url is not None:
                 engine = postgres_engine(settings)
@@ -164,7 +219,14 @@ async def open_runtime(
                     )
                     async with durable.running():
                         yield Runtime(
-                            client, runner, durable, telemetry, content_policy, isolated, catalog
+                            client,
+                            runner,
+                            durable,
+                            telemetry,
+                            content_policy,
+                            isolated,
+                            catalog,
+                            connector,
                         )
                 finally:
                     await engine.dispose()
@@ -195,6 +257,7 @@ async def open_runtime(
                         content_policy,
                         isolated,
                         catalog,
+                        connector,
                     )
         finally:
             await isolated.close()

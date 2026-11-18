@@ -1,7 +1,8 @@
-"""Registered agents: the built-in incident triage adapter and SDK agents loaded at startup.
+"""Registered agents: the built-in triage adapter, Python SDK agents and HTTP agents.
 
-Agents load only from startup configuration (CLI or settings). Nothing here imports code
-because of an HTTP request.
+Python agents load only from startup configuration (CLI or settings); nothing here imports
+code because of an HTTP request. HTTP agents may also be registered at runtime, which only
+records a URL that RunWeave calls.
 """
 
 import importlib
@@ -22,7 +23,27 @@ TARGET_PATTERN = re.compile(
 
 
 class AgentLoadError(ValueError):
-    pass
+    code = "AGENT_LOAD_FAILED"
+
+
+class AgentNameConflict(AgentLoadError):
+    code = "AGENT_NAME_CONFLICT"
+
+
+class AgentLimitReached(AgentLoadError):
+    code = "AGENT_LIMIT_REACHED"
+
+
+class AgentNotRemovable(AgentLoadError):
+    code = "AGENT_NOT_REMOVABLE"
+
+
+class SchemaViolation(ValueError):
+    """Input rejected by an agent's JSON Schema; errors never include submitted values."""
+
+    def __init__(self, errors: list[dict[str, Any]]) -> None:
+        self.errors = errors
+        super().__init__("Input does not match the agent's schema")
 
 
 @dataclass(frozen=True)
@@ -30,11 +51,12 @@ class AgentInfo:
     name: str
     version: str
     description: str
-    kind: Literal["built-in", "python"]
+    kind: Literal["built-in", "python", "http"]
     input_schema: dict[str, Any] = field(repr=False)
     output_schema: dict[str, Any] = field(repr=False)
     max_steps: int
     target: str | None = None
+    removable: bool = False
 
 
 class RegisteredAgent(Protocol):
@@ -49,7 +71,7 @@ class RegisteredAgent(Protocol):
 class PythonAgent:
     def __init__(self, spec: AgentSpec, function: AgentFunction, target: str) -> None:
         self._spec = spec
-        self._function = function
+        self.function = function
         self.info = AgentInfo(
             name=spec.name,
             version=spec.version,
@@ -72,7 +94,7 @@ class PythonAgent:
         return self._spec.input_model.model_validate(payload)
 
     async def run(self, input: BaseModel, context: RunContext) -> BaseModel:
-        result = await self._function(input, context)
+        result = await self.function(input, context)
         if isinstance(result, self._spec.output_model):
             return result
         try:
@@ -138,6 +160,38 @@ class AgentCatalog:
 
     def get(self, name: str) -> RegisteredAgent | None:
         return self._agents.get(name)
+
+    def conflicts(self, source: str, names: Iterable[str]) -> set[str]:
+        """Names already registered by something other than a removable `source` agent."""
+        return {
+            name
+            for name in names
+            if (current := self._agents.get(name)) is not None
+            and not (current.info.removable and current.info.target == source)
+        }
+
+    def replace_source(self, source: str, agents: Sequence[RegisteredAgent], *, limit: int) -> None:
+        """Register runtime HTTP agents for `source`, replacing what it registered before."""
+        names = [item.info.name for item in agents]
+        if self.conflicts(source, names):
+            raise AgentNameConflict("An agent with that name is already registered")
+        kept = {
+            name: item
+            for name, item in self._agents.items()
+            if not (item.info.removable and item.info.target == source)
+        }
+        if sum(item.info.kind == "http" for item in kept.values()) + len(agents) > limit:
+            raise AgentLimitReached(f"At most {limit} HTTP agents can be registered")
+        self._agents = {**kept, **{item.info.name: item for item in agents}}
+
+    def remove(self, name: str) -> RegisteredAgent | None:
+        current = self._agents.get(name)
+        if current is None:
+            return None
+        if not current.info.removable:
+            raise AgentNotRemovable("Only HTTP agents registered at runtime can be removed")
+        del self._agents[name]
+        return current
 
     def __iter__(self) -> Iterator[RegisteredAgent]:
         return iter(self._agents.values())

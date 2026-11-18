@@ -7,7 +7,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from runweave.agents.catalog import AgentCatalog
+from runweave.agents.catalog import AgentCatalog, SchemaViolation
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.approvals import AwaitingApproval, ticket_scope
 from runweave.budgets import BudgetExceeded, budget_scope
@@ -24,16 +24,12 @@ from runweave.orchestration.admission import (
     resolve,
 )
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus, RunSummary
-from runweave.sdk import AgentError, RunContext
+from runweave.sdk import AgentError, AgentUnavailable, RunContext
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
 from runweave.steps import step_scope
 from runweave.storage.engine import StorageUnavailable, storage_errors
 from runweave.storage.postgres import Claim, PostgresRuns
 from runweave.telemetry import Telemetry
-
-
-class AgentUnavailable(AgentError):
-    code = "AGENT_UNAVAILABLE"
 
 
 class AgentInputIncompatible(AgentError):
@@ -264,7 +260,7 @@ class DurableScheduler:
             raise AgentUnavailable()
         try:
             parsed = definition.parse(claim.input)
-        except ValidationError:
+        except (ValidationError, SchemaViolation):
             # A redeployed agent no longer accepts input admitted by an earlier version.
             raise AgentInputIncompatible() from None
         context = RunContext(

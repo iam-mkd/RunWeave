@@ -2,12 +2,14 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 TOOL_INPUT_LIMIT = 16384
+AGENT_REGISTRATION_LIMIT = 8192
 
 
 class RequestBodyLimit:
     """Bound request bodies before JSON/Pydantic allocation, including chunked requests.
 
-    Covers isolated-tool calls and run submissions, whose agent input is arbitrary JSON.
+    Covers isolated-tool calls, agent registration, and run submissions, whose agent input
+    is arbitrary JSON.
     """
 
     def __init__(self, app: ASGIApp, *, runs_max_bytes: int) -> None:
@@ -18,6 +20,8 @@ class RequestBodyLimit:
         path = scope.get("path", "")
         if path.startswith("/v1/tools/"):
             return TOOL_INPUT_LIMIT, {"code": "TOOL_INPUT_LIMIT"}
+        if scope.get("method") == "POST" and path.startswith("/v1/agents"):
+            return AGENT_REGISTRATION_LIMIT, {"code": "INPUT_TOO_LARGE"}
         if scope.get("method") == "POST" and path.rstrip("/") == "/v1/runs":
             return self._runs_max_bytes, {
                 "code": "INPUT_TOO_LARGE",

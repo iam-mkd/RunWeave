@@ -71,9 +71,19 @@ def test_serve_check_lists_http_agents_from_a_running_agent_server() -> None:
         [str(ROOT / "src"), str(ROOT / "examples" / "sample-agent")]
     )
     server = subprocess.Popen(
-        [sys.executable, "-m", "runweave.cli", "serve-agent", "sample_agent:text_report",
-         "--port", "0"],
-        stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, env=env,
+        [
+            sys.executable,
+            "-m",
+            "runweave.cli",
+            "serve-agent",
+            "sample_agent:text_report",
+            "--port",
+            "0",
+        ],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        env=env,
     )
     try:
         assert server.stdout is not None

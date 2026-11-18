@@ -73,7 +73,9 @@ class Fixture:
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         path = scope.get("path", "") if scope["type"] == "http" else ""
         if path == "/fixture/events":
-            await _respond(send, 200, {"Content-Type": "application/json"}, json.dumps(events).encode())
+            await _respond(
+                send, 200, {"Content-Type": "application/json"}, json.dumps(events).encode()
+            )
             return
         parts = path.strip("/").split("/")
         if len(parts) == 5 and parts[:3] == ["runweave", "v1", "agents"] and parts[4] == "runs":

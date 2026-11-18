@@ -42,14 +42,18 @@ class LocalBrowserBoundary:
 
 
 def create_workspace(
-    config: Settings, assets: Path, *, agents: Sequence[RegisteredAgent] | None = None
+    config: Settings,
+    assets: Path,
+    *,
+    agents: Sequence[RegisteredAgent] | None = None,
+    http_agents: Sequence[str] | None = None,
 ) -> FastAPI:
     if config.auth_mode != "local":
         raise ValueError("The local workspace requires RUNWEAVE_AUTH_MODE=local")
     if not (assets / "index.html").is_file() or not (assets / "assets").is_dir():
         raise ValueError("Build the workspace first with npm --prefix frontend run build")
 
-    app = create_app(config, agents=agents)
+    app = create_app(config, agents=agents, http_agents=http_agents)
     app.add_middleware(LocalBrowserBoundary)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
     app.mount("/assets", StaticFiles(directory=assets / "assets"), name="workspace-assets")

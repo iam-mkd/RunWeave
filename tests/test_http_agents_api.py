@@ -1,21 +1,19 @@
 """Registering HTTP agents from the API at runtime, and at startup from settings."""
 
 import asyncio
-import socket
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
 import httpx
 import pytest
-import uvicorn
+from agent_server import agent_server
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
 from runweave.app import create_app
 from runweave.core.settings import Settings
 from runweave.sdk import RunContext, agent
-from runweave.sdk_http import create_agent_app
 
 
 class Ask(BaseModel):
@@ -42,27 +40,6 @@ async def clashing(input: Ask, ctx: RunContext) -> Reply:
     return Reply(reply=input.text)
 
 
-@asynccontextmanager
-async def agent_server(*functions: Any, port: int = 0) -> AsyncIterator[str]:
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", port))
-    port = sock.getsockname()[1]
-    server = uvicorn.Server(
-        uvicorn.Config(create_agent_app(*functions), log_level="warning", lifespan="off")
-    )
-    task = asyncio.create_task(server.serve(sockets=[sock]))
-    try:
-        async with asyncio.timeout(10):
-            while not server.started:
-                await asyncio.sleep(0.01)
-        yield f"http://127.0.0.1:{port}"
-    finally:
-        server.should_exit = True
-        await task
-        sock.close()
-
-
 @agent(name="echo", version="1", input=Ask, output=Reply)
 async def local_echo(input: Ask, ctx: RunContext) -> Reply:
     return Reply(reply=input.text)
@@ -74,7 +51,9 @@ async def runweave(**settings: Any) -> AsyncIterator[httpx.AsyncClient]:
 
     app: FastAPI = create_app(
         Settings(**settings),
-        agents=[PythonAgent.from_function(local_echo, target="tests.test_http_agents_api:local_echo")],
+        agents=[
+            PythonAgent.from_function(local_echo, target="tests.test_http_agents_api:local_echo")
+        ],
     )
     async with (
         app.router.lifespan_context(app),
@@ -101,8 +80,13 @@ async def test_check_reports_the_agents_without_registering_them() -> None:
     body = checked.json()
     assert body["url"] == url
     assert body["agents"] == [
-        {"name": "remote-upper", "version": "1.0.0", "description": "Uppercase",
-         "max_steps": 50, "conflict": False}
+        {
+            "name": "remote-upper",
+            "version": "1.0.0",
+            "description": "Uppercase",
+            "max_steps": 50,
+            "conflict": False,
+        }
     ]
     assert "remote-upper" not in {a["name"] for a in listed}
 
@@ -218,7 +202,9 @@ async def test_managing_agents_requires_its_own_scope() -> None:
         "auth_mode": "test",
         "auth_test_identities": {
             "reader-token-0123456789": {
-                "tenant": "t", "subject": "s", "scopes": ["runs:read", "runs:submit"],
+                "tenant": "t",
+                "subject": "s",
+                "scopes": ["runs:read", "runs:submit"],
             },
         },
     }
@@ -238,7 +224,8 @@ async def test_managing_agents_requires_its_own_scope() -> None:
 async def test_registration_bodies_are_bounded() -> None:
     async with runweave() as client:
         response = await client.post(
-            "/v1/agents/http", content=b'{"url": "' + b"a" * 20000 + b'"}',
+            "/v1/agents/http",
+            content=b'{"url": "' + b"a" * 20000 + b'"}',
             headers={"Content-Type": "application/json"},
         )
     assert response.status_code in {413, 422}

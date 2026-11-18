@@ -30,6 +30,7 @@ def create_app(
     executor: AgentExecutor | None = None,
     mock_transport: httpx.AsyncBaseTransport | None = None,
     agents: Sequence[RegisteredAgent] | None = None,
+    http_agents: Sequence[str] | None = None,
 ) -> FastAPI:
     config = settings if settings is not None else Settings()
     # Imports configured agent modules once, before serving; requests never load code.
@@ -39,7 +40,11 @@ def create_app(
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         try:
             async with open_runtime(
-                config, executor=executor, mock_transport=mock_transport, agents=registered
+                config,
+                executor=executor,
+                mock_transport=mock_transport,
+                agents=registered,
+                http_agents=http_agents,
             ) as runtime:
                 app.state.runtime = runtime
                 yield
@@ -49,6 +54,7 @@ def create_app(
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
     app.add_middleware(RequestBodyLimit, runs_max_bytes=config.run_request_max_bytes)
     app.state.identity_provider = IdentityProvider(config)
+    app.state.http_agent_max_registered = config.http_agent_max_registered
     app.state.event_streams = EventStreams(
         max_subscribers=config.event_stream_max_subscribers,
         max_seconds=config.event_stream_max_seconds,

@@ -104,7 +104,10 @@ class Steps:
         from datetime import UTC, datetime
 
         event = StepEvent(
-            index=len(self.events), title=title, detail=detail, status="running",
+            index=len(self.events),
+            title=title,
+            detail=detail,
+            status="running",
             started_at=datetime.now(UTC),
         )
         self.events[event.index] = event
@@ -181,7 +184,10 @@ async def test_manifest_describes_agents_with_their_schemas() -> None:
     agents = await connector(script).connect(BASE + "/", removable=True)
     info = agents[0].info
     assert (info.name, info.version, info.kind, info.target) == (
-        "remote-echo", "2.0.0", "http", BASE,
+        "remote-echo",
+        "2.0.0",
+        "http",
+        BASE,
     )
     assert info.input_schema == INPUT_SCHEMA and info.output_schema == OUTPUT_SCHEMA
     assert info.max_steps == 5 and info.removable is True
@@ -192,24 +198,63 @@ async def test_manifest_describes_agents_with_their_schemas() -> None:
 @pytest.mark.parametrize(
     ("body", "code"),
     [
-        ({"contract": "runweave.agent/v9", "agents": manifest()["agents"]}, "AGENT_MANIFEST_INVALID"),
+        (
+            {"contract": "runweave.agent/v9", "agents": manifest()["agents"]},
+            "AGENT_MANIFEST_INVALID",
+        ),
         ({"contract": CONTRACT_VERSION, "agents": []}, "AGENT_MANIFEST_INVALID"),
         (manifest(name="Bad Name"), "AGENT_MANIFEST_INVALID"),
         (manifest(input_schema={"type": "array"}), "AGENT_MANIFEST_INVALID"),
         (manifest(input_schema={"type": "object", "minProperties": "x"}), "AGENT_MANIFEST_INVALID"),
         (manifest(name="incident-triage"), "AGENT_MANIFEST_INVALID"),
         (httpx.Response(200, text="<html>"), "AGENT_MANIFEST_INVALID"),
-        (httpx.Response(200, json={"contract": CONTRACT_VERSION, "agents": "x" * 9000}),
-         "AGENT_MANIFEST_INVALID"),
+        (
+            httpx.Response(200, json={"contract": CONTRACT_VERSION, "agents": "x" * 9000}),
+            "AGENT_MANIFEST_INVALID",
+        ),
         (httpx.Response(404, json={}), "AGENT_MANIFEST_INVALID"),
-        (httpx.Response(302, headers={"Location": "http://169.254.169.254/"}),
-         "AGENT_REDIRECT_DENIED"),
+        (
+            httpx.Response(302, headers={"Location": "http://169.254.169.254/"}),
+            "AGENT_REDIRECT_DENIED",
+        ),
     ],
 )
 async def test_invalid_manifests_are_rejected_with_a_code(body: Any, code: str) -> None:
     with pytest.raises(ManifestRejected) as caught:
         await connector(Script(manifest_body=body)).connect(BASE, removable=False)
     assert caught.value.code == code
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "schema",
+    [
+        {"type": "object", "properties": {"x": {"$ref": "https://schemas.example/x.json"}}},
+        {"type": "object", "$defs": {"a": {"$ref": "other.json#/a"}}},
+        {"type": "object", "properties": {"x": {"$dynamicRef": "http://127.0.0.1/s"}}},
+    ],
+)
+async def test_schemas_may_only_reference_themselves(schema: dict[str, Any]) -> None:
+    with pytest.raises(ManifestRejected) as caught:
+        await connector(Script(manifest_body=manifest(input_schema=schema))).connect(
+            BASE, removable=False
+        )
+    assert caught.value.code == "AGENT_MANIFEST_INVALID"
+
+
+@pytest.mark.asyncio
+async def test_local_references_from_pydantic_models_are_supported() -> None:
+    schema = {
+        "type": "object",
+        "$defs": {"Inner": {"type": "object", "properties": {"n": {"type": "integer"}}}},
+        "properties": {"inner": {"$ref": "#/$defs/Inner"}},
+    }
+    agents = await connector(Script(manifest_body=manifest(input_schema=schema))).connect(
+        BASE, removable=False
+    )
+    with pytest.raises(SchemaViolation) as caught:
+        agents[0].parse({"inner": {"n": "nope"}})
+    assert caught.value.errors[0]["loc"] == ["inner", "n"]
 
 
 @pytest.mark.asyncio
@@ -227,8 +272,11 @@ async def test_unreachable_agents_report_a_code() -> None:
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(refuse))
     target = HttpAgentConnector(
-        client, allowed_hosts=(), retry=RetryPolicy(1, 0.01, 0.01),
-        max_response_bytes=4096, connect_timeout=1.0,
+        client,
+        allowed_hosts=(),
+        retry=RetryPolicy(1, 0.01, 0.01),
+        max_response_bytes=4096,
+        connect_timeout=1.0,
     )
     with pytest.raises(ManifestRejected) as caught:
         await target.connect(BASE, removable=False)
@@ -252,7 +300,7 @@ async def test_input_is_validated_against_the_schema_without_echoing_values() ->
 
 @pytest.mark.asyncio
 async def test_successful_run_sends_the_contract_request_and_records_remote_steps() -> None:
-    steps = [
+    steps: list[dict[str, Any]] = [
         {"title": "Plan", "detail": "token sk-test", "status": "succeeded", "duration_ms": 12.5},
         {"title": "Answer", "detail": None, "status": "failed", "duration_ms": 3},
     ]
@@ -379,10 +427,14 @@ async def test_connection_failures_are_retried_but_lost_responses_are_not() -> N
         (httpx.Response(501), "AGENT_SERVER_ERROR"),
         (httpx.Response(500, json={"error": {"code": "RUN_FAILED"}}), "RUN_FAILED"),
         (httpx.Response(500, json={"error": {"code": "AGENT_STEP_LIMIT"}}), "AGENT_STEP_LIMIT"),
-        (httpx.Response(500, json={"error": {"code": "AGENT_OUTPUT_INVALID"}}),
-         "AGENT_OUTPUT_INVALID"),
-        (httpx.Response(500, json={"error": {"code": "ANYTHING_THE_AGENT_SAYS"}}),
-         "AGENT_SERVER_ERROR"),
+        (
+            httpx.Response(500, json={"error": {"code": "AGENT_OUTPUT_INVALID"}}),
+            "AGENT_OUTPUT_INVALID",
+        ),
+        (
+            httpx.Response(500, json={"error": {"code": "ANYTHING_THE_AGENT_SAYS"}}),
+            "AGENT_SERVER_ERROR",
+        ),
         (httpx.Response(422, json={"error": {"code": "INVALID_INPUT"}}), "AGENT_INPUT_REJECTED"),
         (httpx.Response(404), "AGENT_REQUEST_REJECTED"),
         (httpx.Response(400), "AGENT_REQUEST_REJECTED"),
@@ -457,8 +509,11 @@ async def test_a_failing_cancel_call_does_not_mask_cancellation() -> None:
 
     client = httpx.AsyncClient(transport=httpx.MockTransport(handler))
     target = HttpAgentConnector(
-        client, allowed_hosts=(), retry=RetryPolicy(1, 0.01, 0.01),
-        max_response_bytes=4096, connect_timeout=1.0,
+        client,
+        allowed_hosts=(),
+        retry=RetryPolicy(1, 0.01, 0.01),
+        max_response_bytes=4096,
+        connect_timeout=1.0,
     )
     agents = await target.connect(BASE, removable=False)
     task = asyncio.create_task(agents[0].run(agents[0].parse({"text": "hi"}), context()))
@@ -471,6 +526,7 @@ async def test_a_failing_cancel_call_does_not_mask_cancellation() -> None:
 def test_committed_openapi_contract_matches_the_models() -> None:
     path = Path(__file__).parents[1] / "contracts" / "agent-http-v1.openapi.json"
     committed = json.loads(path.read_text(encoding="utf-8"))
+    # Regenerate with: python -m runweave.http_contract
     assert committed == openapi_document()
     assert committed["info"]["version"] == CONTRACT_VERSION
     assert set(committed["paths"]) == {

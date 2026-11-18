@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator, Iterator
 from contextlib import asynccontextmanager, contextmanager, suppress
 from contextvars import ContextVar
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -62,6 +62,29 @@ def step_scope(log: StepLog | None) -> Iterator[None]:
         yield
     finally:
         _log.reset(token)
+
+
+async def record_finished_step(
+    title: str, detail: str | None, status: StepStatus, duration_ms: float
+) -> None:
+    """Add a step that already ran elsewhere, such as inside an HTTP agent."""
+    log = _log.get()
+    if log is None:
+        return
+    with suppress(Exception):
+        event = await log.begin(clip(title, TITLE_LIMIT) or "Step", clip(detail, DETAIL_LIMIT))
+        if event is not None:
+            finished_at = datetime.now(UTC)
+            await log.end(
+                event.model_copy(
+                    update={
+                        "status": status,
+                        "started_at": finished_at - timedelta(milliseconds=duration_ms),
+                        "finished_at": finished_at,
+                        "duration_ms": duration_ms,
+                    }
+                )
+            )
 
 
 @asynccontextmanager

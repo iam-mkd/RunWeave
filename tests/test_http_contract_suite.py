@@ -36,7 +36,12 @@ def _start(command: list[str]) -> tuple[subprocess.Popen[str], str]:
     lines: queue.Queue[str] = queue.Queue()
     assert process.stdout is not None
     stdout = process.stdout
-    threading.Thread(target=lambda: [lines.put(line) for line in stdout], daemon=True).start()
+
+    def pump() -> None:
+        for line in stdout:
+            lines.put(line)
+
+    threading.Thread(target=pump, daemon=True).start()
     try:
         while True:
             line = lines.get(timeout=30)
@@ -100,7 +105,9 @@ async def events(url: str) -> dict[str, Any]:
 
 async def eventually_cancelled(url: str, text: str) -> None:
     async with asyncio.timeout(5):
-        while text not in (await events(url))["cancelled"]:
+        while True:
+            if text in (await events(url))["cancelled"]:
+                return
             await asyncio.sleep(0.05)
 
 
@@ -132,14 +139,17 @@ async def test_input_is_validated_before_admission(agent_url: str) -> None:
     assert response.status_code == 422
     assert response.json()["detail"]["code"] == "INVALID_INPUT"
     assert {tuple(e["loc"]) for e in response.json()["detail"]["errors"]} == {
-        ("text",), ("delay_ms",),
+        ("text",),
+        ("delay_ms",),
     }
 
 
 @pytest.mark.asyncio
 async def test_timeout_fails_the_run_and_cancels_the_agent(agent_url: str) -> None:
     async with runweave(agent_url, run_timeout_seconds=1) as client:
-        run = await wait(client, await start(client, "contract-echo", text="timeout", delay_ms=30000))
+        run = await wait(
+            client, await start(client, "contract-echo", text="timeout", delay_ms=30000)
+        )
     assert run["status"] == "TIMED_OUT"
     await eventually_cancelled(agent_url, "timeout")
 
