@@ -2,9 +2,9 @@ name: Local React workspace
 
 on:
   push:
-    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
   pull_request:
-    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
 
 permissions:
   contents: read

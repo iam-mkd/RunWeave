@@ -1,14 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { listAgents } from '../api.js';
-import { PageHeader, Panel, StatusBadge } from '../components/index.js';
+import { checkHttpAgent, listAgents, registerHttpAgent } from '../api.js';
+import { ErrorState, PageHeader, Panel, StatusBadge } from '../components/index.js';
 import { href } from '../router.js';
+import { HttpAgentCheck } from './parts.jsx';
 
 const targetPattern = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*$/;
 const pollMs = 2000;
 
 const kinds = [
   { id: 'python', title: 'Python callable', text: 'An async function in your project, decorated with @runweave.sdk.agent.', available: true },
-  { id: 'http', title: 'HTTP endpoint', text: 'Any language, called over HTTP. Arrives in milestone 20.', available: false },
+  { id: 'http', title: 'HTTP endpoint', text: 'A service in any language that speaks the runweave.agent/v1 contract, on this machine.', available: true },
   { id: 'proxy', title: 'LLM proxy only', text: 'Point your SDK’s base URL at RunWeave. Arrives in milestone 21.', available: false },
 ];
 
@@ -34,7 +35,73 @@ function CopyCommand({ id, command }) {
   </div>;
 }
 
+function HttpSetup({ onBack }) {
+  const [url, setUrl] = useState('');
+  const [result, setResult] = useState(null);
+  const [registered, setRegistered] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function act(work) {
+    setBusy(true);
+    setError('');
+    try {
+      await work();
+    } catch (failure) {
+      setError(failure.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const check = (event) => {
+    event.preventDefault();
+    setResult(null);
+    act(async () => setResult(await checkHttpAgent(url)));
+  };
+  const register = () => act(async () => setRegistered((await registerHttpAgent(result.url)).agents));
+  const ready = result?.agents.some((agent) => !agent.conflict);
+
+  if (registered) {
+    return <Panel title="Smoke test" id="smoke">
+      <div className="stack">
+        <div className="row"><StatusBadge tone="good" label="Registered" />
+          <span>{registered.length === 1 ? '1 agent is' : `${registered.length} agents are`} ready until this server stops.</span></div>
+        <p className="muted">To register them every time RunWeave starts, use the startup command from the previous step.</p>
+        <ul className="link-list">{registered.map((agent) => <li key={agent.name}>
+          <a className="button" href={href({ screen: 'new-run', params: { agent: agent.name } })}>Run {agent.name}</a></li>)}</ul>
+        <div className="row end"><a className="button" href={href({ screen: 'agents' })}>Done</a></div>
+      </div>
+    </Panel>;
+  }
+  return <Panel title="Check your HTTP agent" id="configure">
+    <div className="stack">
+      <p>Start your agent so it listens on this machine, for example:</p>
+      <CopyCommand id="serve-agent-command" command="runweave serve-agent mypkg.agent:run --port 9100" />
+      <p className="muted">TypeScript: <code>serveAgents([agent], {'{'} port: 9100 {'}'})</code> from <code>@runweave/agent</code>.</p>
+      <form className="stack narrow" onSubmit={check}>
+        <div className="field">
+          <label htmlFor="agent-url">Agent URL</label>
+          <input id="agent-url" className="mono" placeholder="http://127.0.0.1:9100" value={url} maxLength={2048}
+            inputMode="url" autoComplete="off" spellCheck="false" aria-describedby="agent-url-hint"
+            onChange={(event) => { setUrl(event.target.value.trim()); setResult(null); }} />
+          <span className="field-hint" id="agent-url-hint">Loopback addresses only (127.0.0.1, ::1 or localhost), unless the server allows other hosts.</span>
+        </div>
+        <div className="row end"><button type="button" onClick={onBack}>Back</button>
+          <button disabled={!url || busy}>Test connection</button></div>
+      </form>
+      {error && <ErrorState>{error}</ErrorState>}
+      {result && <>
+        <HttpAgentCheck result={result} />
+        <p className="muted">To register these agents every time RunWeave starts instead:</p>
+        <CopyCommand id="http-serve-command" command={`runweave serve --http-agent ${result.url}`} />
+        <div className="row end"><button type="button" className="primary" disabled={!ready || busy} onClick={register}>Register agents</button></div>
+      </>}
+    </div>
+  </Panel>;
+}
+
 export function SetupScreen() {
+  const [kind, setKind] = useState('python');
   const [step, setStep] = useState(1);
   const [target, setTarget] = useState('');
   const [found, setFound] = useState(null);
@@ -65,24 +132,26 @@ export function SetupScreen() {
 
   return <>
     <PageHeader eyebrow={<><a href={href({ screen: 'agents' })}>Agents</a> / Connect</>} title="Connect an agent"
-      description="Agents load when RunWeave starts, never from the browser. Everything runs offline with the mock model unless you add an API key." />
+      description="Python agents load when RunWeave starts, never from the browser. HTTP agents are only called, never imported. Everything runs offline with the mock model unless you add an API key." />
     <ol className="stepper" aria-label="Setup progress">
-      {['Connection', 'Start RunWeave', 'Smoke test'].map((label, index) => <li key={label}
+      {['Connection', kind === 'http' ? 'Check the endpoint' : 'Start RunWeave', 'Smoke test'].map((label, index) => <li key={label}
         aria-current={step === index + 1 ? 'step' : undefined} data-done={step > index + 1 ? 'true' : undefined}>
         <span className="step-number">{index + 1}</span>{label}</li>)}
     </ol>
     {step === 1 && <Panel title="How does RunWeave reach your agent?" id="kind">
       <fieldset className="choice-grid">
         <legend className="visually-hidden">Connection type</legend>
-        {kinds.map((kind) => <label key={kind.id} className="choice" data-disabled={kind.available ? undefined : 'true'}>
-          <input type="radio" name="kind" value={kind.id} defaultChecked={kind.id === 'python'} disabled={!kind.available} />
-          <span className="choice-title">{kind.title}</span>
-          <span className="choice-text">{kind.text}</span>
+        {kinds.map((option) => <label key={option.id} className="choice" data-disabled={option.available ? undefined : 'true'}>
+          <input type="radio" name="kind" value={option.id} checked={kind === option.id} disabled={!option.available}
+            onChange={() => setKind(option.id)} />
+          <span className="choice-title">{option.title}</span>
+          <span className="choice-text">{option.text}</span>
         </label>)}
       </fieldset>
       <div className="row end"><button type="button" className="primary" onClick={() => setStep(2)}>Continue</button></div>
     </Panel>}
-    {step === 2 && <Panel title="Start RunWeave with your agent" id="configure">
+    {step === 2 && kind === 'http' && <HttpSetup onBack={() => setStep(1)} />}
+    {step === 2 && kind === 'python' && <Panel title="Start RunWeave with your agent" id="configure">
       <form className="stack narrow" onSubmit={(event) => { event.preventDefault(); if (valid) setStep(3); }}>
         <div className="field">
           <label htmlFor="agent-target">Agent function (module:attribute)</label>
@@ -101,7 +170,7 @@ export function SetupScreen() {
           <button className="primary" disabled={!valid}>I restarted RunWeave</button></div>
       </form>
     </Panel>}
-    {step === 3 && <Panel title="Smoke test" id="smoke">
+    {step === 3 && kind === 'python' && <Panel title="Smoke test" id="smoke">
       {found ? <div className="stack">
         <div className="row"><StatusBadge tone="good" label="Registered" /><span><strong>{found.name}</strong> {found.version} is ready.</span></div>
         <p className="muted">Run one input through it with the mock model and the default 30 second deadline.</p>

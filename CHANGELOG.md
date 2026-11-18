@@ -37,6 +37,12 @@ All notable changes to RunWeave are recorded here. The format follows
   `DELETE /v1/agents/{name}`, new `agents:manage` scope). `runweave serve-agent` and
   `runweave.sdk_http` serve Python agents over the contract. See `docs/http-agents.md`.
 - New dependency: `jsonschema` (MIT), for HTTP agents' JSON Schemas.
+- TypeScript agent SDK `@runweave/agent` (`sdk/typescript`, unpublished, no runtime
+  dependencies): `defineAgent`, `serveAgents`, `createAgentHandler`, with the same
+  context, limits, idempotency and cancellation behavior as the Python wrapper, plus
+  `examples/http-agent-typescript`. The shared contract suite now runs against both SDKs.
+- Workspace: connect HTTP agents from Connect (test the URL, see conflicts, register,
+  copy the startup command) and remove runtime-registered agents on the Agents screen.
 
 - Apache-2.0 LICENSE and NOTICE, CONTRIBUTING, SECURITY, and this changelog.
 - Dependency license audit in `docs/licenses.md`.

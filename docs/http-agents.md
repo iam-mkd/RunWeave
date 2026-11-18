@@ -34,9 +34,42 @@ uv run --locked runweave serve-agent sample_agent:text_report --port 9100
 
 with `examples/sample-agent` on `PYTHONPATH`.
 
+### TypeScript (Node)
+
+The `@runweave/agent` package in `sdk/typescript` (no runtime dependencies, Node 22.12+ or
+24+) provides `defineAgent` and `serveAgents`:
+
+```js
+import { defineAgent, serveAgents } from '@runweave/agent';
+
+const agent = defineAgent({
+  name: 'word-count', version: '1.0.0', inputSchema, outputSchema,
+  async run(input, ctx) {
+    const words = await ctx.step('Split words', () => input.text.split(/\s+/));
+    return { words: words.length };
+  },
+});
+const server = await serveAgents([agent], { port: 9200 }); // loopback only
+```
+
+The context has `runId`, `attempt`, `signal` (aborted on cancellation or deadline; pass it
+to your I/O), `remainingMs()`, `step(title, fn, { detail })`, `log()` and `usage()`. The
+package is not on npm yet; install it from the repository:
+
+```bash
+npm --prefix sdk/typescript ci
+npm --prefix sdk/typescript run build
+npm --prefix examples/http-agent-typescript install
+npm --prefix examples/http-agent-typescript start
+```
+
+See `sdk/typescript/README.md` and `examples/http-agent-typescript`.
+
 ### Other languages
 
-Implement the three endpoints below. A TypeScript (Node) SDK follows in the next release.
+Implement the three endpoints below. The shared contract suite
+(`tests/test_http_contract_suite.py`, fixture spec in `tests/contract/README.md`) runs the
+same checks against the Python and TypeScript SDKs; add a fixture to run it against yours.
 
 ## 2. Register it with RunWeave
 
@@ -50,8 +83,13 @@ Repeat `--http-agent` or set `RUNWEAVE_HTTP_AGENTS='["http://127.0.0.1:9100"]'`.
 `runweave serve --check --http-agent …` fetches the manifest, lists the agents and exits.
 Startup fails with a clear code if an agent is unreachable or its manifest is invalid.
 
-At runtime (kept until the server stops), with the `agents:manage` scope, which the
-local workspace has:
+At runtime from the workspace: **Agents → Connect agent → HTTP endpoint**, enter the URL,
+**Test connection** to see the agents it serves (and any name conflicts), then
+**Register agents**. Runtime-registered agents have a **Remove** button on the Agents
+screen. Registering the same URL again refreshes its agents.
+
+At runtime from the API (kept until the server stops), with the `agents:manage` scope,
+which the local workspace has:
 
 | Endpoint | Behavior |
 | --- | --- |

@@ -1,5 +1,5 @@
 import React from 'react';
-import { EmptyState, StatusBadge, Timeline } from '../components/index.js';
+import { DataTable, EmptyState, StatusBadge, Timeline } from '../components/index.js';
 import { duration } from '../format.js';
 
 const stepTones = {
@@ -119,4 +119,16 @@ export function RunOutput({ agent, result }) {
     <h4>Evidence</h4>
     <ul className="evidence">{result.evidence_ids.map((evidence) => <li key={evidence}><code>{evidence}</code></li>)}</ul>
   </section>;
+}
+
+// What a Connect check found at an HTTP agent URL. Agent text is rendered as plain text.
+export function HttpAgentCheck({ result }) {
+  return <DataTable caption={`Agents served at ${result.url}`} columns={[
+    { key: 'name', label: 'Agent', render: (agent) => <span className="mono">{agent.name}</span> },
+    { key: 'version', label: 'Version', render: (agent) => <span className="mono">{agent.version}</span> },
+    { key: 'description', label: 'Description', render: (agent) => agent.description || <span className="muted">—</span> },
+    { key: 'status', label: 'Status', render: (agent) => agent.conflict
+      ? <StatusBadge tone="warning" label="Name already registered" />
+      : <StatusBadge tone="good" label="Ready to register" /> },
+  ]} rows={result.agents} rowKey={(agent) => agent.name} />;
 }

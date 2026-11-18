@@ -6,6 +6,7 @@ See tests/contract/README.md for the fixture behavior each SDK implements.
 import asyncio
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import threading
@@ -22,9 +23,16 @@ from runweave.app import create_app
 from runweave.core.settings import Settings
 
 ROOT = Path(__file__).resolve().parents[1]
+TYPESCRIPT_SDK = ROOT / "sdk" / "typescript" / "dist" / "index.js"
 FIXTURES = {
     "python": [sys.executable, str(ROOT / "tests" / "contract" / "python_agent.py")],
+    "typescript": [
+        shutil.which("node") or "node",
+        str(ROOT / "tests" / "contract" / "typescript_agent.mjs"),
+    ],
 }
+# CI sets this so a missing Node or unbuilt SDK fails instead of skipping.
+REQUIRE_ALL = os.environ.get("RUNWEAVE_CONTRACT_REQUIRE_ALL") == "1"
 TERMINAL = {"SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"}
 
 
@@ -54,6 +62,14 @@ def _start(command: list[str]) -> tuple[subprocess.Popen[str], str]:
 
 @pytest.fixture(scope="module", params=sorted(FIXTURES))
 def agent_url(request: pytest.FixtureRequest) -> Iterator[str]:
+    if request.param == "typescript" and not (shutil.which("node") and TYPESCRIPT_SDK.is_file()):
+        reason = (
+            "Build the TypeScript SDK: npm --prefix sdk/typescript ci "
+            "&& npm --prefix sdk/typescript run build"
+        )
+        if REQUIRE_ALL:
+            pytest.fail(reason)
+        pytest.skip(reason)
     process, url = _start(FIXTURES[request.param])
     try:
         yield url

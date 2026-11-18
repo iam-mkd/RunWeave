@@ -1130,6 +1130,35 @@ Implementation notes, pull request A (2026-11-18):
   the production build and the browser smoke test passed; all three reference
   evaluations passed (13 cases each). This milestone stays unchecked until pull
   request B.
+- Pull request A merged as #6 (a3f888a); hosted CI passed on the pull request and
+  `main`, including the contract suite and `serve-agent` on Linux and Windows.
+
+Implementation notes, pull request B (2026-11-18):
+- Test first: `sdk/typescript/test` (25 `node:test` cases mirroring the Python
+  wrapper), `tests/contract/typescript_agent.mjs` (the same fixture behavior, joined
+  to the shared suite), Vitest cases for the registration helpers, the check result
+  and the HTTP option, and a browser flow for connecting, running and removing a real
+  HTTP agent.
+- `@runweave/agent` (`sdk/typescript`, TypeScript 7 compiled with `tsc`, no runtime
+  dependencies, unpublished): `defineAgent` (validated name, version, schemas and
+  limits; optional `parseInput`/`parseOutput`), a context with `runId`, `attempt`,
+  `signal`, `remainingMs()`, `step()`, redacted `log()` and `usage()`, and
+  `serveAgents`/`createAgentHandler` (loopback only, envelope and body limits,
+  bounded concurrency, idempotent dedupe, cancellation by call or disconnect, and
+  detail-free error codes). Cancelled or timed-out runs answer at once; agent code
+  stops early only if it watches `ctx.signal`.
+- The shared contract suite runs against both SDKs (12 checks each); CI builds the
+  SDK and sets `RUNWEAVE_CONTRACT_REQUIRE_ALL=1` so a missing build fails instead of
+  skipping. A new CI job runs the SDK tests on Node 22 and 24, Linux and Windows, and
+  the dependency audit covers its tooling.
+- Connect gained the HTTP endpoint path (test the URL, see agents and conflicts,
+  register, copy the `--http-agent` startup command, run each agent). The Agents
+  screen removes runtime-registered agents after a confirming click.
+- `examples/http-agent-typescript` is a word-count agent on the SDK.
+- Validation: 25 SDK tests, the contract suite (24 checks on Python 3.11 and 3.13),
+  426 offline Python tests, Ruff, formatting and strict mypy (120 files), 60 Vitest
+  tests, the production build and the browser smoke test (no CSP violations or page
+  errors). Check this milestone off after the owner merges this pull request.
 
 ### 21. LLM proxy and fault injection
 

@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, test } from 'vitest';
-import { RunOutput, RunTimeline, SchemaForm } from '../src/screens/parts.jsx';
+import { HttpAgentCheck, RunOutput, RunTimeline, SchemaForm } from '../src/screens/parts.jsx';
+import { SetupScreen } from '../src/screens/SetupScreen.jsx';
 import { formFields } from '../src/schemaForm.js';
 
 const render = (element) => renderToStaticMarkup(element);
@@ -61,5 +62,31 @@ describe('RunOutput', () => {
     assert.match(generic, /<pre[^>]*>\{/);
     assert.match(generic, /&quot;words&quot;: 3/);
     assert.doesNotMatch(generic, /<img/);
+  });
+});
+
+describe('HttpAgentCheck', () => {
+  test('lists discovered agents, flags conflicts and escapes agent text', () => {
+    const html = render(<HttpAgentCheck result={{
+      url: 'http://127.0.0.1:9100',
+      agents: [
+        { name: 'remote-echo', version: '1.0.0', description: hostile, max_steps: 5, conflict: false },
+        { name: 'echo', version: '2', description: '', max_steps: 50, conflict: true },
+      ],
+    }} />);
+    assert.match(html, /remote-echo/);
+    assert.match(html, /1\.0\.0/);
+    assert.match(html, /Name already registered/);
+    assert.ok(!html.includes('<img'));
+    assert.match(html, /&lt;img/);
+  });
+});
+
+describe('SetupScreen', () => {
+  test('offers HTTP endpoints alongside Python callables', () => {
+    const html = render(<SetupScreen />);
+    const input = (value) => html.match(new RegExp(`<input[^>]*value="${value}"[^>]*>`))?.[0] ?? '';
+    assert.ok(input('http') && !input('http').includes('disabled'));
+    assert.ok(input('proxy').includes('disabled'));
   });
 });

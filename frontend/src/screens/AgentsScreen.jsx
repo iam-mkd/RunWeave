@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { listAgents, listRuns } from '../api.js';
+import { listAgents, listRuns, removeAgent } from '../api.js';
 import { DataTable, ErrorState, LoadingState, PageHeader, Panel, StatTile } from '../components/index.js';
 import { percent } from '../format.js';
 import { href } from '../router.js';
@@ -25,6 +25,29 @@ function relative(value) {
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.round(seconds / 60)} min ago`;
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+}
+
+// Runtime-registered HTTP agents can be removed; a second click confirms.
+function AgentActions({ agent, onRemoved }) {
+  const [confirming, setConfirming] = useState(false);
+  const [error, setError] = useState('');
+  async function remove() {
+    try {
+      await removeAgent(agent.name);
+      onRemoved(agent.name);
+    } catch (failure) {
+      setError(failure.message);
+      setConfirming(false);
+    }
+  }
+  return <div className="row">
+    <a className="button" href={href({ screen: 'new-run', params: { agent: agent.name } })} aria-label={`New run for ${agent.name}`}>New run</a>
+    {agent.removable && (confirming
+      ? <><button type="button" className="danger" onClick={remove}>Confirm remove</button>
+        <button type="button" onClick={() => setConfirming(false)}>Keep</button></>
+      : <button type="button" onClick={() => setConfirming(true)} aria-label={`Remove ${agent.name}`}>Remove</button>)}
+    {error && <span role="alert" className="field-error">{error}</span>}
+  </div>;
 }
 
 export function AgentsScreen() {
@@ -59,8 +82,8 @@ export function AgentsScreen() {
       return entry?.finished ? percent(entry.succeeded / entry.finished) : '—';
     } },
     { key: 'last', label: 'Last run', render: (agent) => relative(byAgent[agent.name]?.last) },
-    { key: 'action', label: 'Action', render: (agent) => <a className="button" href={href({ screen: 'new-run', params: { agent: agent.name } })}
-      aria-label={`New run for ${agent.name}`}>New run</a> },
+    { key: 'action', label: 'Action', render: (agent) => <AgentActions agent={agent}
+      onRemoved={(name) => setAgents((current) => current.filter((item) => item.name !== name))} /> },
   ];
 
   return <>
@@ -73,7 +96,7 @@ export function AgentsScreen() {
       <StatTile label="Active now" value={String(recent.filter((run) => !run.finished_at).length)} />
     </div>
     {!custom.length && <div className="spaced-top callout">
-      <p><strong>Only the built-in example agent is registered.</strong> Connect your own Python agent to test it here.</p>
+      <p><strong>Only the built-in example agent is registered.</strong> Connect your own agent, in Python or over HTTP, to test it here.</p>
       <a className="button" href={href({ screen: 'setup' })}>Connect your agent</a>
     </div>}
     <Panel title="All agents" id="agents" className="spaced-top">
