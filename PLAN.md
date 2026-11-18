@@ -11,6 +11,11 @@ remains unmet, hosted CI/live inference are unverified, and the coordinated shad
 candidate is blocked from promotion by its cost gate. This is a local backend
 release, not a public-production or live-model capacity claim.
 
+Milestones 17–26 plan the open-source developer platform scoped with the project
+owner on 2026-11-18: developers install RunWeave and test their own agents. These
+milestones are planned, not authorized; implement each only when the owner
+authorizes it.
+
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
 Work through the milestones in sequence, starting with milestone 1 when the
@@ -33,6 +38,16 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 14. Typed multi-agent coordination
 - [x] 15. Sandboxed code and authorized browser automation
 - [x] 16. Shadow workflow comparison and release verification
+- [ ] 17. Open-source foundation and Python 3.11+ support
+- [ ] 18. Developer UI design system and mockups
+- [ ] 19. Generic run core, Python agent adapter, and core screens
+- [ ] 20. HTTP agent adapter and TypeScript SDK
+- [ ] 21. LLM proxy and fault injection
+- [ ] 22. Testing CLI, reports, screens, and public alpha
+- [ ] 23. Approvals through the agent SDKs
+- [ ] 24. UI polish and accessibility audit
+- [ ] 25. Packaging and desktop app
+- [ ] 26. Developer documentation and framework examples
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -68,8 +83,10 @@ from provider latency, cost, and rate limits. No production incident data is nee
 
 Pin tested compatible versions as dependencies are introduced. The expanded
 platform uses PydanticAI and Pydantic Graph for agent workflows. Redis, Kafka,
-Celery, Kubernetes, and a frontend stay outside this plan until a specific
-requirement justifies them.
+Celery, and Kubernetes stay outside this plan until a specific requirement
+justifies them. The local React workspace was added after milestone 16; the
+developer platform (milestones 17–26) adds a full developer dashboard UI, a
+TypeScript SDK, and a Tauri desktop shell.
 
 ## Execution design
 1. Validate submission, check admission limits, create job ID, enqueue atomically
@@ -822,6 +839,239 @@ bindings were checked against an intercepted durable fixture. The full Python
 suite passed 257 tests with 100 opt-in database/native cases skipped. Ruff,
 formatting, strict mypy (98 files) and lock checks passed. Hosted frontend CI is
 configured but unverified. No paid model calls or database migrations ran.
+
+## Developer platform (milestones 17–26)
+
+Goal: a developer installs RunWeave, points it at an agent they already have,
+and tests it offline for free, then optionally with their own API key. Testing
+covers both reliability under load with injected faults and quality evaluation
+against their own cases. The workspace UI is a first-class way to do all of it.
+
+Scope decisions with the project owner (2026-11-18):
+
+| Decision | Choice |
+| --- | --- |
+| Test focus | Reliability/load with fault injection, and quality evaluations |
+| Agent integration | Python callable, HTTP endpoint, and LLM proxy |
+| Proxy formats | OpenAI Chat Completions, OpenAI Responses, Anthropic Messages, with streaming |
+| Advanced features | Run-level guarantees for every agent, plus approvals through the SDKs |
+| Models | Deterministic mock by default; bring-your-own API key is opt-in with a spend cap |
+| User interface | Design first, then build each screen with the milestone that feeds it; dark-first developer-tool dashboard |
+| Distribution | PyPI/uvx, Tauri desktop app, Docker Compose |
+| License and cost | Apache-2.0; free unsigned builds on GitHub Releases; free OSS signing optional later |
+| Python support | 3.11 and newer |
+| SDKs | Python and TypeScript |
+
+Non-goals for this release: consumer-subscription sign-in or storing provider
+OAuth tokens; hosting agents for third parties as a service; generic durable
+checkpoints, scoped memory, or sandboxes for external agents (they stay with the
+built-in triage workflow); a tool-call proxy; a Go SDK; live provider calls in CI.
+Developer agent code is trusted code in the developer's own environment;
+RunWeave bounds and observes it but does not sandbox it.
+
+Release v1.0 when milestones 17–26 are complete. A 0.x public alpha may ship
+after milestone 22.
+
+### 17. Open-source foundation and Python 3.11+ support
+
+- Add the Apache-2.0 LICENSE and NOTICE, CONTRIBUTING, SECURITY, and CHANGELOG.
+  Record a dependency-license audit, including Playwright and anything bundled
+  later.
+- Lower `requires-python` to `>=3.11` and mypy's target to 3.11. Replace
+  3.12+/3.13-only syntax and APIs. Confirm every locked dependency supports 3.11.
+- Add a hosted CI matrix for Python 3.11–3.13 on Linux and Windows, and run the
+  existing workflows on GitHub for the first time.
+- Commit `scripts/verify-postgres.ps1` and `scripts/verify-isolation.ps1`, which
+  the docs already reference. Align README verification notes with this plan.
+- **Done when** hosted CI passes tests, Ruff, and strict mypy on 3.11, 3.12, and
+  3.13 from a clean checkout, and the license audit is recorded.
+
+### 18. Developer UI design system and mockups
+
+- Define the information architecture: sidebar navigation for Agents, Runs,
+  Load tests, Evals, Shadow, Approvals, and Settings, plus a first-run setup flow.
+- Build a design system for a dark-first developer-tool dashboard with a light
+  theme: color, type, and spacing tokens; dense data tables; status badges;
+  timelines; chart styles; forms; empty, loading, and error states; and layouts
+  from a narrow desktop window to a wide monitor.
+- Produce clickable mockups of every screen in the table below, using realistic
+  synthetic data, and review them with the owner before screens are built.
+- Choose the chart and table approach for the existing React/Vite app. Prefer a
+  small number of maintained dependencies.
+- Set the accessibility baseline: WCAG 2.1 AA contrast in both themes, full
+  keyboard operation, visible focus, and screen-reader labels.
+
+| Screen | Purpose | Built in |
+| --- | --- | --- |
+| Agents | Registered agents, connection type, health, and active mode (mock or live, spend cap) | 19, 20 |
+| Setup | Connect a first agent without editing files, then run a smoke test | 19 |
+| Runs | Live, filterable run list with state, duration, tokens, cost, and cancel | 19 |
+| Run detail | Timeline of model and tool steps, retries, injected faults, budget use, trace, and safely rendered input/output | 19, 21 |
+| Settings | Providers, bring-your-own keys, budgets, and fault profiles | 21 |
+| Load tests | Configure concurrency, fault profile, and duration; live throughput, p95, queue depth, and errors; saved reports | 22 |
+| Evals | Datasets, per-case pass/fail with expected-versus-actual diff, and baseline comparison | 22 |
+| Shadow | Two agent versions side by side with promotion-gate results | 22 |
+| Approvals | Pending decisions with exact arguments and expiry; approve or reject | 23 |
+
+- **Done when** the owner approves the mockups and design tokens, and the token
+  set plus shared components (navigation shell, table, badge, empty/error
+  states) replace the current single-page styling with no loss of existing
+  workspace behavior.
+
+### 19. Generic run core, Python agent adapter, and core screens
+
+- Define an agent specification: name, version, input and output JSON Schemas
+  (or Pydantic models), and declared limits. Run input and output become
+  size-bounded JSON validated against that specification.
+- Replace incident-specific types in the scheduler, registry, run API, Postgres
+  storage, and telemetry with agent-neutral envelopes. Add a migration that
+  records agent identity and preserves existing rows.
+- Load a Python agent from a configured `module:callable` exposing
+  `async def run(input, ctx)`. Reject non-coroutine callables with a clear error.
+  `RunContext` exposes remaining deadline, cancellation, budget usage, the run's
+  trace span, and a redacting logger.
+- Rebuild incident triage as the built-in example agent on the same adapter. Its
+  checkpoint, approval, memory, coordination, and evaluation behavior stays intact.
+- Add a server-sent events stream for run state and step events, with a bounded
+  subscriber count, so the UI stops polling.
+- Build the Agents, Setup, Runs, and Run detail screens from the design system.
+  Run input forms are generated from the agent's input schema.
+- **Done when** a sample agent package outside `src/` runs through
+  `runweave serve --agent` and from the UI, with tests for deadlines,
+  cancellation, failure isolation, and schema rejection (422); the existing
+  triage suites and reference evaluations still pass unchanged; and browser
+  checks cover the new screens in both themes, including untrusted text.
+
+### 20. HTTP agent adapter and TypeScript SDK
+
+- Publish a versioned OpenAPI contract for calling an agent over HTTP: run ID,
+  input, deadline, and idempotency key in the request; validated output in the
+  response. Cancellation closes the request and sends a best-effort cancel call.
+- Apply existing outbound rules: loopback-only destinations by default, redirects
+  disabled, bounded responses, and classified retries only for transient errors.
+- Ship agent-side SDKs for Python and TypeScript (Node): a handler wrapper, the
+  same context fields, and schema declaration.
+- Extend the Agents and Setup screens to register HTTP agents and test their
+  connection.
+- **Done when** one contract test suite runs against Python and TypeScript sample
+  agents and covers success, timeout, cancellation, malformed and oversized
+  responses, 5xx classification, and redirect denial, and an HTTP agent can be
+  connected and run from the UI.
+
+### 21. LLM proxy and fault injection
+
+- Serve local `/v1/chat/completions`, `/v1/responses`, and Anthropic-compatible
+  `/v1/messages` endpoints, including streaming. Bind each request to a run with
+  a per-run proxy token from `RunContext` or the environment. Reject unbound
+  requests.
+- Mock mode returns deterministic scripted text and tool calls from fixtures.
+  Passthrough mode forwards to the developer's configured provider; RunWeave
+  holds the key, and agents only see their proxy token.
+- Reuse the budget ledger: reserve before forwarding, reconcile reported usage
+  (including streamed usage), and charge missing usage conservatively. Apply
+  per-provider concurrency and rate limits independently.
+- Seeded fault profiles: 429 with Retry-After, 5xx, timeouts, slow first token,
+  mid-stream disconnect, malformed tool-call JSON, unknown tool names, and
+  context-length errors. The same seed reproduces the same faults.
+- Do not log prompts or completions by default.
+- Build the Settings screen for providers, budgets, and fault profiles. Keys
+  entered in the UI go to the operating system's credential store and are never
+  returned to the browser. Show proxied model calls and injected faults in the
+  Run detail timeline.
+- **Done when** the official OpenAI and Anthropic SDKs (Python and TypeScript) and
+  at least one agent framework run unmodified against mock mode by changing only
+  their base URL, including streaming; seeded faults reproduce; budgets stop
+  overspend before forwarding; passthrough is tested against a mocked upstream
+  only; and saved keys never appear in API responses, logs, or the browser.
+
+### 22. Testing CLI, reports, screens, and public alpha
+
+- `runweave init` scaffolds a Python or TypeScript agent stub, a `runweave.toml`,
+  and a sample dataset. The config file names the agent target, schemas, limits,
+  proxy mode, fault profile, and datasets.
+- `runweave bench` moves the existing load harness into the package: concurrency
+  sweeps, fault profiles, and soak runs. Reports include hardware, configuration,
+  throughput, p50/p95/p99, queue wait, event-loop lag, memory, failure categories,
+  and tokens/estimated cost.
+- `runweave eval` runs JSONL/YAML cases with built-in assertions (schema, content,
+  tool called, canary absence, latency and cost ceilings), custom Python
+  assertions, and Pydantic Evals. It writes JSON, JUnit XML, and a readable
+  report, and exits non-zero on gate failure or regression against a baseline.
+- `runweave shadow` compares two agent versions on one dataset with the paired
+  differences and promotion gates from milestone 16.
+- Build the Load tests, Evals, and Shadow screens. The UI and CLI start the same
+  jobs and read the same saved reports. Load-test charts update live without
+  slowing the run being measured.
+- Provide an example GitHub Actions job. Publish a 0.x pre-release to PyPI with
+  Trusted Publishing, only when the owner asks.
+- **Done when** a clean machine runs `uvx runweave init`, then offline bench and
+  eval against the sample Python and TypeScript agents with no API key, from both
+  the CLI and the UI; the example CI job fails on a seeded regression; and a
+  load test with the UI open shows no measurable status-API regression.
+
+### 23. Approvals through the agent SDKs
+
+- Add `ctx.request_approval(action, arguments, expires_in)` to both SDKs. It
+  requires durable mode; memory mode rejects it with a clear error.
+- Generalize milestone 12's binding to agent-declared actions: tenant, run,
+  stable action key, argument digest, policy version, and expiry. Decisions are
+  idempotent; opposing decisions conflict.
+- RunWeave cannot checkpoint external agent code. A restarted agent that repeats
+  the same request (same action key and digest) receives the existing request or
+  decision, not a duplicate. Effect idempotency remains the agent's
+  responsibility, and the docs must say so.
+- Waiting time is excluded from the active deadline and has a separate hard
+  expiry and a bounded pending limit. Decide and document in this milestone
+  whether a waiting agent holds a worker slot.
+- Build the Approvals screen (pending inbox with exact arguments and expiry) and
+  add `runweave approvals` to the CLI.
+- **Done when** both SDKs pass approve, reject, expiry, cancellation,
+  duplicate/concurrent decision, and restart-deduplication tests on disposable
+  PostgreSQL, and browser checks cover approving and rejecting from the UI.
+
+### 24. UI polish and accessibility audit
+
+- Review every screen against the approved mockups. Fix inconsistencies in
+  spacing, states, copy, and navigation.
+- Run a WCAG 2.1 AA audit in both themes: contrast, keyboard paths, focus order,
+  screen-reader labels, and reduced motion.
+- Check performance with large data: thousands of runs, long timelines, and big
+  eval reports. Use pagination or virtualization where needed.
+- Refresh `docs/images` screenshots for both themes.
+- **Done when** the audit has no open AA failures, large-data checks stay
+  responsive, and the owner signs off on the finished UI.
+
+### 25. Packaging and desktop app
+
+- The wheel bundles the built UI so `uvx runweave` serves it. Publish the
+  TypeScript SDK to npm and a service image to GHCR, with a Docker Compose file
+  that includes PostgreSQL.
+- Build a Tauri desktop app for Windows, macOS, and Linux around the React UI:
+  - a frozen Python sidecar for the service;
+  - portable PostgreSQL in the user's app-data folder, bound to loopback with a
+    generated password and clean shutdown;
+  - a subprocess bridge that runs Python-callable agents with the developer's
+    selected interpreter or virtual environment;
+  - HTTP agents and the proxy connect directly.
+- Build artifacts on GitHub Actions and attach them to GitHub Releases with
+  SHA-256 checksums and an SBOM. Ship unsigned at first, with documented
+  first-launch steps; free open-source signing can follow. Auto-update is off by
+  default. Keep loopback bindings and Host/origin checks from the workspace.
+- **Done when** clean Windows, macOS, and Linux runners install from release
+  artifacts, launch, run offline bench and eval against the sample agents,
+  complete an approval, and uninstall with no processes left running; the
+  Compose path is verified separately.
+
+### 26. Developer documentation and framework examples
+
+- Write a five-minute quickstart with no API key, plus concepts, configuration
+  and CLI references, the HTTP contract, a proxy guide, the fault catalog, a UI
+  tour, how to read reports, approvals, bring-your-own-key and budgets, limits (a
+  mock benchmark is not provider capacity), and troubleshooting.
+- Examples: plain Python, OpenAI Agents SDK, Claude Agent SDK, LangGraph, and a
+  TypeScript agent. CI runs each in mock mode.
+- **Done when** every example passes offline in CI and a recorded dry run shows
+  a new developer completing the quickstart from the docs alone.
 
 ### PydanticAI references
 

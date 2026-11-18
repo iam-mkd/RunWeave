@@ -5,11 +5,20 @@ Build a FastAPI service that runs 100+ concurrent I/O-bound agent runs with
 bounded resource use, non-blocking tools, observable execution, and explicit
 failure handling. Read PLAN.md before implementation.
 
-Milestones 1 through 6 implementation are authorized. Work in small, reviewable milestones
-and follow the accepted scope and completion criteria in PLAN.md.
+The next phase is an open-source (Apache-2.0) developer platform: developers
+install RunWeave and test their own agents for reliability under load, injected
+faults, and evaluation quality.
+
+Milestones 1 through 16 and the local React workspace are implemented. Milestones
+17 through 26 (developer platform) are planned in PLAN.md and are not yet
+authorized; implement each only when the user authorizes it. Work in small,
+reviewable milestones and follow the accepted scope and completion criteria in
+PLAN.md.
 
 ## Proposed stack
-- Python 3.13 baseline; FastAPI, Uvicorn, Pydantic v2, pydantic-settings.
+- Python 3.13 development baseline; milestone 17 widens support to 3.11+. After
+  that, avoid syntax and APIs newer than 3.11. FastAPI, Uvicorn, Pydantic v2,
+  pydantic-settings.
 - asyncio for scheduling, bounded queues, timeouts, and cancellation.
 - One shared httpx.AsyncClient per application process.
 - uv for environment management and locking; Ruff and mypy for static checks.
@@ -17,6 +26,10 @@ and follow the accepted scope and completion criteria in PLAN.md.
 - Prometheus metrics, structured JSON logs, OpenTelemetry traces.
 - PostgreSQL and async SQLAlchemy/Alembic only in the durable milestone.
 - Docker for packaging; local mock tools must work without paid credentials.
+- React/Vite for the workspace UI. From milestone 18, build screens only from the
+  approved design system (dark-first developer dashboard with a light theme,
+  WCAG 2.1 AA). From milestone 20, a TypeScript (Node) agent SDK; from milestone
+  25, a Tauri desktop shell with a Python sidecar.
 
 Resolve compatible dependency versions and commit the lockfile when scaffolding.
 Use the built-in Windows asyncio loop; do not require uvloop.
@@ -66,6 +79,13 @@ Use the built-in Windows asyncio loop; do not require uvloop.
 - Start with a deterministic fake model and tools; then add a provider adapter
   supporting validated structured tool calls.
 - Keep the orchestrator independent of LangChain/LangGraph and any provider SDK.
+  Framework examples may use them; the core must not.
+- Developers' agents connect through the Python callable, HTTP, and LLM proxy
+  boundaries. Treat their code as trusted local code that RunWeave bounds and
+  observes but does not sandbox.
+- The deterministic mock model is the default. Live models use bring-your-own
+  API keys with explicit opt-in and a spend cap. Never support consumer
+  subscription sign-in or store provider OAuth tokens.
 - Register typed tools explicitly. Validate model outputs and tool arguments;
   enforce step/token budgets and tool permissions before execution.
 - Treat prompts and retrieved content as untrusted data. Never expose arbitrary
@@ -100,4 +120,5 @@ Use the built-in Windows asyncio loop; do not require uvloop.
 - Keep README and PLAN.md aligned with implemented guarantees and limitations.
 - Avoid unrelated changes and new infrastructure without a clear requirement.
 - Do not publish, deploy, send messages, or spend on provider calls unless asked.
+  This includes PyPI, npm, GHCR, and GitHub Releases uploads.
 - Do not spawn sub-agents unless the user explicitly requests delegation.
