@@ -1043,6 +1043,30 @@ Implementation notes, pull request A (2026-11-18):
   Offline suites passed on Python 3.11 and 3.12 (298 each). Ruff, formatting and
   strict mypy (111 files) passed. The workspace browser smoke test passed
   unchanged. Pull request B (screens) follows; this milestone stays unchecked.
+- Pull request A merged as #4 (7d82029) after two CI fixes: listing ties now keep
+  admission order (Windows clocks gave equal timestamps), and a 50 ms scheduler
+  deadline test gained headroom for loaded runners.
+
+Implementation notes, pull request B (2026-11-18):
+- Test first: Vitest suites for hash routing (validated IDs and filters, legacy
+  `?run=` links), the schema-to-form mapping (Pydantic `$ref`/`anyOf`, enums,
+  numbers, lists, nested JSON, coercion and errors), the SSE parser and streaming
+  client, and the form, timeline and output components; a Python assertion that
+  snapshots carry `input` and listings do not.
+- Screens: Agents, Connect (startup-only registration: generates the command,
+  detects the agent after restart, links to a smoke test), Runs (server history,
+  filters in the URL, open by ID, older pages), New run (generated form, raw JSON
+  fallback, triage durable options only when durable) and Run detail (server-sent
+  updates with polling fallback, timeline, output, input, cancel, re-run,
+  approvals). HTML `pattern` is applied only when the browser accepts the schema
+  regex; server validation errors are mapped back onto fields.
+- Browser-local recent run IDs were removed; history now comes from the server.
+- Validation: 57 Vitest tests, production build, the rewritten browser smoke test
+  against a real offline server with the sample agent (all previous scenarios plus
+  generated forms, SDK timeline and re-run, setup detection and both themes; no CSP
+  violations or page errors), the prototype check, 299 offline Python tests, Ruff,
+  strict mypy (111 files), `npm audit --omit=dev` (0 vulnerabilities), and all three
+  reference evaluations (13 cases each, every assertion passing).
 
 ### 20. HTTP agent adapter and TypeScript SDK
 

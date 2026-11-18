@@ -36,8 +36,8 @@ A persistent left sidebar on wide screens; a top bar with a menu button below
 | Settings | Providers, keys, budgets, fault profiles, theme | 21 |
 
 First run shows the Setup flow (connect an agent, run a smoke test) instead of
-an empty Agents page. The production navigation lists only sections that exist;
-until milestone 19 that is the built-in incident-triage workspace under Runs.
+an empty Agents page. The production navigation lists only sections that exist:
+Agents and Runs since milestone 19.
 
 ## Tokens
 

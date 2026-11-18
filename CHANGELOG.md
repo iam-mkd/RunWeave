@@ -24,6 +24,11 @@ All notable changes to RunWeave are recorded here. The format follows
   `GET /v1/runs/{id}/events` (bounded server-sent events).
 - Run snapshots include `agent`, `agent_version` and `steps`.
 - Migration `0007_generic_agents` (agent identity, step timeline, owner index).
+- Workspace screens for any agent: Agents, Connect (startup-only registration with
+  detection and smoke test), Runs (server-side history with filters), New run (form
+  generated from the agent's input schema) and Run detail (live server-sent updates
+  with polling fallback, timeline, output, input, cancel, re-run, approvals).
+- Run snapshots include the validated `input`; run listings do not.
 
 - Apache-2.0 LICENSE and NOTICE, CONTRIBUTING, SECURITY, and this changelog.
 - Dependency license audit in `docs/licenses.md`.
@@ -36,6 +41,8 @@ All notable changes to RunWeave are recorded here. The format follows
 
 - The incident-triage workspace uses the new navigation shell and components;
   behavior is unchanged.
+- The workspace no longer keeps recent run IDs in browser storage; history comes from
+  the server. Screens use hash links (`#/runs/<id>`); old `?run=` links still work.
 - `POST /v1/runs` accepts `{"agent", "input"}`; the incident body still runs the
   built-in `incident-triage` agent. Snapshot `result` is now plain JSON for every agent.
 - Python support widened from 3.13 only to 3.11 and newer. Ruff and mypy now
