@@ -20,6 +20,8 @@ from runweave.api.runs import router as runs_router
 from runweave.core.runtime import open_runtime
 from runweave.core.settings import Settings
 from runweave.identity import IdentityProvider
+from runweave.proxy.mock import MockModel, load_fixtures
+from runweave.proxy.router import router as proxy_router
 from runweave.security import PolicyDenied
 from runweave.storage.engine import StorageUnavailable
 
@@ -52,7 +54,13 @@ def create_app(
             app.state.runtime = None
 
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
-    app.add_middleware(RequestBodyLimit, runs_max_bytes=config.run_request_max_bytes)
+    app.add_middleware(
+        RequestBodyLimit,
+        runs_max_bytes=config.run_request_max_bytes,
+        proxy_max_bytes=config.proxy_request_max_bytes,
+    )
+    app.state.proxy_mock = MockModel(load_fixtures(config.proxy_mock_fixtures))
+    app.state.proxy_default_max_tokens = config.proxy_default_max_tokens
     app.state.identity_provider = IdentityProvider(config)
     app.state.http_agent_max_registered = config.http_agent_max_registered
     app.state.event_streams = EventStreams(
@@ -86,6 +94,7 @@ def create_app(
     app.include_router(health_router)
     app.include_router(runs_router)
     app.include_router(agents_router)
+    app.include_router(proxy_router)
     app.include_router(approvals_router)
     app.include_router(memory_router)
     app.include_router(metrics_router)

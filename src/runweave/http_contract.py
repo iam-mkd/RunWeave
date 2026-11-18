@@ -45,12 +45,23 @@ class Manifest(_Message):
     agents: list[AgentDescriptor] = Field(min_length=1, max_length=MAX_AGENTS)
 
 
+class ProxyBinding(_Message):
+    """The run's LLM proxy binding: use `token` as the API key with these base URLs."""
+
+    token: str = Field(pattern=r"^rwp_[A-Za-z0-9_-]{20,200}$")
+    openai_base_url: str = Field(max_length=2048)
+    anthropic_base_url: str = Field(max_length=2048)
+
+
 class RunRequest(_Message):
     run_id: UUID
     attempt: int = Field(ge=1, le=1000, description="2+ when RunWeave re-runs after lease loss")
     input: dict[str, Any]
     deadline_ms: int = Field(
         ge=1, le=MAX_DEADLINE_MS, description="Milliseconds left in the run's deadline"
+    )
+    proxy: ProxyBinding | None = Field(
+        default=None, description="Present when RunWeave's LLM proxy is available to the run"
     )
 
 
@@ -85,6 +96,7 @@ def openapi_document() -> dict[str, Any]:
     models: list[type[BaseModel]] = [
         AgentDescriptor,
         Manifest,
+        ProxyBinding,
         RunRequest,
         StepRecord,
         RunResponse,

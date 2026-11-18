@@ -54,6 +54,12 @@ const notObject = defineAgent({
   name: 'not-object', version: '1', inputSchema, outputSchema,
   async run() { return 'text'; },
 });
+const probe = defineAgent({
+  name: 'proxy-probe', version: '1', inputSchema, outputSchema,
+  async run(input, ctx) {
+    return { proxy: ctx.proxy, env: ctx.proxy ? ctx.proxy.env() : null };
+  },
+});
 const steps = defineAgent({
   name: 'steps', version: '1', maxSteps: 1, inputSchema, outputSchema,
   async run(input, ctx) {
@@ -68,7 +74,7 @@ let base;
 const logs = [];
 
 before(async () => {
-  server = await serveAgents([echo, crash, classified, notObject, steps], {
+  server = await serveAgents([echo, crash, classified, notObject, steps, probe], {
     port: 0, protectedValues: ['protected-value'], maxBodyBytes: 2048, maxConcurrency: 2,
     logger: (line) => logs.push(line),
   });
@@ -224,6 +230,22 @@ describe('contract', () => {
     assert.equal(busy.status, 503);
     assert.equal(busy.headers.get('retry-after'), '1');
     assert.equal(busy.body.error.code, 'AGENT_BUSY');
+  });
+
+  test('the proxy binding reaches the context only when RunWeave sends it', async () => {
+    const binding = { token: `rwp_${'a'.repeat(43)}`, openai_base_url: 'http://127.0.0.1:8000/llm/v1', anthropic_base_url: 'http://127.0.0.1:8000/llm' };
+    const bound = await post('proxy-probe', envelope({ proxy: binding }));
+    const unbound = await post('proxy-probe', envelope());
+    assert.deepEqual(bound.body.output.proxy, {
+      token: binding.token, openaiBaseUrl: binding.openai_base_url, anthropicBaseUrl: binding.anthropic_base_url,
+    });
+    assert.deepEqual(bound.body.output.env, {
+      OPENAI_BASE_URL: binding.openai_base_url, OPENAI_API_KEY: binding.token,
+      ANTHROPIC_BASE_URL: binding.anthropic_base_url, ANTHROPIC_API_KEY: binding.token,
+    });
+    assert.equal(unbound.body.output.proxy, null);
+    const bad = await post('proxy-probe', envelope({ proxy: { token: 'x' } }));
+    assert.equal(bad.status, 400);
   });
 
   test('unknown paths and methods are not found', async () => {

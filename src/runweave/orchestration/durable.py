@@ -24,6 +24,7 @@ from runweave.orchestration.admission import (
     resolve,
 )
 from runweave.orchestration.models import RunError, RunSnapshot, RunStatus, RunSummary
+from runweave.proxy.bindings import ProxyBindings, bind_run
 from runweave.sdk import AgentError, AgentUnavailable, RunContext
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
 from runweave.steps import step_scope
@@ -44,7 +45,9 @@ class DurableScheduler:
         settings: Settings,
         telemetry: Telemetry,
         content_policy: ContentPolicy | None = None,
+        proxy: ProxyBindings | None = None,
     ) -> None:
+        self._proxy = proxy
         self._store = store
         self._agents = (
             agents
@@ -263,16 +266,11 @@ class DurableScheduler:
         except (ValidationError, SchemaViolation):
             # A redeployed agent no longer accepts input admitted by an earlier version.
             raise AgentInputIncompatible() from None
-        context = RunContext(
-            run_id=claim.snapshot.id,
-            agent=claim.snapshot.agent,
-            attempt=claim.attempt,
-            max_steps=definition.info.max_steps,
-            content_policy=self._content_policy,
-        )
+        ledger = self._store.ledger(claim)
+        steps = self._store.steps(claim)
         with (
             principal_scope(authorize()),
-            budget_scope(self._store.ledger(claim)),
+            budget_scope(ledger),
             checkpoint_scope(self._store.checkpoints(claim)),
             memory_source_scope(self.memory, authorize),
             ticket_scope(
@@ -284,9 +282,26 @@ class DurableScheduler:
                     content_policy=self._content_policy,
                 )
             ),
-            step_scope(self._store.steps(claim)),
+            step_scope(steps),
+            bind_run(
+                self._proxy,
+                run_id=claim.snapshot.id,
+                attempt=claim.attempt,
+                agent=claim.snapshot.agent,
+                ledger=ledger,
+                steps=steps,
+                expires_at=deadline,
+            ) as proxy,
             self._telemetry.span("agent.run", run_id=claim.snapshot.id),
         ):
+            context = RunContext(
+                run_id=claim.snapshot.id,
+                agent=claim.snapshot.agent,
+                attempt=claim.attempt,
+                max_steps=definition.info.max_steps,
+                content_policy=self._content_policy,
+                proxy=proxy,
+            )
             async with deadline_scope(deadline, RUN_DEADLINE):
                 claim.snapshot.principal.require("runs:submit")
                 self._content_policy.check(input_json(parsed))

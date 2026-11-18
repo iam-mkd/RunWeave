@@ -41,7 +41,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 17. Open-source foundation and Python 3.11+ support
 - [x] 18. Developer UI design system and mockups
 - [x] 19. Generic run core, Python agent adapter, and core screens
-- [ ] 20. HTTP agent adapter and TypeScript SDK
+- [x] 20. HTTP agent adapter and TypeScript SDK
 - [ ] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
 - [ ] 23. Approvals through the agent SDKs
@@ -1159,6 +1159,12 @@ Implementation notes, pull request B (2026-11-18):
   426 offline Python tests, Ruff, formatting and strict mypy (120 files), 60 Vitest
   tests, the production build and the browser smoke test (no CSP violations or page
   errors). Check this milestone off after the owner merges this pull request.
+- Completed 2026-11-18: the owner reviewed and merged pull requests #6 (a3f888a) and
+  #7 (merge commit 8af40f7). Hosted CI passed on both pull requests: the Python
+  3.11–3.13 Linux/Windows jobs (with the contract suite required against both SDKs),
+  the TypeScript SDK job on Node 22 and 24 (Linux and Windows), the dependency audit,
+  the offline evaluation workflow with its PostgreSQL suite, and the React workspace
+  checks including the HTTP connect/run/remove browser flow.
 
 ### 21. LLM proxy and fault injection
 
@@ -1185,6 +1191,42 @@ Implementation notes, pull request B (2026-11-18):
   their base URL, including streaming; seeded faults reproduce; budgets stop
   overspend before forwarding; passthrough is tested against a mocked upstream
   only; and saved keys never appear in API responses, logs, or the browser.
+
+Decisions with the owner (2026-11-18): deliver in three pull requests (A: proxy
+endpoints with streaming, per-run proxy tokens, mock mode, budgets and timeline
+steps, proven with the official SDKs and PydanticAI; B: seeded fault profiles,
+passthrough against a mocked upstream, provider limits; C: Settings screen, OS
+credential store, model calls and faults in Run detail). Keys entered in the UI are
+stored with the `keyring` library (Windows Credential Manager, macOS Keychain, Linux
+Secret Service); where no store exists, the UI points to environment variables.
+PydanticAI is the framework that proves unmodified compatibility.
+
+Implementation notes, pull request A (2026-11-18):
+- Test first: `tests/test_llm_proxy.py` (official Python SDKs and PydanticAI against
+  mock mode in process), `tests/test_llm_proxy_agents.py` (HTTP agents in Python, and
+  the official Node SDKs in `tests/proxy_compat`, over a real socket), binding tests
+  for both agent-side SDKs, and a PostgreSQL case.
+- `runweave.proxy`: `/llm/v1/chat/completions`, `/llm/v1/responses` and
+  `/llm/v1/messages`, each with streaming in the provider's own event format, tool
+  calls and usage. A separate `/llm` prefix keeps the provider paths apart from
+  RunWeave's own `/v1` API.
+- Per-attempt proxy tokens (`rwp_…`, only hashes kept) are issued by both schedulers,
+  revoked at the end of the attempt or deadline, exposed as `ctx.proxy` (with
+  `env()`), and sent to HTTP agents in an optional `proxy` field of the run request
+  (the OpenAPI contract was regenerated; the Python wrapper and the TypeScript SDK
+  expose it). Unbound requests get 401 in each provider's error format.
+- Mock mode: fixture rules (checked at startup) or a fixed default reply, usage at four
+  bytes per token, IDs derived from the run.
+- Budgets: every call reserves before it is answered and settles after; a stream cut
+  short keeps its reservation; exhausted budgets answer 402, which SDKs do not retry.
+  Each call adds a "Model call" step with sizes and counts only. Prompts and
+  completions are never logged; request bodies are bounded.
+- Finding: the current OpenAI (3.x) and Anthropic (2.x) Python SDKs are built on
+  `httpx2`, so in-process test clients use its ASGI transport.
+- Validation: the full suite with PostgreSQL 18 passed (529 passed; 14 Docker-only
+  native isolation cases skipped) with the TypeScript contract fixture and Node SDKs
+  required; 439 passed on Python 3.11. Ruff, formatting and strict mypy (127 files),
+  26 TypeScript SDK tests and the browser smoke test passed.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 

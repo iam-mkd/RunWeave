@@ -115,6 +115,33 @@
         "title": "Manifest",
         "type": "object"
       },
+      "ProxyBinding": {
+        "description": "The run's LLM proxy binding: use `token` as the API key with these base URLs.",
+        "properties": {
+          "anthropic_base_url": {
+            "maxLength": 2048,
+            "title": "Anthropic Base Url",
+            "type": "string"
+          },
+          "openai_base_url": {
+            "maxLength": 2048,
+            "title": "Openai Base Url",
+            "type": "string"
+          },
+          "token": {
+            "pattern": "^rwp_[A-Za-z0-9_-]{20,200}$",
+            "title": "Token",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "openai_base_url",
+          "anthropic_base_url"
+        ],
+        "title": "ProxyBinding",
+        "type": "object"
+      },
       "RunRequest": {
         "properties": {
           "attempt": {
@@ -135,6 +162,18 @@
             "additionalProperties": true,
             "title": "Input",
             "type": "object"
+          },
+          "proxy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProxyBinding"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Present when RunWeave's LLM proxy is available to the run"
           },
           "run_id": {
             "format": "uuid",

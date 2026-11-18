@@ -2,6 +2,7 @@ import asyncio
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
 import httpx
@@ -244,3 +245,60 @@ async def test_durable_http_agent_persists_remote_steps_and_rejects_stale_input(
     ]
     assert rejected["status"] == "FAILED"
     assert rejected["error"]["code"] == "AGENT_INPUT_INCOMPATIBLE"
+
+
+PROXY_APP: dict[str, Any] = {}
+
+
+class Prompt(BaseModel):
+    text: str
+
+
+class Reply(BaseModel):
+    text: str
+
+
+@agent(name="durable-proxy", version="1", input=Prompt, output=Reply)
+async def durable_proxy(input: Prompt, ctx: RunContext) -> Reply:
+    assert ctx.proxy is not None
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=PROXY_APP["app"]), base_url="http://test"
+    ) as http:
+        response = await http.post(
+            "/llm/v1/chat/completions",
+            json={"model": "m", "messages": [{"role": "user", "content": input.text}]},
+            headers={"Authorization": f"Bearer {ctx.proxy.token}"},
+        )
+    response.raise_for_status()
+    return Reply(text=response.json()["choices"][0]["message"]["content"])
+
+
+@pytest.mark.asyncio
+async def test_durable_runs_meter_proxied_model_calls(
+    schema: tuple[str, str, AsyncEngine], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dsn, name, engine = schema
+    await apply(engine)
+    monkeypatch.setattr(
+        "runweave.core.runtime.postgres_engine", lambda settings: engine_for(dsn, name)
+    )
+    settings = Settings(database_url=SecretStr(dsn), worker_count=1, db_poll_seconds=0.05)
+    app = create_app(
+        settings,
+        agents=[PythonAgent.from_function(durable_proxy, target="tests.test_postgres_agents:p")],
+    )
+    PROXY_APP["app"] = app
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        response = await client.post(
+            "/v1/runs", json={"agent": "durable-proxy", "input": {"text": "hello"}}
+        )
+        status_url = response.json()["status_url"]
+        await client.get(f"{status_url}/events")
+        run = (await client.get(status_url)).json()
+    assert run["status"] == "SUCCEEDED", run
+    assert run["result"]["text"] == "This is a deterministic RunWeave mock response."
+    assert run["usage"]["requests"] == 1 and run["usage"]["input_tokens"] > 0
+    assert [(s["title"], s["status"]) for s in run["steps"]] == [("Model call", "succeeded")]

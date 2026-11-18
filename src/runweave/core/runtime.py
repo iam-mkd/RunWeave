@@ -22,6 +22,7 @@ from runweave.orchestration.backend import MemoryBackend, RunBackend
 from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
 from runweave.orchestration.scheduler import Scheduler
+from runweave.proxy.bindings import ProxyBindings
 from runweave.security import ContentPolicy
 from runweave.storage.engine import postgres_engine
 from runweave.storage.postgres import PostgresRuns
@@ -42,6 +43,7 @@ class Runtime:
     isolated: IsolatedTools | None = None
     agents: AgentCatalog | None = None
     connector: HttpAgentConnector | None = None
+    proxy: ProxyBindings | None = None
 
 
 def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
@@ -205,6 +207,7 @@ async def open_runtime(
                 settings.http_agents if http_agents is None else http_agents,
                 limit=settings.http_agent_max_registered,
             )
+            proxy = ProxyBindings(settings.proxy_public_url)
             catalog = AgentCatalog.with_triage(
                 run_executor,
                 version=settings.agent_workflow if executor is None else "custom",
@@ -215,7 +218,12 @@ async def open_runtime(
                 engine = postgres_engine(settings)
                 try:
                     durable = DurableScheduler(
-                        PostgresRuns(engine), catalog, settings, telemetry, content_policy
+                        PostgresRuns(engine),
+                        catalog,
+                        settings,
+                        telemetry,
+                        content_policy,
+                        proxy=proxy,
                     )
                     async with durable.running():
                         yield Runtime(
@@ -227,6 +235,7 @@ async def open_runtime(
                             isolated,
                             catalog,
                             connector,
+                            proxy,
                         )
                 finally:
                     await engine.dispose()
@@ -247,6 +256,7 @@ async def open_runtime(
                     content_policy=content_policy,
                     budget_policy=settings.budget_policy(),
                     output_max_bytes=settings.agent_output_max_bytes,
+                    proxy=proxy,
                 )
                 async with scheduler.running():
                     yield Runtime(
@@ -258,6 +268,7 @@ async def open_runtime(
                         isolated,
                         catalog,
                         connector,
+                        proxy,
                     )
         finally:
             await isolated.close()

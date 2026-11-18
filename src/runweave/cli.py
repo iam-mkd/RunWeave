@@ -44,6 +44,8 @@ def serve(args: argparse.Namespace) -> int:
 
     try:
         config = _settings(args.demo)
+        if "proxy_public_url" not in config.model_fields_set:
+            config.proxy_public_url = f"http://{LOOPBACK}:{args.port}"
         agents = load_python_agents([*config.agents, *args.agent])
         http_agents = [
             *config.http_agents,

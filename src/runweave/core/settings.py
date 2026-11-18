@@ -1,4 +1,5 @@
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated, Literal
 
 from pydantic import Field, SecretStr, StringConstraints, model_validator
@@ -91,6 +92,13 @@ class Settings(BaseSettings):
     http_agent_retry_max_delay_seconds: float = Field(default=2.0, gt=0, le=30)
     http_agent_response_max_bytes: int = Field(default=1048576, ge=4096, le=8388608)
     http_agent_connect_timeout_seconds: float = Field(default=2.0, gt=0, le=30)
+    # LLM proxy: the URL agents use to reach this server (serve sets it from --port).
+    proxy_public_url: str = Field(
+        default="http://127.0.0.1:8000", pattern=r"^https?://[^\s/?#]+$", max_length=200
+    )
+    proxy_mock_fixtures: Path | None = None
+    proxy_request_max_bytes: int = Field(default=1048576, ge=4096, le=16777216)
+    proxy_default_max_tokens: int = Field(default=1024, ge=1, le=100000)
     run_request_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     agent_output_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     event_stream_max_subscribers: int = Field(default=64, ge=1, le=1024)

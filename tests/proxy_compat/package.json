@@ -1,0 +1,14 @@
+{
+  "name": "runweave-proxy-compat",
+  "private": true,
+  "type": "module",
+  "description": "Test-only HTTP agent that drives the official OpenAI and Anthropic SDKs through the RunWeave proxy",
+  "engines": {
+    "node": "^22.12.0 || >=24"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "1.4.0",
+    "@runweave/agent": "file:../../sdk/typescript",
+    "openai": "7.49.0"
+  }
+}

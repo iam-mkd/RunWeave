@@ -35,7 +35,14 @@ from runweave.http_contract import (
     RunRequest,
     StepRecord,
 )
-from runweave.sdk import AgentError, AgentFunction, AgentSpec, RunContext, validation_errors
+from runweave.sdk import (
+    AgentError,
+    AgentFunction,
+    AgentSpec,
+    ModelProxy,
+    RunContext,
+    validation_errors,
+)
 from runweave.security import ContentPolicy
 from runweave.steps import STEP_EVENT_CAP, StepEvent, step_scope
 
@@ -264,6 +271,13 @@ class AgentServer:
             attempt=envelope.attempt,
             max_steps=spec.max_steps,
             content_policy=self._policy,
+            proxy=None
+            if envelope.proxy is None
+            else ModelProxy(
+                token=envelope.proxy.token,
+                openai_base_url=envelope.proxy.openai_base_url,
+                anthropic_base_url=envelope.proxy.anthropic_base_url,
+            ),
         )
         expires = asyncio.get_running_loop().time() + envelope.deadline_ms / 1000
         try:

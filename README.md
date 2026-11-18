@@ -46,6 +46,11 @@ connect them from the workspace (Agents → Connect agent → HTTP endpoint). Se
 agents with `runweave serve-agent mypkg.agent:run`, and Node agents with the TypeScript SDK
 in `sdk/typescript`. See [HTTP agents](docs/http-agents.md).
 
+Point your model SDK at RunWeave's LLM proxy (`ctx.proxy`) and every call is metered,
+budgeted and shown on the run timeline. It speaks OpenAI Chat Completions, OpenAI
+Responses and Anthropic Messages, streaming included, and answers deterministically
+offline by default. See [LLM proxy](docs/llm-proxy.md).
+
 ## Backend quick start (PowerShell)
 
 The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),

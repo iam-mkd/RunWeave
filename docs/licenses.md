@@ -46,7 +46,9 @@ Refresh it whenever dependencies change and before every release.
 ## Development tooling (not distributed)
 
 pytest, pytest-asyncio, pluggy, iniconfig, packaging, mypy, mypy-extensions,
-librt, pathspec, ruff, psutil, truststore, types-jsonschema. Licenses: MIT, Apache-2.0,
+librt, pathspec, ruff, psutil, truststore, types-jsonschema, and the official model
+SDKs used by the proxy compatibility tests: openai and anthropic (Apache-2.0), with
+jiter, docstring-parser and sniffio (MIT; sniffio MIT OR Apache-2.0). Licenses: MIT, Apache-2.0,
 BSD-3-Clause, and MPL-2.0 (pathspec).
 
 ## Frontend (`frontend/package-lock.json`)
@@ -65,6 +67,16 @@ The SDK has no runtime dependencies. Its build tooling is not distributed.
 | --- | --- | --- |
 | typescript (and its platform binaries) | Build tooling | Apache-2.0 |
 | @types/node, undici-types | Type declarations | MIT |
+
+## Proxy compatibility tests (`tests/proxy_compat/package-lock.json`)
+
+Test-only; not distributed.
+
+| Package | License |
+| --- | --- |
+| openai, @anthropic-ai/sdk, @opentelemetry/api | Apache-2.0 |
+| @babel/runtime, json-schema-to-ts, ts-algebra, standardwebhooks, @stablelib/base64 | MIT |
+| fast-sha256 | Unlicense |
 
 ## Container base images
 

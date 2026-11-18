@@ -12,14 +12,19 @@ class RequestBodyLimit:
     is arbitrary JSON.
     """
 
-    def __init__(self, app: ASGIApp, *, runs_max_bytes: int) -> None:
+    def __init__(
+        self, app: ASGIApp, *, runs_max_bytes: int, proxy_max_bytes: int = 1048576
+    ) -> None:
         self.app = app
         self._runs_max_bytes = runs_max_bytes
+        self._proxy_max_bytes = proxy_max_bytes
 
     def _limit(self, scope: Scope) -> tuple[int, dict[str, object]] | None:
         path = scope.get("path", "")
         if path.startswith("/v1/tools/"):
             return TOOL_INPUT_LIMIT, {"code": "TOOL_INPUT_LIMIT"}
+        if scope.get("method") == "POST" and path.startswith("/llm/"):
+            return self._proxy_max_bytes, {"code": "INPUT_TOO_LARGE"}
         if scope.get("method") == "POST" and path.startswith("/v1/agents"):
             return AGENT_REGISTRATION_LIMIT, {"code": "INPUT_TOO_LARGE"}
         if scope.get("method") == "POST" and path.rstrip("/") == "/v1/runs":
