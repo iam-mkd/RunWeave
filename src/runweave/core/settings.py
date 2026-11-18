@@ -1,12 +1,20 @@
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, StringConstraints, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from runweave.agents.provider_wire import Provider
 from runweave.budgets import BudgetPolicy
 from runweave.security import IdentityName, Principal
+
+AgentTarget = Annotated[
+    str,
+    StringConstraints(
+        pattern=r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*$",
+        max_length=200,
+    ),
+]
 
 
 class Settings(BaseSettings):
@@ -59,6 +67,13 @@ class Settings(BaseSettings):
     )
     model_price_version: str = Field(default="", max_length=100)
     agent_workflow: Literal["baseline", "pydanticai", "coordinated"] = "baseline"
+    # Python agents to import at startup as module:attribute. Never loaded from requests.
+    agents: tuple[AgentTarget, ...] = Field(default=(), max_length=32)
+    run_request_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
+    agent_output_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
+    event_stream_max_subscribers: int = Field(default=64, ge=1, le=1024)
+    event_stream_max_seconds: float = Field(default=60, ge=1, le=600)
+    event_stream_heartbeat_seconds: float = Field(default=15, ge=0.1, le=60)
     coordination_concurrency: Literal[1, 2] = 2
     isolated_tools_enabled: bool = False
     isolated_tools_concurrency: int = Field(default=2, ge=1, le=8)

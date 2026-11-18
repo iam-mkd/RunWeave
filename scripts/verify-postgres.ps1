@@ -2,7 +2,9 @@
 param(
     [string] $PostgresBin = 'C:\Program Files\PostgreSQL\18\bin',
     [switch] $ReleaseOnly,
-    [string] $ReleaseReport = ''
+    [string] $ReleaseReport = '',
+    # An existing interpreter with the durable dependencies; skips uv sync when set.
+    [string] $Python = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -33,8 +35,12 @@ $created = $false
 
 Push-Location $project
 try {
-    Invoke-Checked uv @('sync', '--locked', '--no-editable', '--extra', 'workflow', '--extra', 'eval')
-    $python = (Resolve-Path '.venv/Scripts/python.exe').Path
+    if ($Python) {
+        $python = (Resolve-Path -LiteralPath $Python).Path
+    } else {
+        Invoke-Checked uv @('sync', '--locked', '--no-editable', '--extra', 'workflow', '--extra', 'eval')
+        $python = (Resolve-Path '.venv/Scripts/python.exe').Path
+    }
     Invoke-Checked uv @('pip', 'install', '--python', $python, '-r', 'requirements-durable.txt')
 
     New-Item -ItemType Directory -Path $testRoot | Out-Null
@@ -77,7 +83,8 @@ try {
     $testFiles = @('tests/test_postgres_release.py')
     if (-not $ReleaseOnly) {
         $testFiles += @('tests/test_postgres_recovery.py', 'tests/test_postgres_checkpoints.py',
-            'tests/test_postgres_approvals.py', 'tests/test_postgres_memory.py', 'tests/test_postgres_coordination.py')
+            'tests/test_postgres_approvals.py', 'tests/test_postgres_memory.py', 'tests/test_postgres_coordination.py',
+            'tests/test_postgres_agents.py')
     }
     Invoke-Checked $python (@('-m', 'pytest') + $testFiles + @('-q', '--tb=short'))
 } finally {

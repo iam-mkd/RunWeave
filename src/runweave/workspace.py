@@ -1,7 +1,7 @@
-import argparse
+import sys
+from collections.abc import Sequence
 from pathlib import Path
 
-import uvicorn
 from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +9,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from runweave.agents.catalog import RegisteredAgent
 from runweave.agents.provider_wire import Provider
 from runweave.app import create_app
 from runweave.core.settings import Settings
@@ -40,13 +41,15 @@ class LocalBrowserBoundary:
         await self.app(scope, receive, send)
 
 
-def create_workspace(config: Settings, assets: Path) -> FastAPI:
+def create_workspace(
+    config: Settings, assets: Path, *, agents: Sequence[RegisteredAgent] | None = None
+) -> FastAPI:
     if config.auth_mode != "local":
         raise ValueError("The local workspace requires RUNWEAVE_AUTH_MODE=local")
     if not (assets / "index.html").is_file() or not (assets / "assets").is_dir():
         raise ValueError("Build the workspace first with npm --prefix frontend run build")
 
-    app = create_app(config)
+    app = create_app(config, agents=agents)
     app.add_middleware(LocalBrowserBoundary)
     app.add_middleware(TrustedHostMiddleware, allowed_hosts=["127.0.0.1"])
     app.mount("/assets", StaticFiles(directory=assets / "assets"), name="workspace-assets")
@@ -79,33 +82,10 @@ def create_workspace(config: Settings, assets: Path) -> FastAPI:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Start the local RunWeave workspace")
-    parser.add_argument(
-        "--demo",
-        action="store_true",
-        help="Use offline inference and in-memory runs, ignoring .env",
-    )
-    parser.add_argument("--port", type=int, default=8000)
-    args = parser.parse_args()
-    if not 1 <= args.port <= 65535:
-        parser.error("Use a port between 1 and 65535")
-    try:
-        config = (
-            Settings(  # type: ignore[call-arg]
-                _env_file=None,
-                model_provider="fake",
-                auth_mode="local",
-                database_url=None,
-                isolated_tools_enabled=False,
-                agent_workflow="baseline",
-            )
-            if args.demo
-            else Settings()
-        )
-        app = create_workspace(config, Path("frontend/dist").resolve())
-    except ValueError as error:
-        raise SystemExit(str(error)) from None
-    uvicorn.run(app, host="127.0.0.1", port=args.port, proxy_headers=False)
+    """Deprecated alias for `runweave serve`."""
+    from runweave.cli import main as cli_main
+
+    cli_main(["serve", *sys.argv[1:]])
 
 
 if __name__ == "__main__":

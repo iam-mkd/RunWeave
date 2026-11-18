@@ -1,15 +1,25 @@
 import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
+from datetime import datetime
 from uuid import UUID
 
 import httpx
 
+from runweave.agents.catalog import AgentCatalog
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.budgets import BudgetExceeded, BudgetPolicy, budget_scope
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
-from runweave.orchestration.models import RunError, RunSnapshot, RunStatus
+from runweave.orchestration.admission import (
+    AdmissionRejected,
+    Submission,
+    input_json,
+    output_json,
+    resolve,
+)
+from runweave.orchestration.models import RunError, RunSnapshot, RunStatus, RunSummary
 from runweave.orchestration.registry import RunRegistry
+from runweave.sdk import AgentError, RunContext
 from runweave.security import (
     LOCAL_PRINCIPAL,
     ContentPolicy,
@@ -17,18 +27,20 @@ from runweave.security import (
     TenantQuotaExceeded,
     principal_scope,
 )
+from runweave.steps import step_scope
+
+__all__ = ["AdmissionRejected", "Scheduler"]
 
 
-class AdmissionRejected(Exception):
-    def __init__(self, code: str) -> None:
-        self.code = code
-        super().__init__(code)
+def failure_code(exc: Exception) -> str:
+    # Only RunWeave-classified errors expose a code; arbitrary agent exceptions never do.
+    return exc.code if isinstance(exc, (BudgetExceeded, AgentError)) else "RUN_FAILED"
 
 
 class Scheduler:
     def __init__(
         self,
-        executor: AgentExecutor,
+        agents: AgentCatalog | AgentExecutor,
         registry: RunRegistry,
         *,
         worker_count: int,
@@ -39,12 +51,17 @@ class Scheduler:
         tenant_limit: int = 1000,
         content_policy: ContentPolicy | None = None,
         budget_policy: BudgetPolicy | None = None,
+        output_max_bytes: int = 65536,
     ) -> None:
         if worker_count < 1 or queue_capacity < 1 or cleanup_interval <= 0 or tenant_limit < 1:
             raise ValueError("Scheduler limits must be positive")
         if run_timeout <= 0 or shutdown_grace < 0:
             raise ValueError("Run timeout must be positive and shutdown grace nonnegative")
-        self._executor = executor
+        self._agents = (
+            agents
+            if isinstance(agents, AgentCatalog)
+            else AgentCatalog.with_triage(agents, version="custom", max_steps=200)
+        )
         self._registry = registry
         self._worker_count = worker_count
         self._cleanup_interval = cleanup_interval
@@ -60,20 +77,25 @@ class Scheduler:
         self._tenant_limit = tenant_limit
         self._content_policy = content_policy or ContentPolicy()
         self._budget_policy = budget_policy or BudgetPolicy()
+        self._output_max_bytes = output_max_bytes
 
     @property
     def ready(self) -> bool:
         return self._accepting
 
-    def submit(
-        self, incident: IncidentRequest, principal: Principal = LOCAL_PRINCIPAL
-    ) -> RunSnapshot:
+    @property
+    def agents(self) -> AgentCatalog:
+        return self._agents
+
+    def submit(self, submission: Submission, principal: Principal = LOCAL_PRINCIPAL) -> RunSnapshot:
         principal.require("runs:submit")
-        if incident.memory is not None:
-            raise AdmissionRejected("MEMORY_REQUIRES_POSTGRES")
-        if incident.create_ticket:
-            raise AdmissionRejected("DURABLE_APPROVAL_REQUIRED")
-        self._content_policy.check(incident.model_dump_json())
+        definition, parsed = resolve(self._agents, submission)
+        if isinstance(parsed, IncidentRequest):
+            if parsed.memory is not None:
+                raise AdmissionRejected("MEMORY_REQUIRES_POSTGRES")
+            if parsed.create_ticket:
+                raise AdmissionRejected("DURABLE_APPROVAL_REQUIRED")
+        self._content_policy.check(input_json(parsed))
         if not self.ready:
             self._telemetry.rejected["unavailable"] += 1
             raise AdmissionRejected("SCHEDULER_UNAVAILABLE")
@@ -85,7 +107,13 @@ class Scheduler:
         loop = asyncio.get_running_loop()
         deadline = loop.time() + self._run_timeout
         # No await between capacity check, record creation, and enqueue.
-        snapshot = self._registry.create(incident, principal, self._budget_policy)
+        snapshot = self._registry.create(
+            parsed,
+            principal,
+            self._budget_policy,
+            agent=definition.info.name,
+            agent_version=definition.info.version,
+        )
         self._queue.put_nowait(snapshot.id)
         self._queued_deadlines[snapshot.id] = loop.call_at(
             deadline, self._expire_queued, snapshot.id
@@ -105,6 +133,40 @@ class Scheduler:
             if snapshot is None or principal is None or principal.owns(snapshot.principal)
             else None
         )
+
+    def list(
+        self,
+        principal: Principal,
+        *,
+        agent: str | None = None,
+        status: RunStatus | None = None,
+        limit: int = 50,
+        before: datetime | None = None,
+    ) -> list[RunSummary]:
+        principal.require("runs:read")
+        return self._registry.list(
+            principal, agent=agent, status=status, limit=limit, before=before
+        )
+
+    async def watch(
+        self, run_id: UUID, principal: Principal, *, heartbeat: float
+    ) -> AsyncIterator[RunSnapshot | None]:
+        """Yield the snapshot, then each change until terminal; None marks a quiet interval."""
+        while True:
+            changed = self._registry.change_event(run_id)
+            snapshot = self.get(run_id, principal)
+            if snapshot is None or changed is None:
+                return
+            yield snapshot
+            if snapshot.status.terminal:
+                return
+            while True:
+                try:
+                    async with asyncio.timeout(heartbeat):
+                        await changed.wait()
+                    break
+                except TimeoutError:
+                    yield None
 
     def cancel(self, run_id: UUID, principal: Principal | None = None) -> RunSnapshot | None:
         if principal is not None:
@@ -193,11 +255,10 @@ class Scheduler:
                     if asyncio.get_running_loop().time() >= deadline:
                         self._finish_timeout(run_id, RUN_DEADLINE)
                         continue
-                    incident = self._registry.claim(run_id)
-                    if incident is None:
+                    if self._registry.claim(run_id) is None:
                         continue
                     task = asyncio.create_task(
-                        self._execute(run_id, incident, deadline), name=f"runweave-run-{run_id}"
+                        self._execute(run_id, deadline), name=f"runweave-run-{run_id}"
                     )
                     self._active[run_id] = task
                     self._telemetry.peak_runs = max(self._telemetry.peak_runs, len(self._active))
@@ -219,20 +280,33 @@ class Scheduler:
             if not self._closing:
                 self._accepting = False
 
-    async def _execute(self, run_id: UUID, incident: IncidentRequest, deadline: float) -> None:
+    async def _execute(self, run_id: UUID, deadline: float) -> None:
         try:
             snapshot = self._registry.get(run_id)
-            assert snapshot is not None
+            parsed = self._registry.input(run_id)
+            assert snapshot is not None and parsed is not None
+            definition = self._agents.get(snapshot.agent)
+            if definition is None:
+                raise AdmissionRejected("AGENT_UNAVAILABLE")
+            context = RunContext(
+                run_id=run_id,
+                agent=snapshot.agent,
+                max_steps=definition.info.max_steps,
+                content_policy=self._content_policy,
+            )
             with (
                 principal_scope(snapshot.principal),
                 budget_scope(self._registry.budget(run_id)),
+                step_scope(self._registry.step_log(run_id)),
                 self._telemetry.span("agent.run", run_id=run_id),
             ):
                 async with deadline_scope(deadline, RUN_DEADLINE):
                     snapshot.principal.require("runs:submit")
-                    self._content_policy.check(incident.model_dump_json())
-                    result = await self._executor.run(incident)
-                    self._content_policy.check(result.model_dump_json())
+                    self._content_policy.check(input_json(parsed))
+                    output = await definition.run(parsed, context)
+                    result = output_json(
+                        output, max_bytes=self._output_max_bytes, policy=self._content_policy
+                    )
         except DeadlineExceeded as exc:
             self._finish_timeout(run_id, exc.code)
         except asyncio.CancelledError:
@@ -249,13 +323,11 @@ class Scheduler:
             else:
                 category = "execution"
             self._telemetry.failure_kinds[category] += 1
+            code = exc.code if isinstance(exc, AdmissionRejected) else failure_code(exc)
             self._registry.finish(
                 run_id,
                 RunStatus.FAILED,
-                error=RunError(
-                    code=exc.code if isinstance(exc, BudgetExceeded) else "RUN_FAILED",
-                    message="Agent execution failed",
-                ),
+                error=RunError(code=code, message="Agent execution failed"),
             )
         else:
             self._registry.finish(run_id, RunStatus.SUCCEEDED, result=result)

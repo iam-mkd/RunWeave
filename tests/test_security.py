@@ -522,7 +522,9 @@ async def test_retained_results_are_checked_again_at_read_time(
         assert stored is not None
         archived = stored.model_copy(
             update={
-                "result": IncidentResult(summary=CANARY, severity="low", evidence_ids=("legacy",))
+                "result": IncidentResult(
+                    summary=CANARY, severity="low", evidence_ids=("legacy",)
+                ).model_dump(mode="json")
             }
         )
 
