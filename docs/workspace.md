@@ -1,9 +1,19 @@
 # Local React workspace
 
-The workspace connects a React UI to the existing FastAPI APIs. It supports
-incident submission, status polling, cancellation, findings/evidence, token and
-estimated-cost reporting, recent run IDs and direct run links. It uses the
-existing incident-triage workflow; it is not a general-purpose coding/chat agent.
+The workspace is a React UI for the RunWeave APIs, served by `runweave serve`. It works
+with every registered agent, including your own Python agents (see the
+[agent guide](agents.md)):
+
+| Screen | What it does |
+| --- | --- |
+| Agents (`#/agents`) | Registered agents, their connection, version and recent success rate |
+| Connect (`#/setup`) | Generates the `runweave serve --agent …` command, detects the agent after restart, links to a smoke test |
+| Runs (`#/runs`) | Your runs, newest first, filtered by agent and state; open any run by ID |
+| New run (`#/runs/new`) | A form generated from the agent's input JSON Schema (raw JSON for schemas it cannot represent) |
+| Run detail (`#/runs/<id>`) | Live status, step timeline, output, input, usage, cancel and re-run; approvals for durable triage runs |
+
+Run detail follows the run over server-sent events and falls back to polling once a
+second when streams are busy or unavailable. Old `/?run=<id>` links still open the run.
 
 ## Start from a checkout
 
@@ -18,7 +28,9 @@ uv run --locked runweave-workspace --demo
 
 On macOS/Linux, use `npm` instead of `npm.cmd`. Open **http://127.0.0.1:8000**.
 No database or provider credentials are required with the default configuration.
-Use **Load example**, then **Start run** to try the offline demo.
+Choose **New run** for `incident-triage`, then **Load example** and **Start run** to try
+the offline demo. Add your own agent with `--agent mypkg.agent:run`
+(`runweave-workspace` is an alias of `runweave serve`).
 
 The `--demo` launcher ignores `.env`, forces offline inference and in-memory runs,
 and disables isolated tools. Omit `--demo` to use your configured backend settings;
@@ -26,10 +38,10 @@ use `--port 8001` if port 8000 is occupied. No keys or subscription tokens are r
 stored in the browser. The provider badge reflects the backend configuration;
 account sign-in and connection setup are separate future work.
 
-Runs in the default in-memory mode are lost when the server stops. The browser
-retains at most twelve run IDs, not descriptions, findings or credentials. A
-stale ID displays an unavailable/expired message. Refreshing the page restores
-the selected run using its `?run=<UUID>` link while the backend still retains it.
+Runs in the default in-memory mode are lost when the server stops. Run history comes
+from the server (`GET /v1/runs`, scoped to the caller); the browser stores only the theme
+choice. A stale ID displays an unavailable/expired message. Every screen has its own
+link, so refreshing keeps your place while the backend still retains the run.
 
 If an existing durable deployment is configured, the UI exposes scoped recall
 and sandbox ticket proposals, and shows the exact pending proposal for approval
@@ -89,8 +101,11 @@ install Playwright Chromium first (`npx playwright install chromium` from
 `frontend`). `PLAYWRIGHT_CHANNEL` can select another installed Playwright browser
 channel. No live model calls or existing databases are used.
 
-Checks cover real API submission/results/cancellation, reload/history, mobile
-overflow, safe rendering of untrusted text, admission failures and expired IDs.
+Checks cover the Agents, Connect, Runs, New run and Run detail screens against a real
+offline server with the sample agent loaded: generated forms, server-side validation
+errors on fields, live updates, triage findings, the SDK agent's timeline and re-run,
+cancellation, reload, old `?run=` links, mobile overflow, safe rendering of untrusted
+text, admission failures, expired IDs, setup detection and both themes.
 The browser approval-binding scenario uses an intercepted durable API fixture;
 the existing PostgreSQL suite separately verifies actual approval persistence
 and effects. Screenshots are written to ignored `frontend/test-results/`.

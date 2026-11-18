@@ -88,6 +88,7 @@ class RunRegistry:
             submitted_at=datetime.now(UTC),
             principal=principal,
             usage=budget.state.summary(),
+            input=input.model_dump(mode="json"),
         )
         self._entries[run_id] = RunEntry(input, snapshot, self._clock(), budget)
         return snapshot

@@ -127,6 +127,7 @@ async def test_python_agent_runs_end_to_end_with_recorded_steps() -> None:
         run = await finished(client, submitted["status_url"])
     assert run["status"] == "SUCCEEDED"
     assert run["result"] == {"reply": "hello", "remaining_positive": True}
+    assert run["input"] == {"text": "hello", "delay": 0}
     assert [(step["title"], step["status"]) for step in run["steps"]] == [
         ("Think", "succeeded"),
         ("Answer", "succeeded"),
@@ -276,7 +277,7 @@ async def test_run_list_is_owner_scoped_filtered_and_bounded() -> None:
         limited = (await client.get("/v1/runs?limit=1", headers=alice)).json()
         too_many = await client.get("/v1/runs?limit=1000", headers=alice)
     assert [run["id"] for run in listing["runs"]] == [second["id"], first["id"]]
-    assert "steps" not in listing["runs"][0] and "result" not in listing["runs"][0]
+    assert not {"steps", "result", "input"} & set(listing["runs"][0])
     assert [run["id"] for run in filtered["runs"]] == [first["id"]]
     assert len(limited["runs"]) == 1
     assert too_many.status_code == 422

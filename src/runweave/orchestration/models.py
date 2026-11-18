@@ -59,6 +59,8 @@ class RunSummary(BaseModel):
 
 
 class RunSnapshot(RunSummary):
+    # The owner's validated agent input; excluded from list summaries.
+    input: dict[str, Any] | None = None
     result: dict[str, Any] | None = None
     steps: tuple[StepEvent, ...] = ()
     principal: Principal = Field(default=LOCAL_PRINCIPAL, exclude=True)
