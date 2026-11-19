@@ -17,29 +17,16 @@ from runweave.api.isolated_tools import router as isolated_router
 from runweave.api.memory import router as memory_router
 from runweave.api.metrics import router as metrics_router
 from runweave.api.runs import router as runs_router
+from runweave.api.settings import router as settings_router
 from runweave.core.runtime import open_runtime
 from runweave.core.settings import Settings
 from runweave.identity import IdentityProvider
-from runweave.proxy.faults import CUSTOM_PROFILE, FaultPlan, FaultProfile, load_profiles
-from runweave.proxy.mock import MockModel, load_fixtures
-from runweave.proxy.router import ProxyConfig, install_log_filter
+from runweave.live_settings import LiveSettings
+from runweave.proxy.config import build_proxy_config
+from runweave.proxy.router import install_log_filter
 from runweave.proxy.router import router as proxy_router
 from runweave.security import PolicyDenied
 from runweave.storage.engine import StorageUnavailable
-
-
-def _fault_profile(config: Settings) -> FaultProfile | None:
-    name = config.proxy_fault_profile
-    if not name:
-        return None
-    if name == CUSTOM_PROFILE:
-        if not config.proxy_fault_inline:
-            raise ValueError("The custom fault profile needs RUNWEAVE_PROXY_FAULT_INLINE")
-        return FaultProfile(name=CUSTOM_PROFILE, faults=config.proxy_fault_inline)
-    profiles = load_profiles(config.proxy_fault_profiles_file)
-    if name not in profiles:
-        raise ValueError(f"Unknown fault profile {name!r}; known: {', '.join(sorted(profiles))}")
-    return profiles[name]
 
 
 def create_app(
@@ -65,6 +52,7 @@ def create_app(
                 agents=registered,
                 http_agents=http_agents,
                 upstream_transport=upstream_transport,
+                live=live,
             ) as runtime:
                 app.state.runtime = runtime
                 yield
@@ -77,13 +65,10 @@ def create_app(
         runs_max_bytes=config.run_request_max_bytes,
         proxy_max_bytes=config.proxy_request_max_bytes,
     )
-    app.state.proxy_config = ProxyConfig(
-        mode=config.proxy_mode,
-        mock=MockModel(load_fixtures(config.proxy_mock_fixtures)),
-        faults=FaultPlan(_fault_profile(config), config.proxy_fault_seed),
-        default_max_tokens=config.proxy_default_max_tokens,
-        models=frozenset(config.proxy_models),
-    )
+    app.state.proxy_config = build_proxy_config(config)
+    live = LiveSettings(config, checks=(build_proxy_config,))
+    live.subscribe(lambda current: setattr(app.state, "proxy_config", build_proxy_config(current)))
+    app.state.live_settings = live
     install_log_filter()
     app.state.identity_provider = IdentityProvider(config)
     app.state.http_agent_max_registered = config.http_agent_max_registered
@@ -119,6 +104,7 @@ def create_app(
     app.include_router(runs_router)
     app.include_router(agents_router)
     app.include_router(proxy_router)
+    app.include_router(settings_router)
     app.include_router(approvals_router)
     app.include_router(memory_router)
     app.include_router(metrics_router)

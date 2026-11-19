@@ -35,3 +35,8 @@ test('links are built from validated parts', () => {
   assert.equal(href({ screen: 'runs', params: { agent: 'Bad Name' } }), '#/runs');
   assert.throws(() => href({ screen: 'run', id: '../x' }));
 });
+
+test('settings has its own route', () => {
+  assert.deepEqual(parseRoute('#/settings', ''), { screen: 'settings', params: {} });
+  assert.equal(href({ screen: 'settings' }), '#/settings');
+});

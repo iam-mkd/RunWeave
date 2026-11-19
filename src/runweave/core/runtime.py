@@ -19,7 +19,9 @@ from runweave.agents.providers import ProviderAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.agents.triage import TriageSteps
 from runweave.core.settings import Settings
+from runweave.keystore import ProviderKeys, key_store
 from runweave.limits import ProviderLimiter
+from runweave.live_settings import LiveSettings
 from runweave.orchestration.backend import MemoryBackend, RunBackend
 from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
@@ -48,6 +50,8 @@ class Runtime:
     connector: HttpAgentConnector | None = None
     proxy: ProxyBindings | None = None
     upstream: Upstream | None = None
+    keys: ProviderKeys | None = None
+    live: LiveSettings | None = None
 
 
 def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
@@ -65,9 +69,10 @@ def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
 def _upstream_mounts(
     settings: Settings, transport: httpx.AsyncBaseTransport | None
 ) -> dict[str, httpx.AsyncBaseTransport]:
-    """Passthrough providers get a real transport even in offline mode (or a test double)."""
-    if settings.proxy_mode != "passthrough":
-        return {}
+    """Passthrough providers get a real transport even in offline mode (or a test double).
+
+    Mounted in every mode because Settings can switch to passthrough at runtime.
+    """
     real = transport or httpx.AsyncHTTPTransport(
         limits=httpx.Limits(
             max_connections=settings.http_max_connections,
@@ -82,14 +87,13 @@ def _upstream_mounts(
     return {f"https://{host}": real for host in hosts if host}
 
 
-def _upstream(client: httpx.AsyncClient, settings: Settings) -> Upstream | None:
-    if settings.proxy_mode != "passthrough":
-        return None
+def _upstream(client: httpx.AsyncClient, settings: Settings, keys: ProviderKeys) -> Upstream:
+    # Built in every mode: Settings can switch to passthrough while the server runs.
     return Upstream(
         client,
         openai=Provider(
             settings.proxy_openai_base_url.rstrip("/"),
-            settings.proxy_openai_api_key,
+            keys.getter("openai"),
             ProviderLimiter(
                 concurrency=settings.proxy_openai_concurrency,
                 requests_per_minute=settings.proxy_openai_requests_per_minute,
@@ -97,7 +101,7 @@ def _upstream(client: httpx.AsyncClient, settings: Settings) -> Upstream | None:
         ),
         anthropic=Provider(
             settings.proxy_anthropic_base_url.rstrip("/"),
-            settings.proxy_anthropic_api_key,
+            keys.getter("anthropic"),
             ProviderLimiter(
                 concurrency=settings.proxy_anthropic_concurrency,
                 requests_per_minute=settings.proxy_anthropic_requests_per_minute,
@@ -132,17 +136,23 @@ async def open_runtime(
     agents: Sequence[RegisteredAgent] = (),
     http_agents: Sequence[str] | None = None,
     upstream_transport: httpx.AsyncBaseTransport | None = None,
+    live: LiveSettings | None = None,
 ) -> AsyncIterator[Runtime]:
+    live_settings = live or LiveSettings(settings)
     mock_transport = mock_transport or httpx.MockTransport(fake_health_response)
     provider = settings.model_provider
-    live = provider != "fake"
+    live_provider = provider != "fake"
     async with httpx.AsyncClient(
         base_url="https://mock-tools.invalid",
-        transport=None if live else mock_transport,
+        transport=None if live_provider else mock_transport,
         # Offline mode sends everything to the mock except HTTP agents, which are real
         # processes on loopback (or explicitly allowed hosts).
         mounts={
-            **({"https://mock-tools.invalid": mock_transport} if live else _agent_mounts(settings)),
+            **(
+                {"https://mock-tools.invalid": mock_transport}
+                if live_provider
+                else _agent_mounts(settings)
+            ),
             **_upstream_mounts(settings, upstream_transport),
         },
         timeout=httpx.Timeout(settings.http_timeout_seconds),
@@ -263,7 +273,16 @@ async def open_runtime(
                 limit=settings.http_agent_max_registered,
             )
             proxy = ProxyBindings(settings.proxy_public_url)
-            upstream = _upstream(client, settings)
+            keys = ProviderKeys(
+                {
+                    "openai": settings.proxy_openai_api_key,
+                    "anthropic": settings.proxy_anthropic_api_key,
+                },
+                key_store(settings.key_store),
+                content_policy,
+            )
+            await keys.load()
+            upstream = _upstream(client, settings, keys)
             catalog = AgentCatalog.with_triage(
                 run_executor,
                 version=settings.agent_workflow if executor is None else "custom",
@@ -280,6 +299,7 @@ async def open_runtime(
                         telemetry,
                         content_policy,
                         proxy=proxy,
+                        budget_policy=live_settings.budget_policy,
                     )
                     async with durable.running():
                         yield Runtime(
@@ -293,6 +313,8 @@ async def open_runtime(
                             connector,
                             proxy,
                             upstream,
+                            keys,
+                            live_settings,
                         )
                 finally:
                     await engine.dispose()
@@ -311,7 +333,7 @@ async def open_runtime(
                     shutdown_grace=settings.shutdown_grace_seconds,
                     tenant_limit=settings.tenant_max_unfinished,
                     content_policy=content_policy,
-                    budget_policy=settings.budget_policy(),
+                    budget_policy=live_settings.budget_policy,
                     output_max_bytes=settings.agent_output_max_bytes,
                     proxy=proxy,
                 )
@@ -327,6 +349,8 @@ async def open_runtime(
                         connector,
                         proxy,
                         upstream,
+                        keys,
+                        live_settings,
                     )
         finally:
             await isolated.close()

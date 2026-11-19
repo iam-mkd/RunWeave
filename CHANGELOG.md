@@ -57,6 +57,12 @@ All notable changes to RunWeave are recorded here. The format follows
   RunWeave holds, a model allowlist, output limits capped to the budget reservation,
   usage settled from responses and streams, relayed provider errors, and per-provider
   concurrency and rate limits.
+- Settings screen and API: proxy mode and models, provider keys in the OS credential store
+  (keyring; write-only, never returned, logged or shown), budgets per run, and the fault
+  profile and seed, changed while the server runs and validated all or nothing. New
+  `settings:manage` scope and `keyring` dependency (MIT).
+- Run detail marks proxied model calls and injected faults; steps carry `kind` and
+  `fault`.
 - Workspace: connect HTTP agents from Connect (test the URL, see conflicts, register,
   copy the startup command) and remove runtime-registered agents on the Agents screen.
 

@@ -23,6 +23,7 @@ ALL_SCOPES = frozenset(
         "memory:delete",
         "agents:delegate",
         "agents:manage",
+        "settings:manage",
         "tools:python_sandbox",
         "tools:browser_read",
         "tools:browser_private",
@@ -78,16 +79,20 @@ class ContentPolicy:
     """Reject configured credentials at data boundaries without echoing the value."""
 
     def __init__(self, secrets: tuple[str, ...] = ()) -> None:
-        self._secrets = tuple(
-            encoded
-            for value in secrets
-            if value
-            for encoded in (
-                value,
-                json.dumps(value, ensure_ascii=False)[1:-1],
-                json.dumps(value, ensure_ascii=True)[1:-1],
-            )
+        self._secrets: tuple[str, ...] = ()
+        for value in secrets:
+            self.protect(value)
+
+    def protect(self, value: str) -> None:
+        """Add a secret learned at runtime, such as a key saved from the Settings screen."""
+        if not value:
+            return
+        encodings = (
+            value,
+            json.dumps(value, ensure_ascii=False)[1:-1],
+            json.dumps(value, ensure_ascii=True)[1:-1],
         )
+        self._secrets = tuple(dict.fromkeys((*self._secrets, *encodings)))
 
     def check(self, text: str) -> None:
         if any(secret in text for secret in self._secrets):

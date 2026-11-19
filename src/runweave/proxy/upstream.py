@@ -8,13 +8,12 @@ followed and responses are size-limited.
 
 import asyncio
 import json
-from collections.abc import AsyncIterator, Mapping
+from collections.abc import AsyncIterator, Callable, Mapping
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
-from pydantic import SecretStr
 
 from runweave.limits import ProviderLimiter
 from runweave.proxy.mock import Api
@@ -33,7 +32,7 @@ class UpstreamFailure(Exception):
 @dataclass(frozen=True)
 class Provider:
     base_url: str
-    key: SecretStr
+    key: Callable[[], str]
     limiter: ProviderLimiter
 
 
@@ -101,7 +100,7 @@ class Upstream:
         self._connect_timeout = connect_timeout
 
     def configured(self, api: Api) -> bool:
-        return bool(self._provider(api).key.get_secret_value().strip())
+        return bool(self._provider(api).key())
 
     def _provider(self, api: Api) -> Provider:
         return self._providers["anthropic" if api == "messages" else "openai"]
@@ -130,7 +129,7 @@ class Upstream:
         if api == "messages":
             provider = self._providers["anthropic"]
             headers = {
-                "x-api-key": provider.key.get_secret_value(),
+                "x-api-key": provider.key(),
                 "anthropic-version": client_headers.get("anthropic-version", ANTHROPIC_VERSION),
             }
             if "anthropic-beta" in client_headers:
@@ -138,7 +137,7 @@ class Upstream:
             url = f"{provider.base_url}/v1/messages"
         else:
             provider = self._providers["openai"]
-            headers = {"Authorization": f"Bearer {provider.key.get_secret_value()}"}
+            headers = {"Authorization": f"Bearer {provider.key()}"}
             url = f"{provider.base_url}/{'chat/completions' if api == 'chat' else 'responses'}"
         headers.update({"Content-Type": "application/json", "Accept": "application/json"})
         return Prepared(url, headers, body, strip_usage)

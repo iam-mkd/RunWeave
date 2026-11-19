@@ -180,11 +180,48 @@ RUNWEAVE_AGENT_MAX_COST_USD=0.05                         # spend cap per run
 - RunWeave's own tests exercise passthrough only against scripted upstreams; CI never
   calls a real provider.
 
+## Settings screen
+
+**Settings** in the workspace (`#/settings`, scope `settings:manage`) changes the proxy
+while the server runs:
+
+- **Model access:** mock or passthrough, and the allowed models.
+- **Provider keys:** typed into a password field and stored in your **OS credential
+  store** (Windows Credential Manager, macOS Keychain, Linux Secret Service) through the
+  `keyring` library, under the service `RunWeave`. Keys are write-only: no response,
+  log or page ever contains them, and the screen only says where each key comes from
+  (credential store, environment variable, or not set). An environment variable wins
+  and cannot be overwritten from the UI. Where no credential store exists (for example
+  headless Linux without Secret Service), the screen asks for environment variables
+  instead.
+- **Budgets per run:** call, token and spend limits and prices, applied to runs started
+  after you save.
+- **Fault injection:** profile and seed, applied to the next proxied call.
+
+Every change is validated as a whole, so a rejected change leaves everything as it was.
+Changes other than keys last until the server stops; the screen shows the environment
+lines (never keys) that make them permanent.
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /v1/settings` | Current settings, key sources and fault profiles; never key values |
+| `PATCH /v1/settings` | `{"proxy": {...}, "budgets": {...}, "faults": {...}}`, all or nothing (422 `INVALID_SETTINGS`) |
+| `PUT /v1/settings/keys/{openai,anthropic}` | `{"key": "..."}`: store a key (204). 409 `KEY_SET_BY_ENVIRONMENT` or `KEY_STORE_UNAVAILABLE` |
+| `DELETE /v1/settings/keys/{openai,anthropic}` | Remove a stored key (204) |
+
+`RUNWEAVE_KEY_STORE=memory` keeps saved keys in memory only (tests and throwaway demos);
+`none` disables saving.
+
+## Run detail
+
+Proxied calls appear on the run timeline as **Model call** steps with their API, mode,
+token usage, and any injected fault (`Injected fault: rate_limit`). The run's Details
+panel counts proxied model calls and injected faults.
+
 ## Limits
 
 - The proxy is in-process: in durable mode, a run's token works on the RunWeave process
   executing it.
 - Mock replies ignore the requested model name.
-- Fault profiles and the seed are server-wide settings; the Settings screen (next pull
-  request) changes them without editing environment variables. Choosing a profile per
-  run is planned with the testing CLI (milestone 22).
+- Fault profiles and the seed are server-wide. Choosing a profile per run is planned with
+  the testing CLI (milestone 22).

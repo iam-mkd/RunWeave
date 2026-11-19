@@ -7,6 +7,7 @@ with every registered agent, including your own Python agents (see the
 | Screen | What it does |
 | --- | --- |
 | Agents (`#/agents`) | Registered agents, their connection, version and recent success rate |
+| Settings (`#/settings`) | Proxy mode and allowed models, provider keys (stored in the OS credential store, never shown), budgets per run, fault profile and seed, and the environment lines that keep them |
 | Connect (`#/setup`) | Python: generates the `runweave serve --agent …` command and detects the agent after restart. HTTP: tests a loopback URL, registers its agents until the server stops, and shows the `--http-agent` startup command. Both link to a smoke test |
 | Runs (`#/runs`) | Your runs, newest first, filtered by agent and state; open any run by ID |
 | New run (`#/runs/new`) | A form generated from the agent's input JSON Schema (raw JSON for schemas it cannot represent) |

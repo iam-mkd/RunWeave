@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from uuid import UUID
@@ -51,7 +51,7 @@ class Scheduler:
         shutdown_grace: float = 5.0,
         tenant_limit: int = 1000,
         content_policy: ContentPolicy | None = None,
-        budget_policy: BudgetPolicy | None = None,
+        budget_policy: BudgetPolicy | Callable[[], BudgetPolicy] | None = None,
         output_max_bytes: int = 65536,
         proxy: ProxyBindings | None = None,
     ) -> None:
@@ -78,7 +78,11 @@ class Scheduler:
         self._telemetry = registry.telemetry
         self._tenant_limit = tenant_limit
         self._content_policy = content_policy or ContentPolicy()
-        self._budget_policy = budget_policy or BudgetPolicy()
+        # A callable lets Settings change the policy for runs admitted afterwards.
+        policy = budget_policy or BudgetPolicy()
+        self._budget_policy: Callable[[], BudgetPolicy] = (
+            policy if callable(policy) else (lambda: policy)
+        )
         self._output_max_bytes = output_max_bytes
         self._proxy = proxy
 
@@ -113,7 +117,7 @@ class Scheduler:
         snapshot = self._registry.create(
             parsed,
             principal,
-            self._budget_policy,
+            self._budget_policy(),
             agent=definition.info.name,
             agent_version=definition.info.version,
         )

@@ -1,5 +1,5 @@
 import asyncio
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import Any
@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from runweave.agents.catalog import AgentCatalog, SchemaViolation
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.approvals import AwaitingApproval, ticket_scope
-from runweave.budgets import BudgetExceeded, budget_scope
+from runweave.budgets import BudgetExceeded, BudgetPolicy, budget_scope
 from runweave.checkpoints import CheckpointError, checkpoint_scope
 from runweave.core.settings import Settings
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
@@ -46,8 +46,10 @@ class DurableScheduler:
         telemetry: Telemetry,
         content_policy: ContentPolicy | None = None,
         proxy: ProxyBindings | None = None,
+        budget_policy: Callable[[], BudgetPolicy] | None = None,
     ) -> None:
         self._proxy = proxy
+        self._budget_policy = budget_policy or settings.budget_policy
         self._store = store
         self._agents = (
             agents
@@ -103,7 +105,7 @@ class DurableScheduler:
                 history_max=self._settings.history_max_records,
                 principal=principal,
                 tenant_limit=self._settings.tenant_max_unfinished,
-                budget_policy=self._settings.budget_policy(),
+                budget_policy=self._budget_policy(),
                 workflow=self._settings.agent_workflow,
                 max_steps=self._settings.agent_max_steps,
                 agent=definition.info.name,

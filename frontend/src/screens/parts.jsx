@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useState } from 'react';
 import { DataTable, EmptyState, StatusBadge, Timeline } from '../components/index.js';
 import { duration } from '../format.js';
 
@@ -94,7 +94,8 @@ export function RunTimeline({ steps }) {
       tone,
       label,
       duration: step.duration_ms === null || step.duration_ms === undefined ? undefined : duration(step.duration_ms),
-      meta: step.attempt > 1 ? `Attempt ${step.attempt}` : undefined,
+      meta: [step.attempt > 1 ? `Attempt ${step.attempt}` : null,
+        step.fault ? `Injected fault: ${step.fault}` : null].filter(Boolean).join(' · ') || undefined,
       detail: step.detail || undefined,
     };
   })} />;
@@ -131,4 +132,36 @@ export function HttpAgentCheck({ result }) {
       ? <StatusBadge tone="warning" label="Name already registered" />
       : <StatusBadge tone="good" label="Ready to register" /> },
   ]} rows={result.agents} rowKey={(agent) => agent.name} />;
+}
+
+// Proxied model calls and injected faults on a run, from its timeline.
+export function runModelSummary(steps) {
+  const calls = steps.filter((step) => step.kind === 'model_call');
+  return {
+    calls: calls.length,
+    faults: calls.filter((step) => step.fault).length,
+    failed: calls.filter((step) => step.status === 'failed').length,
+  };
+}
+
+export function CopyBlock({ id, text }) {
+  const [copied, setCopied] = useState('');
+  const ref = useRef(null);
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied('Copied');
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(ref.current);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(range);
+      setCopied('Selected — press Ctrl+C to copy');
+    }
+  }
+  return <div className="command">
+    <pre id={id} ref={ref}>{text}</pre>
+    <div className="row"><button type="button" onClick={copy} aria-describedby={id}>Copy</button>
+      <span className="muted" role="status">{copied}</span></div>
+  </div>;
 }

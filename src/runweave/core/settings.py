@@ -117,6 +117,8 @@ class Settings(BaseSettings):
     proxy_anthropic_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
     proxy_anthropic_concurrency: int = Field(default=4, ge=1, le=64)
     proxy_anthropic_requests_per_minute: int = Field(default=60, ge=1, le=6000)
+    # Where keys saved from the Settings screen live: the OS credential store by default.
+    key_store: Literal["keyring", "memory", "none"] = "keyring"
     proxy_upstream_max_bytes: int = Field(default=8388608, ge=65536, le=67108864)
     # Seeded fault injection: a built-in or file profile name, or "custom" for the inline list.
     proxy_fault_profile: str = Field(default="", max_length=40)
@@ -128,13 +130,8 @@ class Settings(BaseSettings):
     def require_passthrough_configuration(self) -> "Settings":
         if self.proxy_mode != "passthrough":
             return self
-        if not (
-            self.proxy_openai_api_key.get_secret_value().strip()
-            or self.proxy_anthropic_api_key.get_secret_value().strip()
-        ):
-            raise ValueError(
-                "Passthrough needs RUNWEAVE_PROXY_OPENAI_API_KEY or _ANTHROPIC_API_KEY"
-            )
+        # Keys may also come from the credential store; a provider without one is refused
+        # per request (PROVIDER_NOT_CONFIGURED).
         if not self.proxy_models:
             raise ValueError("Passthrough needs RUNWEAVE_PROXY_MODELS, the models you allow")
         if (

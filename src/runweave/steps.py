@@ -25,6 +25,8 @@ class StepEvent(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     duration_ms: float | None = Field(default=None, ge=0)
+    kind: Literal["step", "model_call"] = "step"
+    fault: str | None = Field(default=None, max_length=40)
 
 
 class StepLog(Protocol):

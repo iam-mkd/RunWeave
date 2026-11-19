@@ -28,6 +28,7 @@ dependencies = [
     "fastapi>=0.115,<1",
     "httpx>=0.28,<1",
     "jsonschema>=4.23,<5",
+    "keyring>=25,<26",
     "opentelemetry-sdk>=1.45.2,<2",
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
