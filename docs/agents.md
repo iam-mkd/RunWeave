@@ -101,6 +101,12 @@ Event streams close after `RUNWEAVE_EVENT_STREAM_MAX_SECONDS` (default 60) with 
 `reconnect` event, send keep-alive comments while quiet, and are capped by
 `RUNWEAVE_EVENT_STREAM_MAX_SUBSCRIBERS` (503 `EVENT_STREAMS_BUSY` beyond it).
 
+## Ask a person first
+
+`await ctx.request_approval(action, arguments, expires_in=...)` pauses the agent until
+someone approves or rejects that exact action (durable mode only). See
+[Approvals for your agents](agent-approvals.md).
+
 ## Limits and guarantees
 
 | Setting | Default | Meaning |

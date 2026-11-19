@@ -71,6 +71,12 @@ class ProxyBindings:
         finally:
             self._bindings.pop(key, None)
 
+    def extend(self, token: str, seconds: float) -> None:
+        """Move a binding's expiry with its run deadline (approval waits pause it)."""
+        binding = self._bindings.get(_key(token))
+        if binding is not None and seconds > 0:
+            binding.expires_at += seconds
+
     def resolve(self, token: str | None) -> Binding | None:
         if not token or not token.startswith(TOKEN_PREFIX) or len(token) > 256:
             return None

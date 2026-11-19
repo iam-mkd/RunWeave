@@ -12,7 +12,7 @@ import re
 from collections.abc import Awaitable, Callable, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
@@ -28,6 +28,9 @@ from runweave.steps import (
     record_finished_step,
     record_step,
 )
+
+if TYPE_CHECKING:
+    from runweave.action_approvals import Approval
 
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,39}$")
@@ -189,6 +192,25 @@ class RunContext:
             clip(self._policy.redact(title), TITLE_LIMIT) or "Step", clip(redacted, DETAIL_LIMIT)
         )
 
+    async def request_approval(
+        self, action: str, arguments: Any, *, expires_in: float | None = None
+    ) -> "Approval":
+        """Ask a human to approve `action` with exactly these `arguments`, and wait.
+
+        Returns the decision (`approved` is False when rejected). Raises `ApprovalExpired`
+        when nobody decides before `expires_in` seconds (capped by the server's approval TTL).
+        The run deadline is paused while waiting. Repeating the same request after a restart
+        returns the existing request or decision; making the approved effect itself
+        idempotent is up to the agent. Needs durable mode (PostgreSQL).
+        """
+        from runweave.action_approvals import canonical, check_action, current_gate
+
+        check_action(action)
+        self._policy.check(canonical(arguments))
+        if expires_in is not None and not expires_in > 0:
+            raise ValueError("expires_in must be a positive number of seconds")
+        return await current_gate().request(action, arguments, expires_in)
+
     async def add_finished_steps(
         self, steps: Sequence[tuple[str, str | None, StepStatus, float]]
     ) -> None:
@@ -213,3 +235,12 @@ class RunContext:
                 "runweave_agent": self.agent,
             },
         )
+
+
+def __getattr__(name: str) -> Any:
+    # Approval types live with the gate; importing them here would be circular.
+    if name in {"Approval", "ApprovalExpired", "ApprovalUnavailable"}:
+        import runweave.action_approvals as approvals
+
+        return getattr(approvals, name)
+    raise AttributeError(name)
