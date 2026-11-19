@@ -2,9 +2,9 @@ name: Local React workspace
 
 on:
   push:
-    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'src/**', 'migrations/**', 'examples/sample-agent/**', 'scripts/smoke-database.py', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
   pull_request:
-    paths: ['frontend/**', 'src/**', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
+    paths: ['frontend/**', 'src/**', 'migrations/**', 'examples/sample-agent/**', 'scripts/smoke-database.py', 'tests/test_workspace.py', 'tests/contract/**', 'pyproject.toml', 'uv.lock', '.github/workflows/frontend.yml']
 
 permissions:
   contents: read
@@ -12,7 +12,22 @@ permissions:
 jobs:
   workspace:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
+    env:
+      # The approvals checks run on a throwaway database created on this server.
+      RUNWEAVE_SMOKE_POSTGRES_URL: postgresql+asyncpg://runweave_smoke:synthetic-test-password@127.0.0.1:5432/postgres
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: runweave_smoke
+          POSTGRES_PASSWORD: synthetic-test-password
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U runweave_smoke -d postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -24,6 +39,7 @@ jobs:
         with:
           python-version: '3.13'
       - run: uv sync --locked
+      - run: uv pip install -r requirements-durable.txt
       - run: npm ci
         working-directory: frontend
       - run: npm test

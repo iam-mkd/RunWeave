@@ -56,7 +56,7 @@ describe('jobs and reports API', () => {
 describe('navigation and routes', () => {
   test('the testing screens are in the shipped workspace', () => {
     assert.deepEqual(productionSections.map((section) => section.id),
-      ['agents', 'runs', 'load-tests', 'evals', 'shadow', 'settings']);
+      ['agents', 'runs', 'load-tests', 'evals', 'shadow', 'approvals', 'settings']);
   });
 
   test('testing routes accept only a valid report id', () => {
