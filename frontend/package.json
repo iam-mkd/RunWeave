@@ -13,7 +13,8 @@
     "build:prototype": "vite build --mode prototype",
     "test": "vitest run",
     "test:browser": "node browser-smoke.mjs",
-    "test:prototype": "node prototype-smoke.mjs"
+    "test:prototype": "node prototype-smoke.mjs",
+    "test:perf": "node perf-smoke.mjs"
   },
   "dependencies": {
     "react": "19.2.7",
