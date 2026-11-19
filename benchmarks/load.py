@@ -1,3 +1,9 @@
+"""RunWeave's own release evidence: the built-in triage workflow under a mocked health API.
+
+Developers load-test their own agents with `runweave bench`, which shares the metric
+parsing below (`runweave.bench`).
+"""
+
 import argparse
 import asyncio
 import json
@@ -16,6 +22,7 @@ import psutil  # type: ignore[import-untyped]
 
 from benchmarks.mock_health import MockHealthService
 from runweave.app import create_app
+from runweave.bench import lag_p99_upper_ms, parse_metrics
 from runweave.core.runtime import Runtime
 from runweave.core.settings import Settings
 
@@ -27,27 +34,6 @@ def percentiles(samples: Iterable[float]) -> dict[str, float]:
         if ordered
         else {}
     )
-
-
-def metric_samples(body: str) -> dict[str, float]:
-    samples = {}
-    for line in body.splitlines():
-        if line and not line.startswith("#"):
-            name, value = line.rsplit(" ", 1)
-            samples[name] = float(value)
-    return samples
-
-
-def lag_p99_upper_ms(samples: dict[str, float]) -> float | None:
-    name = "runweave_event_loop_lag_seconds"
-    count = samples[f"{name}_count"]
-    if count == 0:
-        return None
-    for key, value in samples.items():
-        if key.startswith(f'{name}_bucket{{le="') and value >= ceil(count * 0.99):
-            bound = key.split('"')[1]
-            return None if bound == "+Inf" else 1000 * float(bound)
-    return None
 
 
 async def submit(client: httpx.AsyncClient, service: str = "payments") -> str:
@@ -139,7 +125,7 @@ async def workload(workers: int, runs: int, soak_seconds: float = 0) -> dict[str
                     }
                 )
         elapsed = monotonic() - started
-        metrics = metric_samples((await client.get("/metrics")).raise_for_status().text)
+        metrics = parse_metrics((await client.get("/metrics")).raise_for_status().text)
 
     peak = int(metrics["runweave_peak_active_runs"])
     peak_tools = int(metrics["runweave_peak_active_tool_steps"])
@@ -164,7 +150,7 @@ async def workload(workers: int, runs: int, soak_seconds: float = 0) -> dict[str
         "status_api_ms": percentiles(status_latency),
         "status_api_samples": len(status_latency),
         "completion_samples": len(durations),
-        "loop_lag_p99_bucket_ms": lag_p99_upper_ms(metrics),
+        "loop_lag_p99_bucket_ms": lag_p99_upper_ms({}, metrics),
         "rss_start_mib": round(rss_start / 2**20, 2),
         "rss_peak_mib": round(rss_peak / 2**20, 2),
         "rss_end_mib": round(process.memory_info().rss / 2**20, 2),
@@ -202,7 +188,7 @@ async def failure_matrix() -> dict[str, object]:
         actual = {
             service: (await client.get(url)).json()["status"] for service, url in locations.items()
         }
-        metrics = metric_samples((await client.get("/metrics")).text)
+        metrics = parse_metrics((await client.get("/metrics")).text)
         assert actual == expected, actual
         assert metrics["runweave_tool_retries_total"] == 3
         return {"outcomes": actual, "retried_services": mock.attempts, "retries": 3}

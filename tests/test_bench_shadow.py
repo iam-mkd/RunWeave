@@ -4,8 +4,10 @@ The commands run in subprocesses, offline, against projects made by `runweave in
 developer would run them.
 """
 
+import asyncio
 import json
 import os
+import socket
 import subprocess
 import sys
 from decimal import Decimal
@@ -78,9 +80,11 @@ def new_project(tmp_path: Path) -> Path:
     return tmp_path / "proj"
 
 
-def append_toml(project: Path, text: str) -> None:
+def edit_toml(project: Path, old: str, new: str) -> None:
     path = project / "runweave.toml"
-    path.write_text(path.read_text(encoding="utf-8") + "\n" + text, encoding="utf-8")
+    text = path.read_text(encoding="utf-8")
+    assert old in text, old
+    path.write_text(text.replace(old, new), encoding="utf-8")
 
 
 # Report maths
@@ -224,7 +228,7 @@ def test_bench_fault_profiles_show_failure_categories_and_gate(tmp_path: Path) -
     assert sum(outage["failures"].values()) == 4
     assert all(name.startswith("FAILED:") for name in outage["failures"])
 
-    append_toml(project, "[bench]\nmax_failure_rate = 0.0\n")
+    edit_toml(project, "runs = 32\n", "runs = 32\nmax_failure_rate = 0.0\n")
     gated = runweave(*args, "--fault-profile", "outage", cwd=project)
     assert gated.returncode == 1, gated.stdout + gated.stderr
     verdict = latest(project, "bench")["gates"]
@@ -233,9 +237,7 @@ def test_bench_fault_profiles_show_failure_categories_and_gate(tmp_path: Path) -
 
 def test_bench_soak_records_windows(tmp_path: Path) -> None:
     project = new_project(tmp_path)
-    result = runweave(
-        "bench", "--concurrency", "2", "--runs", "4", "--soak", "1.5", cwd=project
-    )
+    result = runweave("bench", "--concurrency", "2", "--runs", "4", "--soak", "1.5", cwd=project)
     assert result.returncode == 0, result.stdout + result.stderr
     soak = latest(project, "bench")["soak"]
     assert soak["duration_ms"] >= 1500 and soak["concurrency"] == 2
@@ -258,6 +260,57 @@ def test_bench_usage_problems_exit_2(tmp_path: Path) -> None:
     empty = runweave("bench", cwd=project)
     assert empty.returncode == 2 and "input" in empty.stderr.lower()
     assert "Traceback" not in remote.stderr + unknown.stderr + empty.stderr
+
+
+@pytest.mark.asyncio
+async def test_bench_can_load_a_running_server(tmp_path: Path) -> None:
+    import httpx
+
+    project = new_project(tmp_path)
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    sock.close()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RUNWEAVE_")}
+    env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(project)])
+    server = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "runweave.cli",
+        "serve",
+        "--demo",
+        "--api-only",
+        "--port",
+        str(port),
+        "--agent",
+        "agent:run",
+        cwd=project,
+        env=env,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+    url = f"http://127.0.0.1:{port}"
+    try:
+        async with httpx.AsyncClient() as client:
+            for _ in range(200):
+                try:
+                    if (await client.get(f"{url}/health/ready")).status_code == 200:
+                        break
+                except httpx.HTTPError:
+                    pass
+                await asyncio.sleep(0.1)
+        result = await asyncio.to_thread(
+            runweave, "bench", "--server", url, "--concurrency", "2", "--runs", "4", cwd=project
+        )
+    finally:
+        server.kill()
+        await server.wait()
+    assert result.returncode == 0, result.stdout + result.stderr
+    data = latest(project, "bench")
+    assert data["environment"]["mode"] == f"server {url}"
+    (case,) = data["cases"]
+    assert case["outcomes"] == {"SUCCEEDED": 4} and case["memory"] is None
+    assert case["fault_profile"] is None and "server" in data["limitations"]
 
 
 def test_eval_reaches_the_proxy_in_process(tmp_path: Path) -> None:
@@ -283,7 +336,7 @@ def test_shadow_blocks_a_candidate_that_regresses(tmp_path: Path) -> None:
         ),
         encoding="utf-8",
     )
-    append_toml(project, '[shadow]\ncandidate = { python = "agent_v2:run" }\n')
+    edit_toml(project, "# candidate = { python", "candidate = { python")
     result = runweave("shadow", cwd=project)
     assert result.returncode == 1, result.stdout + result.stderr
     assert "finds-longest" in result.stdout

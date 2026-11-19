@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from runweave.evals import report as reports
-from runweave.evals.assertions import check
+from runweave.evals.assertions import CaseResult, check
 from runweave.evals.cases import Case, load_cases
 from runweave.evals.runner import Target, environment, open_target, run_case
 from runweave.project import Project, ProjectError
@@ -25,27 +25,33 @@ class EvalOptions:
     junit: Path | None = None
 
 
+def case_record(case: Case, result: CaseResult) -> dict[str, Any]:
+    """One case's line in a report: verdict, assertions and cost, never the output itself."""
+    outcomes = check(case.expect, result, input=case.input, case=case)
+    usage = result.usage
+    return {
+        "id": case.id,
+        "passed": all(o.passed for o in outcomes),
+        "status": result.status,
+        "run_id": result.snapshot.get("id"),
+        "latency_ms": round(result.latency_ms, 1),
+        "tokens": int(usage.get("input_tokens") or 0) + int(usage.get("output_tokens") or 0),
+        "cost_usd": str(Decimal(str(usage.get("estimated_cost_usd") or 0))),
+        "model_calls": sum(s.get("kind") == "model_call" for s in result.steps),
+        "tags": list(case.tags),
+        "assertions": [
+            {"name": o.name, "passed": o.passed, "message": o.message} for o in outcomes
+        ],
+    }
+
+
 async def _evaluate(target: Target, cases: list[Case], concurrency: int) -> list[dict[str, Any]]:
     slots = asyncio.Semaphore(concurrency)
 
     async def one(case: Case) -> dict[str, Any]:
         async with slots:
             result = await run_case(target, case.input)
-        outcomes = check(case.expect, result, input=case.input, case=case)
-        usage = result.usage
-        return {
-            "id": case.id,
-            "passed": all(o.passed for o in outcomes),
-            "status": result.status,
-            "run_id": result.snapshot.get("id"),
-            "latency_ms": round(result.latency_ms, 1),
-            "tokens": int(usage.get("input_tokens") or 0) + int(usage.get("output_tokens") or 0),
-            "cost_usd": str(Decimal(str(usage.get("estimated_cost_usd") or 0))),
-            "tags": list(case.tags),
-            "assertions": [
-                {"name": o.name, "passed": o.passed, "message": o.message} for o in outcomes
-            ],
-        }
+        return case_record(case, result)
 
     return list(await asyncio.gather(*(one(case) for case in cases)))
 

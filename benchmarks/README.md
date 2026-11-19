@@ -1,5 +1,9 @@
 # RunWeave load and recovery report
 
+This folder holds RunWeave's own release evidence: the built-in triage workflow under a
+mocked health API. To load-test your own agent, use `runweave bench` (see
+[Test your agent](../docs/testing.md)); both share the metric parsing in `runweave.bench`.
+
 ## Milestone 16 verification on November 18, 2026
 
 The latest native Windows sweep and ten-minute soak are recorded in

@@ -33,11 +33,16 @@ development, verification, provider configuration boundaries and storage behavio
 runweave init my-agent          # or --language typescript
 cd my-agent
 runweave eval                   # offline, no API key; exits 1 when a gate fails
+runweave bench                  # concurrency sweep, fault profiles, optional soak
+runweave shadow --candidate agent_v2:run   # compare a new version before you switch
 ```
 
 `runweave eval` runs a dataset through your agent with built-in assertions (output, schema,
 tools, canaries, latency, cost), custom Python checks and Pydantic Evals, writes JSON,
-JUnit and Markdown reports, and compares against a saved baseline. See
+JUnit and Markdown reports, and compares against a saved baseline. `runweave bench` reports
+throughput, p50/p95/p99 latency, queue wait, status-API latency, event-loop lag, memory,
+failure categories and tokens per concurrency level and fault profile. `runweave shadow`
+pairs two versions case by case and applies the milestone 16 promotion gates. See
 [Test your agent](docs/testing.md).
 
 ## Run your own agent

@@ -1355,6 +1355,27 @@ Implementation notes, pull request A (2026-11-19):
   (150 files) passed. A built wheel contains all 21 template files. PostgreSQL was not
   rerun locally (no durable code changed); CI runs it.
 
+Implementation notes, pull request B (2026-11-19):
+- Test first: `tests/test_bench_shadow.py` (report maths, shadow gates, and both commands
+  in subprocesses: sweeps, fault profiles with a model-calling agent, gates, soak,
+  `--server`, usage errors, regressions and promotion) and new `runweave.toml` cases.
+- In-process commands now serve RunWeave on a free loopback port instead of an in-memory
+  ASGI client, so agents reach the LLM proxy over a real socket (an eval of a
+  model-calling agent previously could not).
+- `runweave bench` (`runweave.bench`): one RunWeave per fault profile; each level submits
+  the same number of runs with at most that many in flight, waiting on run event streams.
+  Latency and queue wait come from server timestamps; a 50 ms probe measures the status
+  API and RSS; `/metrics` deltas give the window's loop-lag p99 bucket. Optional soak with
+  windows over time, and failure-rate and p95 gates. `benchmarks/load.py` stays as
+  RunWeave's own release evidence and shares the metric parsing. psutil is now a runtime
+  dependency.
+- `runweave shadow` (`runweave.evals.shadow`): the current agent and a candidate run each
+  case at the same time in separate RunWeave instances with separate budgets; pairs record
+  differences without storing outputs; gates follow milestone 16 (pass rate, no paired
+  regressions, outcome parity, per-case cost within 105%, p95 latency within 2x + 50 ms).
+  Eligibility is reported, never acted on. With `--server` the candidate must be an HTTP
+  agent with its own name.
+
 ### 23. Approvals through the agent SDKs
 
 - Add `ctx.request_approval(action, arguments, expires_in)` to both SDKs. It

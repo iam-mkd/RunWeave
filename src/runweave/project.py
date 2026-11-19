@@ -10,6 +10,8 @@
     [proxy]                       # mode, fault_profile, fault_seed, mock_fixtures
     [[datasets]]                  # name, path (.jsonl, .yaml or .yml)
     [eval]                        # min_pass_rate, baseline, reports
+    [bench]                       # concurrency levels, runs, fault_profiles, soak, gates
+    [shadow]                      # candidate (an agent table) and promotion thresholds
 
 Paths are relative to the file and must stay inside the project directory.
 """
@@ -20,7 +22,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 FILENAME = "runweave.toml"
 NAME_PATTERN = r"^[a-z][a-z0-9-]{0,62}$"
@@ -34,8 +43,7 @@ class _Section(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
 
-class AgentSection(_Section):
-    name: str = Field(pattern=NAME_PATTERN)
+class _AgentTarget(_Section):
     python: str | None = Field(
         default=None, pattern=r"^[A-Za-z_][\w.]*:[A-Za-z_]\w*$", max_length=200
     )
@@ -43,7 +51,7 @@ class AgentSection(_Section):
     command: tuple[str, ...] | None = Field(default=None, min_length=1, max_length=32)
 
     @model_validator(mode="after")
-    def one_connection(self) -> "AgentSection":
+    def one_connection(self) -> "_AgentTarget":
         if self.python is None and self.http is None and self.command is None:
             raise ValueError("set python, http or command to say how to reach the agent")
         if self.python is not None and (self.http is not None or self.command is not None):
@@ -53,6 +61,16 @@ class AgentSection(_Section):
     @property
     def kind(self) -> Literal["python", "http"]:
         return "python" if self.python is not None else "http"
+
+
+class AgentSection(_AgentTarget):
+    name: str = Field(pattern=NAME_PATTERN)
+
+
+class CandidateSection(_AgentTarget):
+    """The version to compare against [agent]; its name defaults to the agent's."""
+
+    name: str | None = Field(default=None, pattern=NAME_PATTERN)
 
 
 class LimitsSection(_Section):
@@ -78,6 +96,30 @@ class EvalSection(_Section):
     reports: str = ".runweave/reports"
 
 
+class BenchSection(_Section):
+    concurrency: tuple[int, ...] = Field(default=(1, 4, 16), min_length=1, max_length=12)
+    runs: int = Field(default=32, ge=1, le=10000)
+    fault_profiles: tuple[str, ...] | None = Field(default=None, min_length=1, max_length=12)
+    soak_seconds: float = Field(default=0, ge=0, le=3600)
+    max_failure_rate: float | None = Field(default=None, ge=0, le=1)
+    max_p95_latency_ms: float | None = Field(default=None, gt=0)
+
+    @field_validator("concurrency")
+    @classmethod
+    def sorted_levels(cls, levels: tuple[int, ...]) -> tuple[int, ...]:
+        if any(not 1 <= level <= 256 for level in levels):
+            raise ValueError("concurrency levels must be between 1 and 256")
+        return tuple(sorted(set(levels)))
+
+
+class ShadowSection(_Section):
+    candidate: CandidateSection | None = None
+    max_cost_ratio: float = Field(default=1.05, ge=1, le=100)
+    max_latency_ratio: float = Field(default=2.0, ge=1, le=100)
+    latency_slack_ms: float = Field(default=50, ge=0, le=60000)
+    require_output_parity: bool = False
+
+
 class _File(_Section):
     project: dict[str, Any] = Field(default_factory=dict)
     agent: AgentSection
@@ -85,6 +127,8 @@ class _File(_Section):
     proxy: ProxySection = Field(default_factory=ProxySection)
     datasets: list[DatasetSection] = Field(default_factory=list, max_length=100)
     eval: EvalSection = Field(default_factory=EvalSection)
+    bench: BenchSection = Field(default_factory=BenchSection)
+    shadow: ShadowSection = Field(default_factory=ShadowSection)
 
 
 @dataclass(frozen=True)
@@ -110,6 +154,8 @@ class Project:
     datasets: tuple[Dataset, ...]
     eval: EvalConfig
     mock_fixtures: Path | None
+    bench: BenchSection
+    shadow: ShadowSection
 
     def dataset(self, name: str | None) -> Dataset:
         if name is None:
@@ -182,4 +228,8 @@ def load_project(path: Path | None, *, start: Path | None = None) -> Project:
         mock_fixtures=_inside(root, parsed.proxy.mock_fixtures, "proxy.mock_fixtures")
         if parsed.proxy.mock_fixtures
         else None,
+        bench=parsed.bench
+        if parsed.bench.fault_profiles is not None
+        else parsed.bench.model_copy(update={"fault_profiles": (parsed.proxy.fault_profile,)}),
+        shadow=parsed.shadow,
     )

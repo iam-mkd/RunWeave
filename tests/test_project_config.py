@@ -168,7 +168,7 @@ def test_bench_and_shadow_defaults(tmp_path: Path) -> None:
         ("[bench]\nconcurrency = []\n", "bench.concurrency"),
         ("[bench]\nruns = 0\n", "bench.runs"),
         ("[bench]\nsoak_seconds = 99999\n", "bench.soak_seconds"),
-        ("[shadow]\ncandidate = { name = \"x\" }\n", "shadow.candidate"),
+        ('[shadow]\ncandidate = { name = "x" }\n', "shadow.candidate"),
     ],
 )
 def test_bench_and_shadow_errors_name_the_field(tmp_path: Path, extra: str, field: str) -> None:
