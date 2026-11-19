@@ -11,6 +11,7 @@ import { RunDetailScreen } from './screens/RunDetailScreen.jsx';
 import { RunsScreen } from './screens/RunsScreen.jsx';
 import { SettingsScreen } from './screens/SettingsScreen.jsx';
 import { SetupScreen } from './screens/SetupScreen.jsx';
+import { EvalsScreen, LoadTestsScreen, ShadowScreen } from './screens/testing.jsx';
 import './design/tokens.css';
 import './design/base.css';
 import './components/components.css';
@@ -56,6 +57,9 @@ function useConnection() {
 function Screen({ route, config, navigate }) {
   if (route.screen === 'setup') return <SetupScreen />;
   if (route.screen === 'settings') return <SettingsScreen />;
+  if (route.screen === 'load-tests') return <LoadTestsScreen report={route.params.report} navigate={navigate} />;
+  if (route.screen === 'evals') return <EvalsScreen report={route.params.report} navigate={navigate} />;
+  if (route.screen === 'shadow') return <ShadowScreen report={route.params.report} navigate={navigate} />;
   if (route.screen === 'runs') return <RunsScreen params={route.params} navigate={navigate} />;
   if (route.screen === 'run') return <RunDetailScreen id={route.id} />;
   if (route.screen === 'new-run') return <NewRunScreen params={route.params} config={config} navigate={navigate} />;
@@ -84,7 +88,7 @@ function App() {
 
   const navigate = (target) => { if (location.hash !== target) location.hash = target; };
   const active = route.screen === 'agents' || route.screen === 'setup' ? 'agents'
-    : route.screen === 'settings' ? 'settings' : 'runs';
+    : ['settings', 'load-tests', 'evals', 'shadow'].includes(route.screen) ? route.screen : 'runs';
   const connection = config
     ? { state: 'connected', label: providerNames[config.provider] ?? config.provider }
     : { state: configError ? 'error' : 'connecting', label: configError ? 'API unavailable' : 'Connecting' };

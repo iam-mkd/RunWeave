@@ -42,7 +42,9 @@ tools, canaries, latency, cost), custom Python checks and Pydantic Evals, writes
 JUnit and Markdown reports, and compares against a saved baseline. `runweave bench` reports
 throughput, p50/p95/p99 latency, queue wait, status-API latency, event-loop lag, memory,
 failure categories and tokens per concurrency level and fault profile. `runweave shadow`
-pairs two versions case by case and applies the milestone 16 promotion gates. See
+pairs two versions case by case and applies the milestone 16 promotion gates. Run
+`runweave serve` in the project folder and the workspace's Load tests, Evals and Shadow
+screens start the same commands, chart load tests live, and list every saved report. See
 [Test your agent](docs/testing.md).
 
 ## Run your own agent
@@ -306,6 +308,7 @@ Application code lives in `src/runweave/`.
 | `core/runtime.py` | Construct implementations and own the shared HTTP client |
 | `api/health.py` | Health HTTP contracts and routes |
 | `api/runs.py` | Submission, polling, and cancellation HTTP contracts |
+| `api/testing.py`, `jobs.py` | Testing jobs (the CLI in a child process) and saved reports for the workspace |
 | `api/dependencies.py` | Resolve the lifespan-owned scheduler for requests |
 | `orchestration/scheduler.py` | Admission, workers, cancellation, supervision, cleanup task |
 | `orchestration/registry.py` | Atomic in-memory transitions and history eviction |

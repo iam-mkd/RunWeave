@@ -48,6 +48,12 @@ All notable changes to RunWeave are recorded here. The format follows
   without prompt text, and fixture-scripted deterministic replies
   (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
   for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
+- Load tests, Evals and Shadow screens (milestone 22): the workspace starts
+  `runweave bench|eval|shadow --progress` as a child process through a new jobs API
+  (`/v1/jobs`, `/v1/reports`), charts load tests live, and lists saved reports from the
+  CLI and UI alike. One job at a time; cancelling stops the command cleanly. `runweave
+  serve` picks up `./runweave.toml` or `--project`. New scopes `tests:run` and
+  `tests:read`.
 - `runweave bench` (milestone 22): concurrency sweeps, fault profiles and soak runs
   against the project's agent, reporting hardware, settings, throughput, p50/p95/p99
   latency and queue wait, status-API latency, event-loop lag, memory, failure categories,

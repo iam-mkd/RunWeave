@@ -187,3 +187,37 @@ The candidate is eligible for promotion only when every gate passes:
 These are the milestone 16 shadow gates applied to your agent. `shadow` exits 0 when the
 candidate is eligible and 1 when not; nothing is switched automatically. With `--server`,
 the candidate must be an HTTP agent registered under its own `name`.
+
+## 8. From the workspace
+
+Start the workspace from the project folder (or pass `--project path/to/runweave.toml`):
+
+```bash
+cd my-agent
+runweave serve --agent agent:run     # then open http://127.0.0.1:8000
+```
+
+The **Load tests**, **Evals** and **Shadow** screens start the same commands as above. Each
+runs as `runweave bench|eval|shadow --progress` in a child process in the project folder,
+so a load test never shares the workspace's event loop, and the reports are the same files
+a terminal run writes. Load tests show throughput and p95 latency live; when a job ends,
+the screen opens its report, and every saved report (from the UI or the CLI) is listed
+underneath. One test runs at a time; **Cancel** stops the command cleanly, including any
+agent process it started.
+
+The screens use a small API you can also script against:
+
+| Endpoint | Behavior |
+| --- | --- |
+| `GET /v1/jobs/project` | The project's agent, datasets, bench and shadow defaults, and fault profiles (404 `NO_PROJECT` without one) |
+| `POST /v1/jobs` | Start `{"kind": "eval" \| "bench" \| "shadow", ...options}`; 202, or 409 `JOB_RUNNING` |
+| `GET /v1/jobs`, `GET /v1/jobs/{id}?after=N` | Recent jobs; one job with its progress events after sequence `N` |
+| `POST /v1/jobs/{id}/cancel` | Stop a running job |
+| `GET /v1/reports?kind=eval`, `GET /v1/reports/{id}` | Saved report summaries, newest first; one full `report.json` |
+
+Options are validated before anything starts (dataset names, 1 to 12 concurrency levels of
+1 to 256, runs, fault profile names, soak up to an hour, a `module:function` or HTTP URL
+candidate), and the command is started without a shell. Reports are looked up by strict id
+only. The endpoints need the `tests:run` and `tests:read` scopes when authentication is on.
+`--progress` prints one JSON object per line (`started`, `case`, `pair`, `level_started`,
+`tick`, `level`, `soak_window`, then `report`) if you want the same feed in your own tools.
