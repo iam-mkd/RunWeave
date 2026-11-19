@@ -23,14 +23,33 @@ def result(**overrides: Any) -> CaseResult:
         "error": None,
         "steps": [
             {"title": "Split words", "kind": "step", "detail": None, "status": "succeeded"},
-            {"title": "Tool call", "kind": "step", "detail": "lookup_weather", "status": "succeeded"},
-            {"title": "Model call", "kind": "model_call", "detail": "chat · mock", "status": "succeeded"},
+            {
+                "title": "Tool call",
+                "kind": "step",
+                "detail": "lookup_weather",
+                "status": "succeeded",
+            },
+            {
+                "title": "Model call",
+                "kind": "model_call",
+                "detail": "chat · mock",
+                "status": "succeeded",
+            },
         ],
-        "usage": {"input_tokens": 100, "output_tokens": 20, "estimated_cost_usd": "0.0012", "requests": 1},
+        "usage": {
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "estimated_cost_usd": "0.0012",
+            "requests": 1,
+        },
     }
     snapshot.update(overrides.pop("snapshot", {}))
-    return CaseResult(snapshot=snapshot, latency_ms=overrides.pop("latency_ms", 120.0),
-                      output_schema=OUTPUT_SCHEMA, **overrides)
+    return CaseResult(
+        snapshot=snapshot,
+        latency_ms=overrides.pop("latency_ms", 120.0),
+        output_schema=OUTPUT_SCHEMA,
+        **overrides,
+    )
 
 
 def outcomes(expect: dict[str, Any], **overrides: Any) -> dict[str, bool]:
@@ -40,12 +59,16 @@ def outcomes(expect: dict[str, Any], **overrides: Any) -> dict[str, bool]:
 def test_jsonl_and_yaml_cases_load_with_ids(tmp_path: Path) -> None:
     jsonl = tmp_path / "cases.jsonl"
     jsonl.write_text(
-        json.dumps({"id": "a", "input": {"text": "x"}, "expect": {"output": {"words": 1}}}) + "\n\n"
-        + json.dumps({"input": {"text": "y"}, "tags": ["slow"]}) + "\n",
+        json.dumps({"id": "a", "input": {"text": "x"}, "expect": {"output": {"words": 1}}})
+        + "\n\n"
+        + json.dumps({"input": {"text": "y"}, "tags": ["slow"]})
+        + "\n",
         encoding="utf-8",
     )
     yaml = tmp_path / "cases.yaml"
-    yaml.write_text("- id: b\n  input: {text: z}\n  expect: {status: SUCCEEDED}\n", encoding="utf-8")
+    yaml.write_text(
+        "- id: b\n  input: {text: z}\n  expect: {status: SUCCEEDED}\n", encoding="utf-8"
+    )
     first = load_cases(jsonl)
     assert [c.id for c in first] == ["a", "case-3"]
     assert first[1].tags == ("slow",)
@@ -79,7 +102,8 @@ def test_output_schema_and_status_assertions() -> None:
     assert outcomes({"status": "FAILED"})["status"] is False
     failed = {"status": "FAILED", "result": None, "error": {"code": "AGENT_STEP_LIMIT"}}
     assert outcomes({"error_code": "AGENT_STEP_LIMIT"}, snapshot=failed) == {
-        "status": True, "error_code": True,
+        "status": True,
+        "error_code": True,
     }
 
 
@@ -103,10 +127,18 @@ def test_tool_and_canary_assertions() -> None:
 def test_latency_cost_token_and_model_call_ceilings() -> None:
     within = {"max_latency_ms": 500, "max_cost_usd": 0.01, "max_tokens": 200, "max_model_calls": 1}
     assert set(outcomes(within).values()) == {True}
-    over = outcomes({"max_latency_ms": 100, "max_cost_usd": 0.001, "max_tokens": 50,
-                     "max_model_calls": 0}, latency_ms=150.0)
-    assert over == {"status": True, "schema": True, "max_latency_ms": False,
-                    "max_cost_usd": False, "max_tokens": False, "max_model_calls": False}
+    over = outcomes(
+        {"max_latency_ms": 100, "max_cost_usd": 0.001, "max_tokens": 50, "max_model_calls": 0},
+        latency_ms=150.0,
+    )
+    assert over == {
+        "status": True,
+        "schema": True,
+        "max_latency_ms": False,
+        "max_cost_usd": False,
+        "max_tokens": False,
+        "max_model_calls": False,
+    }
 
 
 def test_messages_explain_failures_without_dumping_whole_outputs() -> None:
@@ -122,12 +154,18 @@ def test_custom_python_assertions(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
         encoding="utf-8",
     )
     monkeypatch.syspath_prepend(str(tmp_path))
-    found = {a.name: a for a in check(
-        {"python": ["checks:has_three", "checks:explained", "checks:broken"]}, result(), input={}
-    )}
+    found = {
+        a.name: a
+        for a in check(
+            {"python": ["checks:has_three", "checks:explained", "checks:broken"]},
+            result(),
+            input={},
+        )
+    }
     assert found["python:checks:has_three"].passed is True
     assert (found["python:checks:explained"].passed, found["python:checks:explained"].message) == (
-        False, "needs more words",
+        False,
+        "needs more words",
     )
     assert found["python:checks:broken"].passed is False
     assert "RuntimeError" in found["python:checks:broken"].message
@@ -135,13 +173,19 @@ def test_custom_python_assertions(tmp_path: Path, monkeypatch: pytest.MonkeyPatc
 
 def test_pydantic_evals_evaluators_run_on_the_result() -> None:
     pytest.importorskip("pydantic_evals")
-    found = {a.name: a.passed for a in check(
-        {"pydantic_evals": [
-            {"evaluator": "Contains", "args": {"value": "wonderful"}},
-            {"evaluator": "MaxDuration", "args": {"seconds": 0.05}},
-        ]},
-        result(),
-        input={"text": "hi"},
-    )}
+    found = {
+        a.name: a.passed
+        for a in check(
+            {
+                "pydantic_evals": [
+                    # On a dict output, pydantic-evals Contains checks keys.
+                    {"evaluator": "Contains", "args": {"value": "longest"}},
+                    {"evaluator": "MaxDuration", "args": {"seconds": 0.05}},
+                ]
+            },
+            result(),
+            input={"text": "hi"},
+        )
+    }
     assert found["pydantic_evals:Contains"] is True
     assert found["pydantic_evals:MaxDuration"] is False  # 120 ms > 50 ms

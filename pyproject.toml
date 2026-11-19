@@ -77,7 +77,13 @@ cache-keys = [
 ]
 
 [tool.setuptools.package-data]
-"runweave" = ["sandbox_assets/*.json", "sandbox_assets/*LICENSE", "sandbox_assets/*.md"]
+"runweave" = [
+    "sandbox_assets/*.json",
+    "sandbox_assets/*LICENSE",
+    "sandbox_assets/*.md",
+    "templates/**/*",
+    "templates/*/.gitignore",
+]
 "runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 
 [tool.pytest.ini_options]

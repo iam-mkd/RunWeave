@@ -1,7 +1,10 @@
 """`runweave` command line.
 
-`serve` starts the local workspace with your agents; `serve-agent` exposes Python agents
-over the HTTP agent contract so another RunWeave can call them.
+`init` creates a project, `eval` tests its agent against a dataset, `serve` starts the
+local workspace with your agents, and `serve-agent` exposes Python agents over the HTTP
+agent contract so another RunWeave can call them.
+
+Exit codes: 0 success, 1 failed gates or a failed command, 2 a project or usage problem.
 """
 
 import argparse
@@ -72,11 +75,16 @@ def serve(args: argparse.Namespace) -> int:
 
     import uvicorn
 
+    from runweave.app import create_app
     from runweave.workspace import create_workspace
 
     try:
-        app = create_workspace(
-            config, Path(args.assets).resolve(), agents=agents, http_agents=http_agents
+        app = (
+            create_app(config, agents=agents, http_agents=http_agents)
+            if args.api_only
+            else create_workspace(
+                config, Path(args.assets).resolve(), agents=agents, http_agents=http_agents
+            )
         )
     except ValueError as error:
         print(f"runweave: {error}", file=sys.stderr)
@@ -130,6 +138,49 @@ def serve_agent(args: argparse.Namespace) -> int:
     return 0
 
 
+def init(args: argparse.Namespace) -> int:
+    from runweave.project import ProjectError
+    from runweave.scaffold import init_project
+
+    directory = Path(args.directory)
+    try:
+        written = init_project(directory, args.language, force=args.force)
+    except ProjectError as error:
+        print(f"runweave: {error}", file=sys.stderr)
+        return 2
+    print(f"Created a {args.language} project in {directory} ({len(written)} files).")
+    steps = ["npm install", "runweave eval"] if args.language == "typescript" else ["runweave eval"]
+    where = "" if directory == Path(".") else f"cd {directory}\n  "
+    print("Next:\n  " + where + "\n  ".join(steps))
+    return 0
+
+
+def eval_command(args: argparse.Namespace) -> int:
+    from runweave.evals.cases import CaseError
+    from runweave.evals.command import EvalOptions, run_eval, summary_text
+    from runweave.project import ProjectError, load_project
+
+    try:
+        project = load_project(args.config)
+        report, folder = asyncio.run(
+            run_eval(
+                project,
+                EvalOptions(
+                    dataset=args.dataset,
+                    server=args.server,
+                    baseline=args.baseline,
+                    save_baseline=args.save_baseline,
+                    junit=args.junit,
+                ),
+            )
+        )
+    except (ProjectError, CaseError) as error:
+        print(f"runweave: {error}", file=sys.stderr)
+        return 2
+    print(summary_text(report, folder))
+    return 0 if report["gates"]["passed"] else 1
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="runweave", description="Run and test your agents locally")
     commands = root.add_subparsers(dest="command", required=True)
@@ -153,7 +204,25 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--port", type=int, default=8000)
     start.add_argument("--assets", default="frontend/dist", help="Built workspace UI directory")
     start.add_argument("--check", action="store_true", help="Load agents, list them and exit")
+    start.add_argument("--api-only", action="store_true", help="Serve the API without the UI")
     start.set_defaults(handler=serve)
+    create = commands.add_parser("init", help="Create a project with a sample agent and dataset")
+    create.add_argument("directory", nargs="?", default=".")
+    create.add_argument("--language", choices=("python", "typescript"), default="python")
+    create.add_argument("--force", action="store_true", help="Overwrite existing files")
+    create.set_defaults(handler=init)
+    evaluate = commands.add_parser("eval", help="Run a dataset through the agent and gate on it")
+    evaluate.add_argument("--config", type=Path, help="runweave.toml (default: search upward)")
+    evaluate.add_argument("--dataset", help="Dataset name (default: the first one)")
+    evaluate.add_argument(
+        "--server", help="Submit to a running RunWeave, e.g. http://127.0.0.1:8000"
+    )
+    evaluate.add_argument("--baseline", type=Path, help="An earlier report.json to compare with")
+    evaluate.add_argument(
+        "--save-baseline", action="store_true", help="Keep this report as the dataset's baseline"
+    )
+    evaluate.add_argument("--junit", type=Path, help="Also write JUnit XML here")
+    evaluate.set_defaults(handler=eval_command)
     expose = commands.add_parser(
         "serve-agent", help="Serve Python agents over the RunWeave HTTP agent contract"
     )

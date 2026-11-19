@@ -1,0 +1,4 @@
+{"id": "counts-words", "input": {"text": "RunWeave tests agents"}, "expect": {"output": {"words": 3}, "max_latency_ms": 5000}}
+{"id": "finds-longest", "input": {"text": "a wonderful day"}, "expect": {"contains": {"longest": "wonderful"}}}
+{"id": "records-steps", "input": {"text": "one two three"}, "expect": {"tool_called": ["Split words", "Find the longest word"], "not_contains": ["RW_CANARY_SAMPLE"]}}
+{"id": "rejects-empty-text", "input": {"text": ""}, "expect": {"status": "REJECTED"}}

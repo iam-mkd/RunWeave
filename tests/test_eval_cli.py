@@ -21,8 +21,13 @@ def runweave(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
     env = {k: v for k, v in os.environ.items() if not k.startswith("RUNWEAVE_")}
     env["PYTHONPATH"] = str(ROOT / "src")
     return subprocess.run(
-        [sys.executable, "-m", "runweave.cli", *args], cwd=cwd, env=env, capture_output=True,
-        text=True, timeout=180, check=False,
+        [sys.executable, "-m", "runweave.cli", *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
     )
 
 
@@ -41,7 +46,12 @@ def test_init_creates_a_python_project_that_passes_its_own_eval(tmp_path: Path) 
     created = runweave("init", "my-agent", cwd=tmp_path)
     assert created.returncode == 0, created.stderr
     project = tmp_path / "my-agent"
-    assert {p.name for p in project.iterdir()} >= {"runweave.toml", "agent.py", "datasets", "README.md"}
+    assert {p.name for p in project.iterdir()} >= {
+        "runweave.toml",
+        "agent.py",
+        "datasets",
+        "README.md",
+    }
     again = runweave("init", "my-agent", cwd=tmp_path)
     assert again.returncode != 0 and "--force" in again.stderr
 
@@ -64,8 +74,12 @@ def test_failing_cases_exit_non_zero_and_are_reported(tmp_path: Path) -> None:
     project = tmp_path / "proj"
     dataset = project / "datasets" / "smoke.jsonl"
     with dataset.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps({"id": "wrong", "input": {"text": "one two"},
-                                 "expect": {"output": {"words": 3}}}) + "\n")
+        handle.write(
+            json.dumps(
+                {"id": "wrong", "input": {"text": "one two"}, "expect": {"output": {"words": 3}}}
+            )
+            + "\n"
+        )
     evaluated = runweave("eval", "--junit", "out/junit.xml", cwd=project)
     assert evaluated.returncode == 1
     assert "wrong" in evaluated.stdout
@@ -85,14 +99,17 @@ def test_a_baseline_catches_regressions_even_above_the_pass_rate(tmp_path: Path)
     baseline = project / ".runweave" / "baselines" / "smoke.json"
     assert baseline.is_file()
     (project / "runweave.toml").write_text(
-        (project / "runweave.toml").read_text(encoding="utf-8").replace(
-            "min_pass_rate = 1.0", "min_pass_rate = 0.5"
-        ) + '\n',
+        (project / "runweave.toml")
+        .read_text(encoding="utf-8")
+        .replace("min_pass_rate = 1.0", "min_pass_rate = 0.5")
+        + "\n",
         encoding="utf-8",
     )
     agent = project / "agent.py"
-    agent.write_text(agent.read_text(encoding="utf-8").replace(
-        "longest=longest", 'longest="regressed"'), encoding="utf-8")
+    agent.write_text(
+        agent.read_text(encoding="utf-8").replace("longest=longest", 'longest="regressed"'),
+        encoding="utf-8",
+    )
     second = runweave("eval", "--baseline", str(baseline), cwd=project)
     assert second.returncode == 1, second.stdout
     assert "regress" in second.stdout.lower()
@@ -116,10 +133,21 @@ async def test_eval_can_submit_to_a_running_server(tmp_path: Path) -> None:
     sock.close()
     env = {k: v for k, v in os.environ.items() if not k.startswith("RUNWEAVE_")}
     env["PYTHONPATH"] = os.pathsep.join([str(ROOT / "src"), str(project)])
-    server = subprocess.Popen(
-        [sys.executable, "-m", "runweave.cli", "serve", "--demo", "--api-only", "--port", str(port),
-         "--agent", "agent:run"],
-        cwd=project, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    server = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-m",
+        "runweave.cli",
+        "serve",
+        "--demo",
+        "--api-only",
+        "--port",
+        str(port),
+        "--agent",
+        "agent:run",
+        cwd=project,
+        env=env,
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
     )
     try:
         import httpx
@@ -127,7 +155,9 @@ async def test_eval_can_submit_to_a_running_server(tmp_path: Path) -> None:
         async with httpx.AsyncClient() as client:
             for _ in range(200):
                 try:
-                    if (await client.get(f"http://127.0.0.1:{port}/health/ready")).status_code == 200:
+                    if (
+                        await client.get(f"http://127.0.0.1:{port}/health/ready")
+                    ).status_code == 200:
                         break
                 except httpx.HTTPError:
                     pass
@@ -137,7 +167,7 @@ async def test_eval_can_submit_to_a_running_server(tmp_path: Path) -> None:
         )
     finally:
         server.kill()
-        server.wait(timeout=10)
+        await server.wait()
     assert evaluated.returncode == 0, evaluated.stdout + evaluated.stderr
     assert report(latest(project))["environment"]["mode"] == f"server http://127.0.0.1:{port}"
 
@@ -154,9 +184,15 @@ def test_init_creates_a_typescript_project_that_passes_its_own_eval(tmp_path: Pa
     assert (project / "vendor" / "runweave-agent" / "dist" / "index.js").is_file()
     manifest = json.loads((project / "package.json").read_text(encoding="utf-8"))
     assert manifest["dependencies"]["@runweave/agent"] == "file:vendor/runweave-agent"
-    installed = subprocess.run([npm, "install", "--no-audit", "--no-fund"], cwd=project,
-                               capture_output=True, text=True, timeout=180, check=False,
-                               shell=sys.platform == "win32")
+    installed = subprocess.run(
+        [npm, "install", "--no-audit", "--no-fund"],
+        cwd=project,
+        capture_output=True,
+        text=True,
+        timeout=180,
+        check=False,
+        shell=sys.platform == "win32",
+    )
     assert installed.returncode == 0, installed.stderr
     evaluated = runweave("eval", cwd=project)
     assert evaluated.returncode == 0, evaluated.stdout + evaluated.stderr

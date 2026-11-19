@@ -49,7 +49,10 @@ def test_a_python_project_loads_with_paths_relative_to_the_file(tmp_path: Path) 
 
 
 def test_defaults_and_http_agents_with_a_start_command(tmp_path: Path) -> None:
-    project = load_project(write(tmp_path, """
+    project = load_project(
+        write(
+            tmp_path,
+            """
 [agent]
 name = "word-count"
 command = ["node", "agent.mjs"]
@@ -57,7 +60,9 @@ command = ["node", "agent.mjs"]
 [[datasets]]
 name = "smoke"
 path = "smoke.yaml"
-"""))
+""",
+        )
+    )
     assert project.agent.command == ("node", "agent.mjs") and project.agent.python is None
     assert project.limits.concurrency == 4 and project.proxy.mode == "mock"
     assert project.eval.min_pass_rate == 1.0 and project.eval.baseline is None
@@ -75,16 +80,30 @@ def test_the_project_file_is_found_from_a_subdirectory(tmp_path: Path) -> None:
     [
         ("[agent\nname=1", "not valid TOML"),
         ('[agent]\nname = "x"\n[[datasets]]\nname="d"\npath="d.jsonl"', "python, http or command"),
-        ('[agent]\nname = "x"\npython = "a:b"\nhttp = "http://127.0.0.1:1"\n'
-         '[[datasets]]\nname="d"\npath="d.jsonl"', "either python or http"),
-        ('[agent]\nname = "Bad Name"\npython = "a:b"\n[[datasets]]\nname="d"\npath="d.jsonl"', "agent.name"),
+        (
+            '[agent]\nname = "x"\npython = "a:b"\nhttp = "http://127.0.0.1:1"\n'
+            '[[datasets]]\nname="d"\npath="d.jsonl"',
+            "either python or http",
+        ),
+        (
+            '[agent]\nname = "Bad Name"\npython = "a:b"\n[[datasets]]\nname="d"\npath="d.jsonl"',
+            "agent.name",
+        ),
         ('[agent]\nname = "x"\npython = "a:b"', "at least one dataset"),
-        ('[agent]\nname = "x"\npython = "a:b"\n[[datasets]]\nname="d"\npath="../../etc/passwd"',
-         "inside the project"),
-        ('[agent]\nname = "x"\npython = "a:b"\nsurprise = 1\n[[datasets]]\nname="d"\npath="d.jsonl"',
-         "surprise"),
-        ('[agent]\nname = "x"\npython = "a:b"\n[proxy]\nmode = "live"\n[[datasets]]\nname="d"\npath="d.jsonl"',
-         "proxy.mode"),
+        (
+            '[agent]\nname = "x"\npython = "a:b"\n[[datasets]]\nname="d"\npath="../../etc/passwd"',
+            "inside the project",
+        ),
+        (
+            '[agent]\nname = "x"\npython = "a:b"\nsurprise = 1\n'
+            '[[datasets]]\nname="d"\npath="d.jsonl"',
+            "surprise",
+        ),
+        (
+            '[agent]\nname = "x"\npython = "a:b"\n[proxy]\nmode = "live"\n'
+            '[[datasets]]\nname="d"\npath="d.jsonl"',
+            "proxy.mode",
+        ),
     ],
 )
 def test_invalid_projects_explain_what_to_fix(tmp_path: Path, text: str, message: str) -> None:

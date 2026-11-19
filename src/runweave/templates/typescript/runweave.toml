@@ -1,0 +1,20 @@
+# RunWeave project: `runweave eval` starts agent.mjs, runs the datasets, then stops it.
+[agent]
+name = "word-count"
+command = ["node", "agent.mjs"]
+
+[limits]
+run_timeout_seconds = 30
+concurrency = 4
+
+[proxy]
+mode = "mock"
+fault_profile = ""
+fault_seed = 0
+
+[[datasets]]
+name = "smoke"
+path = "datasets/smoke.jsonl"
+
+[eval]
+min_pass_rate = 1.0
