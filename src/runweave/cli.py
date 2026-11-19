@@ -1,8 +1,9 @@
 """`runweave` command line.
 
-`init` creates a project, `eval` tests its agent against a dataset, `serve` starts the
-local workspace with your agents, and `serve-agent` exposes Python agents over the HTTP
-agent contract so another RunWeave can call them.
+`init` creates a project, `eval` tests its agent against a dataset, `bench` load-tests it,
+`shadow` compares a candidate version with it, `serve` starts the local workspace with your
+agents, and `serve-agent` exposes Python agents over the HTTP agent contract so another
+RunWeave can call them.
 
 Exit codes: 0 success, 1 failed gates or a failed command, 2 a project or usage problem.
 """
@@ -181,6 +182,70 @@ def eval_command(args: argparse.Namespace) -> int:
     return 0 if report["gates"]["passed"] else 1
 
 
+def bench_command(args: argparse.Namespace) -> int:
+    from runweave.bench import BenchOptions, run_bench, summary_text
+    from runweave.evals.cases import CaseError
+    from runweave.project import ProjectError, load_project
+
+    if args.concurrency and any(not 1 <= level <= 256 for level in args.concurrency):
+        print("runweave: use concurrency levels between 1 and 256", file=sys.stderr)
+        return 2
+    if args.runs is not None and not 1 <= args.runs <= 10000:
+        print("runweave: use between 1 and 10000 runs per level", file=sys.stderr)
+        return 2
+    if args.soak is not None and not 0 <= args.soak <= 3600:
+        print("runweave: use a soak between 0 and 3600 seconds", file=sys.stderr)
+        return 2
+    try:
+        project = load_project(args.config)
+        report, folder = asyncio.run(
+            run_bench(
+                project,
+                BenchOptions(
+                    dataset=args.dataset,
+                    server=args.server,
+                    concurrency=tuple(sorted(set(args.concurrency))) if args.concurrency else None,
+                    runs=args.runs,
+                    fault_profiles=tuple(args.fault_profile) if args.fault_profile else None,
+                    soak_seconds=args.soak,
+                ),
+            )
+        )
+    except (ProjectError, CaseError) as error:
+        print(f"runweave: {error}", file=sys.stderr)
+        return 2
+    print(summary_text(report, folder))
+    return 0 if report["gates"]["passed"] else 1
+
+
+def shadow_command(args: argparse.Namespace) -> int:
+    from runweave.evals.cases import CaseError
+    from runweave.evals.shadow import ShadowOptions, run_shadow, summary_text
+    from runweave.project import ProjectError, load_project
+
+    try:
+        project = load_project(args.config)
+        report, folder = asyncio.run(
+            run_shadow(
+                project,
+                ShadowOptions(dataset=args.dataset, server=args.server, candidate=args.candidate),
+            )
+        )
+    except (ProjectError, CaseError) as error:
+        print(f"runweave: {error}", file=sys.stderr)
+        return 2
+    print(summary_text(report, folder))
+    return 0 if report["promotion_eligible"] else 1
+
+
+def _project_arguments(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--config", type=Path, help="runweave.toml (default: search upward)")
+    command.add_argument("--dataset", help="Dataset name (default: the first one)")
+    command.add_argument(
+        "--server", help="Submit to a running RunWeave, e.g. http://127.0.0.1:8000"
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="runweave", description="Run and test your agents locally")
     commands = root.add_subparsers(dest="command", required=True)
@@ -212,17 +277,39 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--force", action="store_true", help="Overwrite existing files")
     create.set_defaults(handler=init)
     evaluate = commands.add_parser("eval", help="Run a dataset through the agent and gate on it")
-    evaluate.add_argument("--config", type=Path, help="runweave.toml (default: search upward)")
-    evaluate.add_argument("--dataset", help="Dataset name (default: the first one)")
-    evaluate.add_argument(
-        "--server", help="Submit to a running RunWeave, e.g. http://127.0.0.1:8000"
-    )
+    _project_arguments(evaluate)
     evaluate.add_argument("--baseline", type=Path, help="An earlier report.json to compare with")
     evaluate.add_argument(
         "--save-baseline", action="store_true", help="Keep this report as the dataset's baseline"
     )
     evaluate.add_argument("--junit", type=Path, help="Also write JUnit XML here")
     evaluate.set_defaults(handler=eval_command)
+    load = commands.add_parser(
+        "bench", help="Load-test the agent: concurrency sweeps, fault profiles and soak runs"
+    )
+    _project_arguments(load)
+    load.add_argument(
+        "--concurrency", type=int, nargs="+", metavar="N", help="Levels to sweep, e.g. 1 8 32"
+    )
+    load.add_argument("--runs", type=int, help="Runs per level")
+    load.add_argument(
+        "--fault-profile",
+        action="append",
+        metavar="NAME",
+        help='Proxy fault profile (repeatable; "" for none), e.g. flaky',
+    )
+    load.add_argument("--soak", type=float, metavar="SECONDS", help="Then soak at the top level")
+    load.set_defaults(handler=bench_command)
+    compare = commands.add_parser(
+        "shadow", help="Compare a candidate agent version with the current one on a dataset"
+    )
+    _project_arguments(compare)
+    compare.add_argument(
+        "--candidate",
+        metavar="TARGET",
+        help="module:function of a Python @agent, or an HTTP agent URL ([shadow] candidate)",
+    )
+    compare.set_defaults(handler=shadow_command)
     expose = commands.add_parser(
         "serve-agent", help="Serve Python agents over the RunWeave HTTP agent contract"
     )

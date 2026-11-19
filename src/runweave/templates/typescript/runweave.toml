@@ -18,3 +18,12 @@ path = "datasets/smoke.jsonl"
 
 [eval]
 min_pass_rate = 1.0
+
+[bench]                # runweave bench: levels to sweep and runs per level
+concurrency = [1, 4, 16]
+runs = 32
+# soak_seconds = 600
+# max_failure_rate = 0.01
+
+[shadow]               # runweave shadow: the version to compare with [agent]
+# candidate = { command = ["node", "agent_v2.mjs"] }

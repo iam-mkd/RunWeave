@@ -5,6 +5,8 @@ A RunWeave project created by `runweave init`.
 ```bash
 runweave eval                    # run datasets/smoke.jsonl, offline, no API key
 runweave eval --save-baseline    # keep this result to catch regressions later
+runweave bench                   # load-test: throughput, latency, memory, failures
+runweave shadow --candidate agent_v2:run   # compare a new version case by case
 runweave serve --agent agent:run # open the workspace at http://127.0.0.1:8000
 ```
 

@@ -1,14 +1,16 @@
 """Run a project's agent through RunWeave's own HTTP API, in-process or on a running server.
 
-In-process, RunWeave starts inside the command (Python agents are imported from the project
-folder; an HTTP agent's `command` is started and stopped around the run). With `--server`,
-cases are submitted to that instance. Both paths use the same API calls, so the CLI and the
-workspace run identical jobs.
+In-process, RunWeave starts inside the command and listens on a free loopback port, so agents
+reach its LLM proxy over a real socket (Python agents are imported from the project folder;
+an HTTP agent's `command` is started and stopped around the run). With `--server`, cases are
+submitted to that instance. Both paths use the same API calls, so the CLI and the workspace
+run identical jobs.
 """
 
 import asyncio
 import os
 import platform
+import socket
 import sys
 from collections.abc import AsyncIterator
 from contextlib import AsyncExitStack, asynccontextmanager
@@ -20,7 +22,7 @@ from typing import Any
 import httpx
 
 from runweave.evals.assertions import CaseResult
-from runweave.project import Project, ProjectError
+from runweave.project import AgentSection, CandidateSection, Project, ProjectError
 
 TERMINAL = {"SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED"}
 READY_PREFIX = "RUNWEAVE_AGENT_READY "
@@ -88,12 +90,31 @@ async def _agent_info(client: httpx.AsyncClient, name: str) -> dict[str, Any] | 
     return next((a for a in agents if a["name"] == name), None)
 
 
+@dataclass(frozen=True)
+class InProcessLimits:
+    """Overrides for the RunWeave started in-process (bench sweeps and fault profiles)."""
+
+    workers: int | None = None
+    fault_profile: str | None = None
+
+
+DEFAULT_LIMITS = InProcessLimits()
+
+
 @asynccontextmanager
-async def open_target(project: Project, server: str | None) -> AsyncIterator[Target]:
+async def open_target(
+    project: Project,
+    server: str | None,
+    *,
+    agent: AgentSection | CandidateSection | None = None,
+    limits: InProcessLimits = DEFAULT_LIMITS,
+) -> AsyncIterator[Target]:
+    section = agent or project.agent
+    name = section.name or project.agent.name
     async with AsyncExitStack() as stack:
-        agent_url: str | None = project.agent.http
-        if project.agent.command is not None:
-            process, agent_url = await _start_agent(project.agent.command, project)
+        agent_url: str | None = section.http
+        if section.command is not None:
+            process, agent_url = await _start_agent(section.command, project)
 
             async def stop() -> None:
                 if process.returncode is None:
@@ -106,7 +127,7 @@ async def open_target(project: Project, server: str | None) -> AsyncIterator[Tar
                 httpx.AsyncClient(base_url=server.rstrip("/"), timeout=60, trust_env=False)
             )
             try:
-                info = await _agent_info(client, project.agent.name)
+                info = await _agent_info(client, name)
             except httpx.HTTPError as error:
                 raise ProjectError(
                     f"Cannot reach RunWeave at {server}: {type(error).__name__}"
@@ -117,14 +138,14 @@ async def open_target(project: Project, server: str | None) -> AsyncIterator[Tar
                     raise ProjectError(
                         f"The server could not register {agent_url}: {registered.text[:200]}"
                     )
-                info = await _agent_info(client, project.agent.name)
+                info = await _agent_info(client, name)
             mode = f"server {server.rstrip('/')}"
         else:
-            client, mode = await _in_process(stack, project, agent_url)
-            info = await _agent_info(client, project.agent.name)
+            client, mode = await _in_process(stack, project, section, agent_url, limits)
+            info = await _agent_info(client, name)
         if info is None:
             raise ProjectError(
-                f"Agent {project.agent.name!r} is not registered"
+                f"Agent {name!r} is not registered"
                 + (
                     " on the server; start it with --agent or connect it first"
                     if server
@@ -135,31 +156,49 @@ async def open_target(project: Project, server: str | None) -> AsyncIterator[Tar
 
 
 async def _in_process(
-    stack: AsyncExitStack, project: Project, agent_url: str | None
+    stack: AsyncExitStack,
+    project: Project,
+    section: AgentSection | CandidateSection,
+    agent_url: str | None,
+    limits: InProcessLimits,
 ) -> tuple[httpx.AsyncClient, str]:
+    import uvicorn
+
     from runweave.agents.catalog import AgentLoadError, load_python_agents
     from runweave.app import create_app
     from runweave.core.settings import Settings
 
     agents = []
-    if project.agent.python is not None:
+    if section.python is not None:
         root = str(project.root)
         if root not in sys.path:
             sys.path.insert(0, root)
         try:
-            agents = load_python_agents([project.agent.python])
+            agents = load_python_agents([section.python])
         except AgentLoadError as error:
             raise ProjectError(str(error)) from None
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    stack.callback(listener.close)
+    listener.bind(("127.0.0.1", 0))
+    url = f"http://127.0.0.1:{listener.getsockname()[1]}"
+    fault_profile = (
+        project.proxy.fault_profile if limits.fault_profile is None else limits.fault_profile
+    )
+    workers = max(4, project.limits.concurrency, limits.workers or 0)
     try:
         settings = Settings(  # type: ignore[call-arg]
             _env_file=None,
             auth_mode="local",
             database_url=None,
             model_provider="fake",
-            worker_count=max(4, project.limits.concurrency),
+            worker_count=workers,
+            queue_capacity=max(1000, workers),
+            history_max_records=max(1000, workers * 4),
+            event_stream_max_subscribers=min(1024, workers + 8),
             run_timeout_seconds=project.limits.run_timeout_seconds,
             proxy_mode=project.proxy.mode,
-            proxy_fault_profile=project.proxy.fault_profile,
+            proxy_public_url=url,
+            proxy_fault_profile=fault_profile,
             proxy_fault_seed=project.proxy.fault_seed,
             proxy_mock_fixtures=project.mock_fixtures,
             key_store="none",
@@ -167,13 +206,34 @@ async def _in_process(
         app = create_app(settings, agents=agents, http_agents=[agent_url] if agent_url else [])
     except ValueError as error:
         raise ProjectError(str(error)) from None
-    try:
-        await stack.enter_async_context(app.router.lifespan_context(app))
-    except RuntimeError as error:
-        raise ProjectError(str(error)) from None
+    server = uvicorn.Server(
+        uvicorn.Config(app, log_level="error", access_log=False, timeout_graceful_shutdown=5)
+    )
+    serving = asyncio.create_task(server.serve(sockets=[listener]), name="runweave-in-process")
+
+    async def stop() -> None:
+        server.should_exit = True
+        try:
+            async with asyncio.timeout(15):
+                await asyncio.gather(serving, return_exceptions=True)
+        except TimeoutError:
+            serving.cancel()
+            await asyncio.gather(serving, return_exceptions=True)
+
+    stack.push_async_callback(stop)
+    async with asyncio.timeout(30):
+        while not server.started:  # uvicorn exposes startup only as a flag
+            if serving.done():
+                raise ProjectError(
+                    "RunWeave could not start in-process; check the agent and runweave.toml"
+                )
+            await asyncio.sleep(0.01)
     client = await stack.enter_async_context(
         httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app), base_url="http://runweave", timeout=60
+            base_url=url,
+            timeout=60,
+            trust_env=False,
+            limits=httpx.Limits(max_connections=workers + 8, max_keepalive_connections=workers + 8),
         )
     )
     return client, "in-process"

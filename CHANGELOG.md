@@ -48,6 +48,13 @@ All notable changes to RunWeave are recorded here. The format follows
   without prompt text, and fixture-scripted deterministic replies
   (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
   for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
+- `runweave bench` (milestone 22): concurrency sweeps, fault profiles and soak runs
+  against the project's agent, reporting hardware, settings, throughput, p50/p95/p99
+  latency and queue wait, status-API latency, event-loop lag, memory, failure categories,
+  tokens and cost, with optional failure-rate and p95 gates. `runweave shadow` runs a
+  candidate version beside the current one, records paired differences and applies the
+  milestone 16 promotion gates. In-process commands now serve RunWeave on a loopback port
+  so agents reach the LLM proxy. psutil becomes a runtime dependency (BSD-3-Clause).
 - Testing CLI (milestone 22): `runweave init` creates a Python or TypeScript project
   (with the TypeScript SDK vendored) and `runweave.toml`; `runweave eval` runs JSONL or
   YAML cases with built-in assertions, custom Python checks and Pydantic Evals, writes
