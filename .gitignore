@@ -27,3 +27,5 @@ target/
 frontend/node_modules/
 frontend/test-results/
 frontend/dist-prototype/
+# The TypeScript SDK copy that runweave init gives new projects (see scripts/vendor-typescript-sdk.py).
+!src/runweave/templates/typescript/vendor/runweave-agent/dist/
