@@ -1328,6 +1328,33 @@ Actions job, the UI bundled in the wheel, and the clean-machine `uvx` check, pub
 only when the owner asks). CLI commands run RunWeave in-process by default and accept
 `--server URL` to submit to a running instance; both paths drive the same HTTP API.
 
+Implementation notes, pull request A (2026-11-19):
+- Test first: `tests/test_project_config.py`, `tests/test_eval_cases.py` and
+  `tests/test_eval_cli.py` (subprocesses, like a developer: init, eval, failures,
+  baselines, config errors, `--server`, a TypeScript project, vendored SDK drift).
+- `runweave.project` loads `runweave.toml` (found upward from the working folder):
+  Python agents, or HTTP agents with an optional start command; limits, proxy and fault
+  settings, datasets and eval gates; paths must stay inside the project; errors name the
+  field and say what to fix.
+- `runweave init` copies a starter project from package data. TypeScript projects get
+  the SDK under `vendor/` (it is not on npm), copied by `scripts/vendor-typescript-sdk.py`
+  and checked against the build.
+- `runweave.evals`: JSONL/YAML cases with line-numbered errors; built-in assertions
+  (status including admission rejection, error code, schema, output subset/equality,
+  contains, regex, tool called, canaries, latency, cost, token and model-call ceilings),
+  custom Python checks and Pydantic Evals evaluators; failure messages are short and do
+  not dump outputs.
+- The runner drives RunWeave's HTTP API in-process (ASGI client, in-memory, offline,
+  mock proxy; a `command` agent is started and stopped) or against `--server`, with
+  bounded concurrency and queue-full retries.
+- Reports: `report.json` (source of truth for the coming screens), `junit.xml` and
+  `report.md` under `.runweave/reports/`; gates on minimum pass rate and baseline
+  regressions; exit 0/1/2. `runweave serve --api-only` serves the API without the UI.
+- Validation: 529 offline tests passed on Python 3.13 with the TypeScript fixtures
+  required, and the new and CLI suites on 3.11 (47). Ruff, formatting and strict mypy
+  (150 files) passed. A built wheel contains all 21 template files. PostgreSQL was not
+  rerun locally (no durable code changed); CI runs it.
+
 ### 23. Approvals through the agent SDKs
 
 - Add `ctx.request_approval(action, arguments, expires_in)` to both SDKs. It

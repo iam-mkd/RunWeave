@@ -48,6 +48,12 @@ All notable changes to RunWeave are recorded here. The format follows
   without prompt text, and fixture-scripted deterministic replies
   (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
   for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
+- Testing CLI (milestone 22): `runweave init` creates a Python or TypeScript project
+  (with the TypeScript SDK vendored) and `runweave.toml`; `runweave eval` runs JSONL or
+  YAML cases with built-in assertions, custom Python checks and Pydantic Evals, writes
+  JSON, JUnit XML and Markdown reports, gates on pass rate and baseline regressions, and
+  runs in-process or against `--server`. `runweave serve --api-only`. New dependency:
+  PyYAML (MIT). See `docs/testing.md`.
 - LLM proxy fault injection: seeded profiles (built-in `flaky`, `rate-limited`, `outage`,
   `slow`, `broken-tools`, `chaos`, plus your own) with 429s, 5xx, timeouts, slow first
   tokens, mid-stream disconnects, malformed tool-call JSON, unknown tool names and

@@ -31,6 +31,7 @@ Refresh it whenever dependencies change and before every release.
 | opentelemetry-api, opentelemetry-sdk, opentelemetry-semantic-conventions | Apache-2.0 |
 | pyjwt | MIT |
 | jsonschema, jsonschema-specifications, referencing, rpds-py, attrs | MIT |
+| pyyaml | MIT |
 | keyring, jaraco.classes, jaraco.context, jaraco.functools, more-itertools | MIT |
 | keyring on Windows: pywin32-ctypes | BSD-3-Clause |
 | keyring on Linux: SecretStorage, jeepney, cryptography, cffi, pycparser | BSD-3-Clause; MIT; Apache-2.0 OR BSD-3-Clause; MIT-0; BSD-3-Clause |
@@ -50,7 +51,7 @@ Refresh it whenever dependencies change and before every release.
 ## Development tooling (not distributed)
 
 pytest, pytest-asyncio, pluggy, iniconfig, packaging, mypy, mypy-extensions,
-librt, pathspec, ruff, psutil, truststore, types-jsonschema, and the official model
+librt, pathspec, ruff, psutil, truststore, types-jsonschema, types-pyyaml, and the official model
 SDKs used by the proxy compatibility tests: openai and anthropic (Apache-2.0), with
 jiter, docstring-parser and sniffio (MIT; sniffio MIT OR Apache-2.0). Licenses: MIT, Apache-2.0,
 BSD-3-Clause, and MPL-2.0 (pathspec).
