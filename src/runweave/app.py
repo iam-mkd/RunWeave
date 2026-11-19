@@ -18,9 +18,11 @@ from runweave.api.memory import router as memory_router
 from runweave.api.metrics import router as metrics_router
 from runweave.api.runs import router as runs_router
 from runweave.api.settings import router as settings_router
+from runweave.api.testing import router as testing_router
 from runweave.core.runtime import open_runtime
 from runweave.core.settings import Settings
 from runweave.identity import IdentityProvider
+from runweave.jobs import JobManager
 from runweave.live_settings import LiveSettings
 from runweave.proxy.config import build_proxy_config
 from runweave.proxy.router import install_log_filter
@@ -57,6 +59,7 @@ def create_app(
                 app.state.runtime = runtime
                 yield
         finally:
+            await jobs.close()
             app.state.runtime = None
 
     app = FastAPI(title=config.app_name, version="0.1.0", lifespan=lifespan)
@@ -69,6 +72,8 @@ def create_app(
     live = LiveSettings(config, checks=(build_proxy_config,))
     live.subscribe(lambda current: setattr(app.state, "proxy_config", build_proxy_config(current)))
     app.state.live_settings = live
+    jobs = JobManager(config.project_file)
+    app.state.jobs = jobs
     install_log_filter()
     app.state.identity_provider = IdentityProvider(config)
     app.state.http_agent_max_registered = config.http_agent_max_registered
@@ -105,6 +110,7 @@ def create_app(
     app.include_router(agents_router)
     app.include_router(proxy_router)
     app.include_router(settings_router)
+    app.include_router(testing_router)
     app.include_router(approvals_router)
     app.include_router(memory_router)
     app.include_router(metrics_router)

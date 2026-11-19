@@ -5,6 +5,7 @@ import hashlib
 import json
 import math
 import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -12,6 +13,13 @@ from typing import Any
 from uuid import uuid4
 
 REPORT_VERSION = 1
+
+Progress = Callable[[dict[str, Any]], None]
+"""Receives progress events (`{"event": "case", ...}`); `--progress` prints them as JSON lines."""
+
+
+def silent(event: dict[str, Any]) -> None:
+    """The default progress sink: report nothing."""
 
 
 def new_id(kind: str) -> str:

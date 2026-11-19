@@ -94,7 +94,8 @@ def test_progress_prints_json_lines_for_each_command(tmp_path: Path) -> None:
     assert evaluated.returncode == 0, evaluated.stderr
     lines = [json.loads(line) for line in evaluated.stdout.splitlines()]
     assert [e["event"] for e in lines].count("case") == 4
-    assert {"id", "passed", "done", "total"} <= set(lines[0])
+    assert lines[0] == {"event": "started", "kind": "eval", "total": 4}
+    assert {"id", "passed", "done", "total"} <= set(lines[1])
     assert lines[-1]["event"] == "report" and lines[-1]["id"].startswith("eval-")
     assert lines[-1]["passed"] is True
 
@@ -262,7 +263,7 @@ async def test_reports_and_jobs_are_looked_up_by_strict_ids(tmp_path: Path) -> N
             "/v1/reports/..%2Fsecret",
             "/v1/reports/secret",
             "/v1/jobs/job-000000000000",
-            "/v1/jobs/../reports",
+            "/v1/jobs/..%2Freports",
         ):
             response = await client.get(path)
             assert response.status_code in {404, 422}, path

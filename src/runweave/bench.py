@@ -33,6 +33,7 @@ from runweave.project import Project, ProjectError
 
 LAG_METRIC = "runweave_event_loop_lag_seconds"
 PROBE_INTERVAL_SECONDS = 0.05
+TICK_SECONDS = 0.5
 MAX_ADMISSION_ATTEMPTS = 200
 
 
@@ -44,6 +45,7 @@ class BenchOptions:
     runs: int | None = None
     fault_profiles: tuple[str, ...] | None = None
     soak_seconds: float | None = None
+    progress: reports.Progress = reports.silent
 
 
 def percentiles(values: Iterable[float]) -> dict[str, float | None]:
@@ -138,12 +140,20 @@ def _sample(snapshot: dict[str, Any], retries: int) -> Sample:
 class Driver:
     """Submits runs and waits for them, and probes the status API while they run."""
 
-    def __init__(self, target: Target, inputs: list[dict[str, Any]], measure_memory: bool):
+    def __init__(
+        self,
+        target: Target,
+        inputs: list[dict[str, Any]],
+        measure_memory: bool,
+        progress: reports.Progress = reports.silent,
+    ):
         self.target = target
         self.inputs = inputs
         self.process = psutil.Process() if measure_memory else None
         self.latest_url: str | None = None
         self.next_input = 0
+        self.progress = progress
+        self.started = time.monotonic()
 
     def payload(self) -> dict[str, Any]:
         payload = self.inputs[self.next_input % len(self.inputs)]
@@ -233,6 +243,40 @@ class Probe:
             await self.sample()  # the level ended before any probe: measure it once now
 
 
+async def _ticks(
+    driver: Driver,
+    labels: dict[str, Any],
+    samples: list[Sample],
+    stop: asyncio.Event,
+    runs: int | None,
+) -> None:
+    """Live progress for charts: completed runs, recent throughput and p95 so far."""
+    if driver.progress is reports.silent:
+        return
+    last, last_time = 0, time.monotonic()
+    while not stop.is_set():
+        try:
+            await asyncio.wait_for(stop.wait(), TICK_SECONDS)
+        except TimeoutError:
+            pass
+        now, done = time.monotonic(), len(samples)
+        driver.progress(
+            {
+                "event": "tick",
+                **labels,
+                "elapsed_ms": round((now - driver.started) * 1000, 1),
+                "completed": done,
+                "runs": runs,
+                "throughput_rps": round((done - last) / max(now - last_time, 1e-6), 2),
+                "p95_latency_ms": percentiles(
+                    s.latency_ms for s in samples if s.latency_ms is not None
+                )["p95"],
+                "failures": sum(s.category is not None for s in samples),
+            }
+        )
+        last, last_time = done, now
+
+
 async def _metrics(client: httpx.AsyncClient) -> dict[str, float] | None:
     try:
         response = await client.get("/metrics")
@@ -269,24 +313,30 @@ def _totals(samples: list[Sample]) -> dict[str, Any]:
     }
 
 
-async def measure_level(driver: Driver, level: int, runs: int) -> dict[str, Any]:
+async def measure_level(
+    driver: Driver, level: int, runs: int, labels: dict[str, Any] | None = None
+) -> dict[str, Any]:
     client = driver.target.client
     before = await _metrics(client)
     rss_start = driver.rss_mib()
     probe = Probe(driver, rss_peak=rss_start)
     stop = asyncio.Event()
-    probing = asyncio.create_task(probe.run(stop))
+    samples: list[Sample] = []
+    background = [
+        asyncio.create_task(probe.run(stop)),
+        asyncio.create_task(_ticks(driver, labels or {}, samples, stop, runs)),
+    ]
     slots = asyncio.Semaphore(level)
 
-    async def bounded() -> Sample:
+    async def bounded() -> None:
         async with slots:
-            return await driver.one()
+            samples.append(await driver.one())
 
     try:
-        samples = list(await asyncio.gather(*(bounded() for _ in range(runs))))
+        await asyncio.gather(*(bounded() for _ in range(runs)))
     finally:
         stop.set()
-        await probing
+        await asyncio.gather(*background)
     after = await _metrics(client)
     rss_end = driver.rss_mib()
     return {
@@ -308,7 +358,9 @@ async def measure_level(driver: Driver, level: int, runs: int) -> dict[str, Any]
     }
 
 
-async def soak(driver: Driver, level: int, seconds: float) -> dict[str, Any]:
+async def soak(
+    driver: Driver, level: int, seconds: float, labels: dict[str, Any] | None = None
+) -> dict[str, Any]:
     interval = max(0.5, seconds / 30)
     samples: list[Sample] = []
     windows: list[dict[str, Any]] = []
@@ -316,6 +368,7 @@ async def soak(driver: Driver, level: int, seconds: float) -> dict[str, Any]:
     end = started + seconds
     rss_start = driver.rss_mib()
     rss_peak = rss_start
+    stop = asyncio.Event()
 
     async def worker() -> None:
         while time.monotonic() < end:
@@ -342,8 +395,14 @@ async def soak(driver: Driver, level: int, seconds: float) -> dict[str, Any]:
                     "rss_mib": rss,
                 }
             )
+            driver.progress({"event": "soak_window", **(labels or {}), **windows[-1]})
 
-    await asyncio.gather(sampler(), *(worker() for _ in range(level)))
+    ticking = asyncio.create_task(_ticks(driver, labels or {}, samples, stop, None))
+    try:
+        await asyncio.gather(sampler(), *(worker() for _ in range(level)))
+    finally:
+        stop.set()
+        await ticking
     rss_end = driver.rss_mib()
     totals = _totals(samples)
     totals["duration_ms"] = round((time.monotonic() - started) * 1000, 1)
@@ -422,16 +481,32 @@ async def run_bench(project: Project, options: BenchOptions) -> tuple[dict[str, 
     soaked: dict[str, Any] | None = None
     agent: dict[str, Any] = {}
     mode = "in-process"
+    driver: Driver | None = None
     for profile in profiles:
         limits = InProcessLimits(workers=max(levels), fault_profile=profile)
         async with open_target(project, options.server, limits=limits) as target:
             agent, mode = target.agent, target.mode
-            driver = Driver(target, inputs, measure_memory=options.server is None)
+            if driver is None:
+                driver = Driver(target, inputs, options.server is None, options.progress)
+            else:
+                driver.target, driver.latest_url = target, None
             for level in levels:
-                result = await measure_level(driver, level, runs)
-                measured.append({"fault_profile": profile, **result})
+                labels = {"fault_profile": profile, "concurrency": level}
+                options.progress({"event": "level_started", **labels, "runs": runs})
+                result = {
+                    "fault_profile": profile,
+                    **await measure_level(driver, level, runs, labels),
+                }
+                options.progress({"event": "level", **result})
+                measured.append(result)
             if soak_seconds > 0 and soaked is None:
-                soaked = {"fault_profile": profile, **await soak(driver, max(levels), soak_seconds)}
+                labels = {"fault_profile": profile, "concurrency": max(levels), "phase": "soak"}
+                options.progress({"event": "soak_started", **labels, "seconds": soak_seconds})
+                soaked = {
+                    "fault_profile": profile,
+                    **await soak(driver, max(levels), soak_seconds, labels),
+                }
+                options.progress({"event": "soak", **soaked})
     report: dict[str, Any] = {
         "kind": "bench",
         "version": reports.REPORT_VERSION,
