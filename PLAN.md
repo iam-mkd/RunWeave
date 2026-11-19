@@ -1454,6 +1454,15 @@ Implementation notes, pull request D (2026-11-19):
   duplicate/concurrent decision, and restart-deduplication tests on disposable
   PostgreSQL, and browser checks cover approving and rejecting from the UI.
 
+Decisions with the owner (2026-11-19): a waiting agent holds its worker slot (its call
+awaits the decision in place and the lease keeps renewing; nothing is re-run), bounded by
+`approval_max_pending` and at most half of `worker_count`; a rejection returns
+`approved=False` and expiry raises `ApprovalExpired` (an uncaught expiry ends the run
+TIMED_OUT with `APPROVAL_EXPIRED`); memory mode rejects the call with
+`DURABLE_APPROVAL_REQUIRED`. Three pull requests: A (durable action approvals, Python SDK,
+decision API), B (HTTP callback, TypeScript SDK, shared contract tests), C (Approvals
+screen, `runweave approvals`, browser checks).
+
 ### 24. UI polish and accessibility audit
 
 - Review every screen against the approved mockups. Fix inconsistencies in
