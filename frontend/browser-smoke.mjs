@@ -468,14 +468,17 @@ try {
   await noOverflow(page, 'shadow');
 
   // Keyboard paths: the skip link, the sidebar in visual order, navigation and the theme.
-  await page.goto(`${base}/#/agents`);
-  await page.getByRole('heading', { name: 'Agents', level: 1 }).waitFor();
-  await page.evaluate(() => document.activeElement?.blur());
+  // A fresh load (a new query string) so Tab starts from the top of the document.
+  const freshAgents = async (n) => {
+    await page.goto(`${base}/?keyboard=${n}#/agents`);
+    await page.getByRole('heading', { name: 'Agents', level: 1 }).waitFor();
+  };
+  await freshAgents(1);
   await page.keyboard.press('Tab');
   assert.equal((await focused(page))?.href, '#main', 'the skip link comes first');
   await page.keyboard.press('Enter');
   assert.equal((await focused(page))?.id, 'main', 'the skip link moves focus to the content');
-  await page.evaluate(() => document.activeElement?.blur());
+  await freshAgents(2);
   const order = [];
   for (let i = 0; i < 12; i += 1) {
     await page.keyboard.press('Tab');
