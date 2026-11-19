@@ -1227,6 +1227,34 @@ Implementation notes, pull request A (2026-11-18):
   native isolation cases skipped) with the TypeScript contract fixture and Node SDKs
   required; 439 passed on Python 3.11. Ruff, formatting and strict mypy (127 files),
   26 TypeScript SDK tests and the browser smoke test passed.
+- Pull request A merged as #8 (8fc0dcc) after one CI fix: Ruff formats Python code blocks
+  in Markdown, which the new guide's example needed.
+
+Implementation notes, pull request B (2026-11-19):
+- Test first: `tests/test_proxy_faults.py` (profiles, determinism, every fault kind in
+  both formats) and `tests/test_proxy_passthrough.py` (scripted upstreams only),
+  sharing a harness that binds a proxy token without running an agent.
+- `proxy/faults.py`: validated profiles (probabilities add up to at most 1), six
+  built-ins, profile files and an inline `custom` profile. One SHA-256 draw from the
+  seed and the call's position in the attempt picks at most one applicable fault.
+  Error faults answer before the budget is touched; the timeout fault never holds past
+  the run deadline; stream disconnects drop the connection (the expected error is kept
+  out of uvicorn's log) and keep the reservation; tool faults are answered by RunWeave.
+- `proxy/upstream.py` and `limits.py`: passthrough with RunWeave-held keys (redacted),
+  HTTPS-only base URLs, a model allowlist (prices apply to every forwarded model),
+  output limits capped to the reservation, usage settled from bodies and streams
+  (missing usage charged in full), provider errors relayed with a header allowlist and
+  not charged, classified transport failures, and per-provider semaphores and pacers
+  whose waits are bounded by the run deadline. Passthrough needs a key, models and
+  versioned prices; the budget policy prices calls in passthrough mode.
+- Decisions taken in this pull request: fault profiles are server-wide (the Settings
+  screen will manage them; per-run selection fits the milestone 22 testing CLI), and
+  passthrough requires a model allowlist so configured prices cannot be bypassed.
+- Validation: the full suite with PostgreSQL 18 passed (568 passed; 14 Docker-only
+  native isolation cases skipped) with the TypeScript fixture and Node SDKs required; the
+  proxy suites passed on Python 3.11 (49). Ruff, formatting and strict mypy (133 files)
+  passed. A real-socket check confirmed an injected disconnect reaches the client as a
+  dropped connection with nothing in uvicorn's error log.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 

@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from runweave.agents.provider_wire import Provider
 from runweave.budgets import BudgetPolicy
+from runweave.proxy.faults import FaultSpec
 from runweave.security import IdentityName, Principal
 
 AgentTarget = Annotated[
@@ -99,6 +100,51 @@ class Settings(BaseSettings):
     proxy_mock_fixtures: Path | None = None
     proxy_request_max_bytes: int = Field(default=1048576, ge=4096, le=16777216)
     proxy_default_max_tokens: int = Field(default=1024, ge=1, le=100000)
+    # "passthrough" forwards to your providers with your keys; prices and models required.
+    proxy_mode: Literal["mock", "passthrough"] = "mock"
+    proxy_models: tuple[Annotated[str, StringConstraints(min_length=1, max_length=200)], ...] = (
+        Field(default=(), max_length=64)
+    )
+    proxy_openai_base_url: str = Field(
+        default="https://api.openai.com/v1", pattern=r"^https://[^\s?#]+$", max_length=200
+    )
+    proxy_openai_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    proxy_openai_concurrency: int = Field(default=4, ge=1, le=64)
+    proxy_openai_requests_per_minute: int = Field(default=60, ge=1, le=6000)
+    proxy_anthropic_base_url: str = Field(
+        default="https://api.anthropic.com", pattern=r"^https://[^\s?#]+$", max_length=200
+    )
+    proxy_anthropic_api_key: SecretStr = Field(default_factory=lambda: SecretStr(""))
+    proxy_anthropic_concurrency: int = Field(default=4, ge=1, le=64)
+    proxy_anthropic_requests_per_minute: int = Field(default=60, ge=1, le=6000)
+    proxy_upstream_max_bytes: int = Field(default=8388608, ge=65536, le=67108864)
+    # Seeded fault injection: a built-in or file profile name, or "custom" for the inline list.
+    proxy_fault_profile: str = Field(default="", max_length=40)
+    proxy_fault_seed: int = Field(default=0, ge=0, le=2**63 - 1)
+    proxy_fault_profiles_file: Path | None = None
+    proxy_fault_inline: tuple[FaultSpec, ...] = Field(default=(), max_length=16)
+
+    @model_validator(mode="after")
+    def require_passthrough_configuration(self) -> "Settings":
+        if self.proxy_mode != "passthrough":
+            return self
+        if not (
+            self.proxy_openai_api_key.get_secret_value().strip()
+            or self.proxy_anthropic_api_key.get_secret_value().strip()
+        ):
+            raise ValueError(
+                "Passthrough needs RUNWEAVE_PROXY_OPENAI_API_KEY or _ANTHROPIC_API_KEY"
+            )
+        if not self.proxy_models:
+            raise ValueError("Passthrough needs RUNWEAVE_PROXY_MODELS, the models you allow")
+        if (
+            self.model_input_usd_per_million is None
+            or self.model_output_usd_per_million is None
+            or not self.model_price_version.strip()
+        ):
+            raise ValueError("Configure versioned input and output prices before passthrough")
+        return self
+
     run_request_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     agent_output_max_bytes: int = Field(default=65536, ge=1024, le=1048576)
     event_stream_max_subscribers: int = Field(default=64, ge=1, le=1024)
@@ -199,7 +245,7 @@ class Settings(BaseSettings):
         return self
 
     def budget_policy(self) -> BudgetPolicy:
-        live = self.model_provider != "fake"
+        live = self.model_provider != "fake" or self.proxy_mode == "passthrough"
         return BudgetPolicy(
             model=self.selected_model,
             price_version=self.model_price_version if live else "fake-free-v1",

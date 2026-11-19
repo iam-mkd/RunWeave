@@ -48,6 +48,15 @@ All notable changes to RunWeave are recorded here. The format follows
   without prompt text, and fixture-scripted deterministic replies
   (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
   for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
+- LLM proxy fault injection: seeded profiles (built-in `flaky`, `rate-limited`, `outage`,
+  `slow`, `broken-tools`, `chaos`, plus your own) with 429s, 5xx, timeouts, slow first
+  tokens, mid-stream disconnects, malformed tool-call JSON, unknown tool names and
+  context-length errors, in each provider's format. The same seed reproduces the same
+  faults.
+- LLM proxy passthrough: forwards to OpenAI- and Anthropic-compatible providers with keys
+  RunWeave holds, a model allowlist, output limits capped to the budget reservation,
+  usage settled from responses and streams, relayed provider errors, and per-provider
+  concurrency and rate limits.
 - Workspace: connect HTTP agents from Connect (test the URL, see conflicts, register,
   copy the startup command) and remove runtime-registered agents on the Agents screen.
 
