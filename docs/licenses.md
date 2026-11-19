@@ -64,6 +64,7 @@ BSD-3-Clause, and MPL-2.0 (pathspec).
 | react, react-dom, scheduler | Bundled into the built UI | MIT |
 | vite, rollup, esbuild, postcss, nanoid, picocolors, fdir, picomatch, tinyglobby, source-map-js, @types/estree | Build tooling | MIT (picocolors: ISC; source-map-js: BSD-3-Clause) |
 | playwright, playwright-core | Browser smoke tests | Apache-2.0 |
+| axe-core | Accessibility audit in the browser smoke test (never shipped) | MPL-2.0 |
 
 ## TypeScript SDK (`sdk/typescript/package-lock.json`)
 

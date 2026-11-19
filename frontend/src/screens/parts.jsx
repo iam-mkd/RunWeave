@@ -1,5 +1,5 @@
-import React, { useRef, useState } from 'react';
-import { DataTable, EmptyState, StatusBadge, Timeline } from '../components/index.js';
+import React, { useState } from 'react';
+import { DataTable, EmptyState, StatusBadge, Timeline, useScrollRegion } from '../components/index.js';
 import { duration } from '../format.js';
 
 const stepTones = {
@@ -103,8 +103,14 @@ export function RunTimeline({ steps }) {
 
 const severityTones = { low: 'good', medium: 'warning', high: 'critical' };
 
-export function JsonBlock({ value }) {
-  return <pre className="json-block">{JSON.stringify(value, null, 2)}</pre>;
+/** Preformatted text that scrolls in its box and stays reachable by keyboard. */
+export function ScrollPre({ id, label, className, children }) {
+  const region = useScrollRegion(label);
+  return <pre id={id} className={className} {...region}>{children}</pre>;
+}
+
+export function JsonBlock({ value, label = 'JSON', id }) {
+  return <ScrollPre id={id} label={label} className="json-block">{JSON.stringify(value, null, 2)}</ScrollPre>;
 }
 
 export function RunOutput({ agent, result }) {
@@ -144,9 +150,10 @@ export function runModelSummary(steps) {
   };
 }
 
-export function CopyBlock({ id, text }) {
+export function CopyBlock({ id, text, label = 'Command' }) {
   const [copied, setCopied] = useState('');
-  const ref = useRef(null);
+  const region = useScrollRegion(label);
+  const { ref } = region;
   async function copy() {
     try {
       await navigator.clipboard.writeText(text);
@@ -160,7 +167,7 @@ export function CopyBlock({ id, text }) {
     }
   }
   return <div className="command">
-    <pre id={id} ref={ref}>{text}</pre>
+    <pre id={id} {...region}>{text}</pre>
     <div className="row"><button type="button" onClick={copy} aria-describedby={id}>Copy</button>
       <span className="muted" role="status">{copied}</span></div>
   </div>;

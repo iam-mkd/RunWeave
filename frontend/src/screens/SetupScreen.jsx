@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { checkHttpAgent, listAgents, registerHttpAgent } from '../api.js';
 import { ErrorState, PageHeader, Panel, StatusBadge } from '../components/index.js';
 import { href } from '../router.js';
-import { HttpAgentCheck } from './parts.jsx';
+import { CopyBlock, HttpAgentCheck } from './parts.jsx';
 
 const targetPattern = /^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*$/;
 const pollMs = 2000;
@@ -12,28 +12,6 @@ const kinds = [
   { id: 'http', title: 'HTTP endpoint', text: 'A service in any language that speaks the runweave.agent/v1 contract, on this machine.', available: true },
   { id: 'proxy', title: 'LLM proxy only', text: 'Point your SDK’s base URL at RunWeave. Arrives in milestone 21.', available: false },
 ];
-
-function CopyCommand({ id, command }) {
-  const [copied, setCopied] = useState('');
-  const ref = useRef(null);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(command);
-      setCopied('Copied');
-    } catch {
-      const range = document.createRange();
-      range.selectNodeContents(ref.current);
-      window.getSelection()?.removeAllRanges();
-      window.getSelection()?.addRange(range);
-      setCopied('Selected — press Ctrl+C to copy');
-    }
-  }
-  return <div className="command">
-    <pre id={id} ref={ref}>{command}</pre>
-    <div className="row"><button type="button" onClick={copy} aria-describedby={id}>Copy</button>
-      <span className="muted" role="status">{copied}</span></div>
-  </div>;
-}
 
 function HttpSetup({ onBack }) {
   const [url, setUrl] = useState('');
@@ -76,7 +54,7 @@ function HttpSetup({ onBack }) {
   return <Panel title="Check your HTTP agent" id="configure">
     <div className="stack">
       <p>Start your agent so it listens on this machine, for example:</p>
-      <CopyCommand id="serve-agent-command" command="runweave serve-agent mypkg.agent:run --port 9100" />
+      <CopyBlock id="serve-agent-command" text="runweave serve-agent mypkg.agent:run --port 9100" />
       <p className="muted">TypeScript: <code>serveAgents([agent], {'{'} port: 9100 {'}'})</code> from <code>@runweave/agent</code>.</p>
       <form className="stack narrow" onSubmit={check}>
         <div className="field">
@@ -93,7 +71,7 @@ function HttpSetup({ onBack }) {
       {result && <>
         <HttpAgentCheck result={result} />
         <p className="muted">To register these agents every time RunWeave starts instead:</p>
-        <CopyCommand id="http-serve-command" command={`runweave serve --http-agent ${result.url}`} />
+        <CopyBlock id="http-serve-command" text={`runweave serve --http-agent ${result.url}`} />
         <div className="row end"><button type="button" className="primary" disabled={!ready || busy} onClick={register}>Register agents</button></div>
       </>}
     </div>
@@ -162,9 +140,9 @@ export function SetupScreen() {
         </div>
         {valid && <>
           <p>Stop this server, then start it again with your agent:</p>
-          <CopyCommand id="serve-command" command={`runweave serve --agent ${target}`} />
+          <CopyBlock id="serve-command" text={`runweave serve --agent ${target}`} />
           <p className="muted">To check the import first without starting the server:</p>
-          <CopyCommand id="check-command" command={`runweave serve --check --agent ${target}`} />
+          <CopyBlock id="check-command" text={`runweave serve --check --agent ${target}`} />
         </>}
         <div className="row end"><button type="button" onClick={() => setStep(1)}>Back</button>
           <button className="primary" disabled={!valid}>I restarted RunWeave</button></div>

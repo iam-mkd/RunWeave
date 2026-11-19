@@ -1538,6 +1538,9 @@ Implementation notes, pull request C (2026-11-19):
   skips need sandbox images); the CLI and approval suites on 3.11 (18); Vitest 84; the
   browser smoke test with PostgreSQL in both themes; Ruff, formatting and strict mypy
   (170 files).
+- Hosted CI passed on #18 at its merged head: the Python 3.11–3.13 Linux/Windows jobs,
+  the offline evaluation workflow with its PostgreSQL suite, and the React workspace job
+  with the browser approval checks on its new PostgreSQL service.
 
 ### 24. UI polish and accessibility audit
 
@@ -1550,6 +1553,39 @@ Implementation notes, pull request C (2026-11-19):
 - Refresh `docs/images` screenshots for both themes.
 - **Done when** the audit has no open AA failures, large-data checks stay
   responsive, and the owner signs off on the finished UI.
+
+Decisions with the owner (2026-11-19): the audit runs axe-core (MPL-2.0, a frontend
+development dependency, never shipped) on every screen in both themes inside the browser
+smoke test, alongside our own keyboard, focus-order and reduced-motion checks and a manual
+pass; large tables use pagination (pages of 100, with filters) rather than windowed
+rendering, and long live charts are downsampled; three pull requests: A (audit and AA
+fixes), B (large-data checks and pagination), C (mockup consistency pass, refreshed
+screenshots, owner sign-off).
+
+Implementation notes, pull request A (2026-11-19):
+- Test first: `frontend/a11y.mjs` plus additions to `frontend/browser-smoke.mjs`.
+  - axe-core (WCAG 2.0/2.1 A and AA) audits every screen and state the smoke test
+    reaches, in both themes, at desktop and 390 px. That is 49 audits with PostgreSQL,
+    covering the approval screens, the no-project state, the API-down state, form errors,
+    confirmations and decided requests.
+  - Keyboard checks: the skip link, sidebar tab order, navigation with `aria-current` and
+    focus moved to the content, the theme switch with arrow keys, chart keys, choosing a
+    case by keyboard, focus on the first invalid field, the confirmation focus cycle, and
+    focus never lost to the page body.
+  - A reduced-motion check on a live run.
+- Findings, all fixed at the source:
+  - Wide tables and command blocks that scroll at 390 px were not keyboard-reachable
+    (axe `scrollable-region-focusable`, 9 places). The new `useScrollRegion` hook makes
+    them a named, focusable region only while they overflow. It is used by `DataTable`,
+    `CopyBlock` and the new shared `ScrollPre`/`JsonBlock`, and Setup's duplicate copy
+    block was replaced by `CopyBlock`.
+  - Server-side field errors did not move focus to the field (WCAG 3.3.1, 2.4.3).
+  - The approval confirmation did not take focus and could not be cancelled with Escape,
+    and after a decision focus fell to the page body (2.4.3).
+- `docs/design-system.md` describes how the audit runs, the accepted exceptions (none) and
+  the keyboard map.
+- A screen-reader pass with Narrator or VoiceOver needs a person; it is listed as a
+  release check in the design system and for the owner's review in pull request C.
 
 ### 25. Packaging and desktop app
 

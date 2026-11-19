@@ -1,9 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { decideApproval, getApproval, listApprovals } from '../api.js';
 import {
   DataTable, EmptyState, ErrorState, KeyValueList, LoadingState, PageHeader, Panel, StatusBadge,
 } from '../components/index.js';
 import { href } from '../router.js';
+import { JsonBlock } from './parts.jsx';
 
 const refreshMs = 3000;
 const tones = { pending: 'warning', approved: 'good', rejected: 'critical', expired: 'neutral', cancelled: 'neutral' };
@@ -49,6 +50,23 @@ export function ApprovalInbox({ approvals, selected, onSelect, now = Date.now() 
 
 export function ApprovalDetail({ approval, now = Date.now(), confirming = null, busy = false, error = '', onDecide, onConfirm, onCancel }) {
   const pending = approval.status === 'pending' && Date.parse(approval.expires_at) > now;
+  const confirm = useRef(null);
+  const origin = { approve: useRef(null), reject: useRef(null) };
+  const opened = useRef(null);
+  // The confirmation takes focus; cancelling returns it to the button that opened it.
+  useEffect(() => {
+    if (confirming) {
+      opened.current = confirming;
+      confirm.current?.focus();
+    } else if (opened.current) {
+      // After a decision the buttons are gone: land on the panel heading, whose badge says
+      // what happened, rather than losing focus to the page.
+      const heading = document.getElementById('approval-detail-title');
+      if (heading) heading.tabIndex = -1;
+      (origin[opened.current].current ?? heading)?.focus();
+      opened.current = null;
+    }
+  }, [confirming]);
   return <Panel title={approval.action} id="approval-detail" actions={<StateBadge status={approval.status} live />}>
     <div className="stack">
       <KeyValueList items={[
@@ -62,18 +80,19 @@ export function ApprovalDetail({ approval, now = Date.now(), confirming = null, 
       ]} />
       <div>
         <h3 className="section-label">Exact arguments</h3>
-        <pre id="approval-arguments" className="json-block">{JSON.stringify(approval.arguments, null, 2)}</pre>
+        <JsonBlock id="approval-arguments" label="Exact arguments" value={approval.arguments} />
       </div>
       {error && <ErrorState>{error}</ErrorState>}
       {pending && !confirming && <div className="row">
-        <button type="button" className="primary" disabled={busy} onClick={() => onDecide('approve')}>Approve</button>
-        <button type="button" disabled={busy} onClick={() => onDecide('reject')}>Reject</button>
+        <button type="button" className="primary" ref={origin.approve} disabled={busy} onClick={() => onDecide('approve')}>Approve</button>
+        <button type="button" ref={origin.reject} disabled={busy} onClick={() => onDecide('reject')}>Reject</button>
         <span className="field-hint">The decision applies to these exact arguments only. Approving lets the agent act once; make the action idempotent in your agent.</span>
       </div>}
-      {pending && confirming && <div className="callout" role="group" aria-label="Confirm decision">
+      {pending && confirming && <div className="callout" role="group" aria-label="Confirm decision"
+        onKeyDown={(event) => { if (event.key === 'Escape') { event.preventDefault(); onCancel(); } }}>
         <span>{confirming === 'approve' ? 'Approve this action with the arguments above?' : 'Reject this action? The agent is told it was rejected.'}</span>
         <div className="row">
-          <button type="button" className={confirming === 'approve' ? 'primary' : 'danger'} disabled={busy} onClick={onConfirm}>
+          <button type="button" ref={confirm} className={confirming === 'approve' ? 'primary' : 'danger'} disabled={busy} onClick={onConfirm}>
             {confirming === 'approve' ? 'Confirm approve' : 'Confirm reject'}</button>
           <button type="button" disabled={busy} onClick={onCancel}>Cancel</button>
         </div>

@@ -79,6 +79,57 @@ accessible name and a data-table view; motion respects
 `prefers-reduced-motion`; layouts work from 360 px to wide monitors without
 horizontal page scroll.
 
+### How the audit runs
+
+`frontend/browser-smoke.mjs` (`npm run test:browser`, in CI with PostgreSQL) drives the
+real workspace and audits every screen and state it reaches with axe-core
+(`frontend/a11y.mjs`, WCAG 2.0/2.1 A and AA rules). That is about 50 audits, in both
+themes, at desktop width and at 390 px. A screen must also not scroll sideways at 390 px.
+Findings from the whole run are written to `frontend/test-results/a11y-report.json`, and
+any violation fails the run.
+
+Accepted exceptions are listed in `ACCEPTED` in `frontend/a11y.mjs`, each with a reason
+and repeated here. There are none today; the light-mode status-colour exception above is a
+token rule that axe does not flag, because status badges always pair colour with an icon
+and a label.
+
+The same run checks what axe cannot:
+
+- **Keyboard paths:**
+  - The skip link comes first and moves focus to the content.
+  - The sidebar tabs in visual order, and Enter on a link changes the screen, marks it with
+    `aria-current` and moves focus to `#main`.
+  - The theme switch works with the arrow keys.
+  - Charts respond to the arrow keys and Escape.
+  - Table rows can be chosen with Enter.
+- **Focus management:**
+  - Form errors move focus to the first invalid field, whose description is the message.
+  - A confirmation takes focus, and Escape cancels it and returns focus to the button that
+    opened it.
+  - After a decision, focus lands on the panel heading rather than the page body.
+- **Reduced motion:** with `prefers-reduced-motion: reduce`, a live run has no animations
+  or transitions.
+
+Content that scrolls inside its own box (wide tables and code at narrow widths) becomes a
+named, focusable region while it overflows (`useScrollRegion`), so arrow keys can scroll
+it. When the content fits, it adds no tab stop.
+
+Automated checks don't replace a person. Before a release, also check that each screen
+reads sensibly in a screen reader (Narrator on Windows, VoiceOver on macOS): headings,
+the live run state, form errors, the approval confirmation, and chart summaries.
+
+### Keyboard map
+
+| Where | Keys |
+| --- | --- |
+| Any screen | Tab and Shift+Tab move through controls; the first Tab reaches *Skip to content* |
+| Sidebar | Enter opens a section; focus moves to the screen's content |
+| Theme switch | Arrow keys choose System, Dark or Light |
+| Tables | Tab to a row's link or button, then Enter; sortable headers toggle with Enter or Space |
+| Scrolling tables and code | Tab to the region, then the arrow keys scroll it |
+| Charts | Tab to the chart; Left and Right move between points; Escape hides the tooltip |
+| Approve or Reject | Enter opens the confirmation, which takes focus; Enter confirms; Escape cancels |
+
 ## Components
 
 | Component | Notes |

@@ -130,3 +130,12 @@ describe('data components', () => {
     assert.match(render(<Sparkline label="Errors per minute" values={[1, 3, 2]} />), /role="img"[^>]*aria-label="Errors per minute"/);
   });
 });
+
+describe('scroll regions', () => {
+  test('a table that fits adds no tab stop or region role', () => {
+    const html = renderToStaticMarkup(<DataTable caption="Fits" columns={[{ key: 'name', label: 'Name' }]}
+      rows={[{ id: 1, name: 'a' }]} rowKey={(row) => row.id} />);
+    assert.match(html, /<div class="table-wrap">/);
+    assert.doesNotMatch(html, /tabindex|role="region"/i);
+  });
+});
