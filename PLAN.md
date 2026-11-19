@@ -1463,6 +1463,29 @@ TIMED_OUT with `APPROVAL_EXPIRED`); memory mode rejects the call with
 decision API), B (HTTP callback, TypeScript SDK, shared contract tests), C (Approvals
 screen, `runweave approvals`, browser checks).
 
+Implementation notes, pull request A (2026-11-19):
+- Test first: `tests/test_postgres_action_approvals.py` (approve, reject, wait excluded
+  from the deadline, expiry and the TTL cap, cancellation, concurrent and repeated
+  decisions, binding mismatch, restart deduplication with the decision made while no worker
+  ran and while still pending, the pending bound, tenant isolation) and
+  `tests/test_action_approvals.py` (memory-mode rejection, digest and argument limits, the
+  paused deadline and its listeners).
+- `runweave.action_approvals`: the public types (`Approval`, `ApprovalExpired`,
+  `ApprovalUnavailable`), canonical-JSON digests and the gate context;
+  `RunContext.request_approval` calls the gate bound for the run.
+- `runweave.storage.action_approvals`: migration `0008_action_approvals` adds
+  `runweave_action_approvals` (unique per run, action and digest) and relaxes the runs
+  lease constraint so a run waiting in place keeps its lease while a parked ticket approval
+  does not. The gate records the request (or finds the existing one) under the run lock,
+  bounds pending requests under an advisory lock, marks the run `WAITING_APPROVAL`, polls
+  for the decision, and resumes the run with the waited time added to its stored deadline.
+  Lease renewal covers waiting runs; maintenance expires overdue requests and requeues a
+  waiting run whose worker died (crediting the wait), and cancelling a run cancels its
+  pending requests.
+- `deadline.paused_deadline` reschedules the run's `asyncio.Timeout` for the wait and
+  restores the remaining time afterwards; listeners move the run's proxy token expiry too.
+- `/v1/approvals` (list, get, decide) for the screen and CLI, owner-scoped like runs.
+
 ### 24. UI polish and accessibility audit
 
 - Review every screen against the approved mockups. Fix inconsistencies in

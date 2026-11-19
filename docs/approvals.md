@@ -1,5 +1,8 @@
 # Human approvals and resumable waiting
 
+This page covers the built-in triage agent's ticket approval. For your own agents, see
+[Approvals for your agents](agent-approvals.md) (`ctx.request_approval`).
+
 Milestone 12 adds one concrete gated action: creating a synthetic ticket in the
 local PostgreSQL sandbox table. It uses PydanticAI's
 [deferred tool approval](https://pydantic.dev/docs/ai/tools-toolsets/deferred-tools/)

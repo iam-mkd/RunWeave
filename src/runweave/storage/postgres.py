@@ -30,6 +30,7 @@ _FINISH_ATTEMPT = """
 
 if TYPE_CHECKING:
     from runweave.core.settings import Settings
+    from runweave.storage.action_approvals import PostgresActionApprovals
     from runweave.storage.approvals import PostgresApprovals, PostgresTicketGate
     from runweave.storage.checkpoints import PostgresCheckpoints
     from runweave.storage.memory import PostgresMemory
@@ -60,6 +61,10 @@ class PostgresRuns:
     def __init__(self, engine: AsyncEngine) -> None:
         self._engine = engine
 
+    @property
+    def engine(self) -> AsyncEngine:
+        return self._engine
+
     async def check(self) -> None:
         async with self._engine.connect() as conn:
             await conn.execute(
@@ -73,6 +78,7 @@ class PostgresRuns:
             await conn.execute(
                 text("SELECT agent, agent_version, steps FROM runweave_runs LIMIT 0")
             )
+            await conn.execute(text("SELECT action_key FROM runweave_action_approvals LIMIT 0"))
 
     async def admit(
         self,
@@ -196,8 +202,9 @@ class PostgresRuns:
                 text("""
                 UPDATE runweave_runs
                 SET lease_until = clock_timestamp() + :lease * interval '1 second'
-                WHERE id = :id AND status = 'RUNNING' AND lease_token = :token
-                    AND lease_until > clock_timestamp() AND deadline_at > clock_timestamp()
+                WHERE id = :id AND lease_token = :token AND lease_until > clock_timestamp()
+                    AND ((status = 'RUNNING' AND deadline_at > clock_timestamp())
+                        OR status = 'WAITING_APPROVAL')
                 RETURNING id
             """),
                 {"id": claim.snapshot.id, "token": claim.token, "lease": seconds},
@@ -250,6 +257,11 @@ class PostgresRuns:
 
         return PostgresCheckpoints(self._engine, claim)
 
+    def action_approvals(self) -> "PostgresActionApprovals":
+        from runweave.storage.action_approvals import PostgresActionApprovals
+
+        return PostgresActionApprovals(self._engine)
+
     def approvals(self) -> "PostgresApprovals":
         from runweave.storage.approvals import PostgresApprovals
 
@@ -299,6 +311,8 @@ class PostgresRuns:
             )
             row = result.mappings().one_or_none()
             if row is not None and row["status"] == "CANCELLED":
+                from runweave.storage.action_approvals import cancel_action_approvals
+
                 await conn.execute(
                     text("""
                     UPDATE runweave_approvals SET status = 'cancelled'
@@ -306,6 +320,7 @@ class PostgresRuns:
                 """),
                     {"id": row["id"]},
                 )
+                await cancel_action_approvals(conn, row["id"])
         return snapshot(row) if row is not None else None
 
     async def finish(
@@ -347,12 +362,31 @@ class PostgresRuns:
         return changed if changed is not None else await self.get(run_id, principal)
 
     async def maintain(self, *, retry_delay: float, history_ttl: float, history_max: int) -> None:
+        from runweave.storage.action_approvals import expire_action_approvals
         from runweave.storage.approvals import expire_approvals
         from runweave.storage.memory import prune_memory
 
         async with self._engine.begin() as conn:
             await expire_approvals(conn)
+            await expire_action_approvals(conn)
             await prune_memory(conn)
+            # A worker that died while its agent waited on an approval: credit the wait to
+            # the deadline and hand the run back as RUNNING with an expired lease, which the
+            # statement below requeues. The re-run finds the same request (or its decision).
+            await conn.execute(
+                text("""
+                UPDATE runweave_runs SET status = 'RUNNING',
+                    deadline_at = deadline_at + (clock_timestamp() - approval_wait_started_at),
+                    approval_wait_seconds = approval_wait_seconds +
+                        extract(epoch FROM clock_timestamp() - approval_wait_started_at),
+                    approval_wait_started_at = NULL
+                WHERE id IN (
+                    SELECT id FROM runweave_runs WHERE status = 'WAITING_APPROVAL'
+                        AND lease_token IS NOT NULL AND lease_until <= statement_timestamp()
+                    ORDER BY lease_until LIMIT 128 FOR UPDATE SKIP LOCKED
+                )
+            """)
+            )
             await conn.execute(
                 text("""
                 WITH candidates AS (

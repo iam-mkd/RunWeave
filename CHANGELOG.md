@@ -8,6 +8,13 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Agent approvals (milestone 23, part 1): `ctx.request_approval(action, arguments,
+  expires_in)` for Python agents in durable mode. Requests are bound to tenant, run,
+  action, argument digest, policy version and expiry; decisions are idempotent and
+  opposing ones conflict; a re-run repeating the same request gets the existing request or
+  decision. The waiting agent keeps its worker slot (at most half the pool can wait) and
+  its run deadline is paused. New `/v1/approvals` API and migration
+  `0008_action_approvals`. See `docs/agent-approvals.md`.
 - Workspace design system (milestone 18): dark-first tokens with a light theme
   and a System / Dark / Light switch, WCAG 2.1 AA contrast tests, and shared
   components (app shell, tables, status badges, stat tiles, timeline, charts,

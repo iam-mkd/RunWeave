@@ -7,13 +7,14 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
+from runweave.action_approvals import ApprovalExpired, approval_scope
 from runweave.agents.catalog import AgentCatalog, SchemaViolation
 from runweave.agents.contracts import AgentExecutor, IncidentRequest
 from runweave.approvals import AwaitingApproval, ticket_scope
 from runweave.budgets import BudgetExceeded, BudgetPolicy, budget_scope
 from runweave.checkpoints import CheckpointError, checkpoint_scope
 from runweave.core.settings import Settings
-from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
+from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, current_deadline, deadline_scope
 from runweave.identity import IdentityProvider
 from runweave.memory import MemoryRejected, memory_source_scope
 from runweave.orchestration.admission import (
@@ -28,6 +29,7 @@ from runweave.proxy.bindings import ProxyBindings, bind_run
 from runweave.sdk import AgentError, AgentUnavailable, RunContext
 from runweave.security import LOCAL_PRINCIPAL, ContentPolicy, Principal, principal_scope
 from runweave.steps import step_scope
+from runweave.storage.action_approvals import PostgresActionGate
 from runweave.storage.engine import StorageUnavailable, storage_errors
 from runweave.storage.postgres import Claim, PostgresRuns
 from runweave.telemetry import Telemetry
@@ -66,6 +68,7 @@ class DurableScheduler:
         self._in_progress = 0
         self._content_policy = content_policy or ContentPolicy()
         self.approvals = store.approvals()
+        self.action_approvals = store.action_approvals()
         self.memory = store.memory(settings, self._content_policy)
         self._identity = IdentityProvider(settings)
 
@@ -285,6 +288,21 @@ class DurableScheduler:
                 )
             ),
             step_scope(steps),
+            approval_scope(
+                PostgresActionGate(
+                    self._store.engine,
+                    claim,
+                    agent=claim.snapshot.agent,
+                    version=claim.snapshot.agent_version,
+                    ttl=self._settings.approval_ttl_seconds,
+                    # A waiting agent keeps its worker slot, so at most half the pool waits.
+                    limit=max(
+                        1,
+                        min(self._settings.approval_max_pending, self._settings.worker_count // 2),
+                    ),
+                    poll=self._settings.db_poll_seconds,
+                )
+            ),
             bind_run(
                 self._proxy,
                 run_id=claim.snapshot.id,
@@ -305,6 +323,11 @@ class DurableScheduler:
                 proxy=proxy,
             )
             async with deadline_scope(deadline, RUN_DEADLINE):
+                budget = current_deadline()
+                if budget is not None and proxy is not None and self._proxy is not None:
+                    # Time spent waiting on an approval extends the proxy token too.
+                    bindings, token = self._proxy, proxy.token
+                    budget.listeners.append(lambda shift: bindings.extend(token, shift))
                 claim.snapshot.principal.require("runs:submit")
                 self._content_policy.check(input_json(parsed))
                 output = await definition.run(parsed, context)
@@ -336,6 +359,12 @@ class DurableScheduler:
             except AwaitingApproval:
                 self._telemetry.audit("approval", "waiting", claim.snapshot.principal)
                 return
+            except ApprovalExpired as exc:
+                finished = await self._store.finish(
+                    claim,
+                    RunStatus.TIMED_OUT,
+                    error=RunError(code=exc.code, message="Approval expired"),
+                )
             except DeadlineExceeded as exc:
                 finished = await self._store.finish(
                     claim,

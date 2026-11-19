@@ -62,6 +62,7 @@ async def test_postgres_recovery_after_worker_exit(monkeypatch: pytest.MonkeyPat
                 "0005_human_approvals.sql",
                 "0006_scoped_memory.sql",
                 "0007_generic_agents.sql",
+                "0008_action_approvals.sql",
             ):
                 migration = _TEST_FILE.parents[1] / "migrations" / name
                 migration_sql = await asyncio.to_thread(migration.read_text, "utf-8")
