@@ -207,23 +207,30 @@ class Probe:
     latencies: list[float] = field(default_factory=list)
     rss_peak: float | None = None
 
-    async def run(self, stop: asyncio.Event) -> None:
-        client = self.driver.target.client
-        while not stop.is_set():
-            if self.driver.latest_url is not None:
-                started = time.perf_counter()
-                try:
-                    (await client.get(self.driver.latest_url)).raise_for_status()
-                    self.latencies.append((time.perf_counter() - started) * 1000)
-                except httpx.HTTPError:
-                    pass
-            rss = self.driver.rss_mib()
-            if rss is not None:
-                self.rss_peak = max(self.rss_peak or 0, rss)
+    async def sample(self) -> None:
+        if self.driver.latest_url is not None:
+            started = time.perf_counter()
             try:
-                await asyncio.wait_for(stop.wait(), PROBE_INTERVAL_SECONDS)
+                (await self.driver.target.client.get(self.driver.latest_url)).raise_for_status()
+                self.latencies.append((time.perf_counter() - started) * 1000)
+            except httpx.HTTPError:
+                pass
+        rss = self.driver.rss_mib()
+        if rss is not None:
+            self.rss_peak = max(self.rss_peak or 0, rss)
+
+    async def run(self, stop: asyncio.Event) -> None:
+        while not stop.is_set():
+            await self.sample()
+            # Until the first run is admitted there is nothing to probe; check again soon
+            # so a level that finishes within one interval still gets a sample under load.
+            interval = PROBE_INTERVAL_SECONDS if self.latencies else 0.002
+            try:
+                await asyncio.wait_for(stop.wait(), interval)
             except TimeoutError:
                 pass
+        if not self.latencies:
+            await self.sample()  # the level ended before any probe: measure it once now
 
 
 async def _metrics(client: httpx.AsyncClient) -> dict[str, float] | None:
