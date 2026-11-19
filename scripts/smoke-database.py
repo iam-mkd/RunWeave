@@ -1,8 +1,8 @@
 """Create or drop a throwaway PostgreSQL database for the browser smoke test.
 
-    python scripts/smoke-database.py create postgresql+asyncpg://user:pw@host/postgres
-        -> prints the URL of a new, empty database
-    python scripts/smoke-database.py drop <that URL>
+python scripts/smoke-database.py create postgresql+asyncpg://user:pw@host/postgres
+    -> prints the URL of a new, empty database
+python scripts/smoke-database.py drop <that URL>
 """
 
 import argparse
