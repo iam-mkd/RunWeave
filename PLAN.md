@@ -1255,6 +1255,40 @@ Implementation notes, pull request B (2026-11-19):
   proxy suites passed on Python 3.11 (49). Ruff, formatting and strict mypy (133 files)
   passed. A real-socket check confirmed an injected disconnect reaches the client as a
   dropped connection with nothing in uvicorn's error log.
+- Pull request B merged as #9 (89f087e) after one CI fix: timing assertions now allow
+  for Windows timer granularity (a 0.3 s sleep measured 0.296 s).
+
+Implementation notes, pull request C (2026-11-19):
+- Test first: `tests/test_settings_api.py` (view, live budget and fault changes,
+  all-or-nothing validation, saved keys used for passthrough and absent from responses,
+  headers, snapshots and logs, key validation without echo, environment precedence, no
+  store, scope, keyring against a fake OS backend), Vitest cases for the settings
+  helpers, key card, environment lines and fault badges, and a browser flow that saves
+  a key and checks no response or page content contains it.
+- `keystore.py`: environment keys win over keys in the OS credential store (`keyring`,
+  service `RunWeave`, calls off the event loop); `memory` and `none` stores for tests
+  and machines without one. Saved keys join the content policy so they are redacted.
+- `live_settings.py`: proxy mode and models, budgets and the fault profile change while
+  the server runs, validated as a whole Settings object plus the proxy config build.
+  Both schedulers read the budget policy at admission, so changes apply to later runs.
+  The upstream is built in every mode and reads keys per request. Passthrough no longer
+  needs an environment key at startup (a provider without one is refused per request).
+- `/v1/settings` and `/v1/settings/keys/{provider}` under `settings:manage`; keys are
+  write-only.
+- Steps gain `kind` and `fault` (stored in the existing JSON timeline; no migration).
+  Run detail marks injected faults and counts proxied calls and faults.
+- Settings screen from the design system: model access, provider key cards (password
+  field cleared after saving, status only), budgets, fault profile and seed with the
+  profile's faults, and environment lines without keys.
+- Decision taken in this pull request: settings other than keys last until the server
+  stops, with environment lines to keep them, matching runtime-registered HTTP agents.
+- Validation: the full suite with PostgreSQL 18 passed (584 passed; 14 Docker-only
+  native isolation cases skipped) with the TypeScript fixture and Node SDKs required;
+  494 passed on Python 3.11. Ruff, formatting and strict mypy (138 files), 66 Vitest
+  tests, the production build and the browser smoke test (settings saved and reloaded,
+  a key saved and absent from every response and the page, both themes, no CSP
+  violations or page errors) passed. This completes milestone 21's "Done when"; check
+  it off after the owner merges this pull request.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 

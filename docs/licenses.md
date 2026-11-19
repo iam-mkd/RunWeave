@@ -31,6 +31,10 @@ Refresh it whenever dependencies change and before every release.
 | opentelemetry-api, opentelemetry-sdk, opentelemetry-semantic-conventions | Apache-2.0 |
 | pyjwt | MIT |
 | jsonschema, jsonschema-specifications, referencing, rpds-py, attrs | MIT |
+| keyring, jaraco.classes, jaraco.context, jaraco.functools, more-itertools | MIT |
+| keyring on Windows: pywin32-ctypes | BSD-3-Clause |
+| keyring on Linux: SecretStorage, jeepney, cryptography, cffi, pycparser | BSD-3-Clause; MIT; Apache-2.0 OR BSD-3-Clause; MIT-0; BSD-3-Clause |
+| keyring on older Pythons: importlib-metadata, zipp, backports.tarfile | Apache-2.0; MIT; MIT |
 | sqlalchemy, greenlet | MIT; MIT AND PSF-2.0 |
 | typing-extensions | PSF-2.0 |
 
