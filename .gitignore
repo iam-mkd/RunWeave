@@ -27,5 +27,7 @@ target/
 frontend/node_modules/
 frontend/test-results/
 frontend/dist-prototype/
+# The built workspace UI that wheels carry (see scripts/bundle-workspace-ui.py).
+src/runweave/workspace_ui/
 # The TypeScript SDK copy that runweave init gives new projects (see scripts/vendor-typescript-sdk.py).
 !src/runweave/templates/typescript/vendor/runweave-agent/dist/

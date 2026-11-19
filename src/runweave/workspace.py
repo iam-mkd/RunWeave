@@ -14,6 +14,24 @@ from runweave.agents.provider_wire import Provider
 from runweave.app import create_app
 from runweave.core.settings import Settings
 
+# Wheels carry the built UI here (scripts/bundle-workspace-ui.py); source checkouts use
+# frontend/dist.
+BUNDLED_UI = Path(__file__).resolve().parent / "workspace_ui"
+CHECKOUT_UI = Path("frontend") / "dist"
+
+
+def _built(folder: Path) -> bool:
+    return (folder / "index.html").is_file() and (folder / "assets").is_dir()
+
+
+def workspace_assets(
+    explicit: Path | None, *, bundled: Path = BUNDLED_UI, checkout: Path = CHECKOUT_UI
+) -> Path:
+    """The UI to serve: `--assets` if given, else the packaged build, else a checkout's."""
+    if explicit is not None:
+        return explicit.resolve()
+    return (bundled if _built(bundled) else checkout).resolve()
+
 
 class LocalBrowserBoundary:
     def __init__(self, app: ASGIApp) -> None:
@@ -50,8 +68,12 @@ def create_workspace(
 ) -> FastAPI:
     if config.auth_mode != "local":
         raise ValueError("The local workspace requires RUNWEAVE_AUTH_MODE=local")
-    if not (assets / "index.html").is_file() or not (assets / "assets").is_dir():
-        raise ValueError("Build the workspace first with npm --prefix frontend run build")
+    if not _built(assets):
+        raise ValueError(
+            f"No built workspace UI in {assets}. In a source checkout run "
+            "`npm --prefix frontend run build`; installed packages include it. "
+            "Or use --api-only."
+        )
 
     app = create_app(config, agents=agents, http_agents=http_agents)
     app.add_middleware(LocalBrowserBoundary)

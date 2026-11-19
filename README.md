@@ -44,8 +44,9 @@ throughput, p50/p95/p99 latency, queue wait, status-API latency, event-loop lag,
 failure categories and tokens per concurrency level and fault profile. `runweave shadow`
 pairs two versions case by case and applies the milestone 16 promotion gates. Run
 `runweave serve` in the project folder and the workspace's Load tests, Evals and Shadow
-screens start the same commands, chart load tests live, and list every saved report. See
-[Test your agent](docs/testing.md).
+screens start the same commands, chart load tests live, and list every saved report. A
+copy-ready GitHub Actions job ([examples/github-actions](examples/github-actions)) fails a
+pull request that regresses the agent. See [Test your agent](docs/testing.md).
 
 ## Run your own agent
 

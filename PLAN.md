@@ -43,7 +43,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 19. Generic run core, Python agent adapter, and core screens
 - [x] 20. HTTP agent adapter and TypeScript SDK
 - [x] 21. LLM proxy and fault injection
-- [ ] 22. Testing CLI, reports, screens, and public alpha
+- [x] 22. Testing CLI, reports, screens, and public alpha
 - [ ] 23. Approvals through the agent SDKs
 - [ ] 24. UI polish and accessibility audit
 - [ ] 25. Packaging and desktop app
@@ -1399,6 +1399,40 @@ Implementation notes, pull request C (2026-11-19):
   environment-gated skips), and the jobs, bench, shadow, eval, config and settings suites
   on 3.11 (76). Vitest 76 passed; the browser smoke test passed in both themes. Ruff,
   formatting and strict mypy (156 files) passed. PostgreSQL was not rerun locally.
+
+Implementation notes, pull request D (2026-11-19):
+- Test first: `tests/test_release.py` (asset lookup order, the bundle script, package data,
+  the example GitHub Actions job passing and then failing on a seeded regression, and
+  `serve --agent` importing like the installed command).
+- Wheels carry the built UI in `runweave/workspace_ui/` (copied by
+  `scripts/bundle-workspace-ui.py`, not committed); `serve` uses `--assets`, else the
+  packaged UI, else `frontend/dist`.
+- `examples/github-actions/runweave.yml`: eval with JUnit against a committed baseline,
+  then a short bench, offline; documented in `docs/testing.md`.
+- `scripts/check-release.py` (CI job `clean-install`, Linux and Windows) builds the wheel
+  and, outside the repository with no settings or keys, runs `uvx --from <wheel> runweave`
+  init, eval, bench and shadow for Python and TypeScript projects, then the packaged UI and
+  an eval and a load test through the jobs API. It found that `runweave serve --agent
+  agent:run` failed when run as the installed command (no working folder on `sys.path`);
+  fixed, with a test.
+- `scripts/measure-ui-overhead.py`: same bench from a terminal and from the screen's API
+  with the screen's polling, 5 alternating rounds, an I/O-bound agent. Status-API p95 medians
+  33.5 / 33.4 ms at concurrency 8 and 716.0 / 804.0 ms at 64 (overlapping
+  rounds); throughput 100.5 / 102.1 and 88.99 / 92.52 runs/s. Recorded in
+  `benchmarks/ui-overhead-windows.json`. Throughput near 90 runs/s with 64 runs in flight
+  shows that per-run CPU cost (RunWeave and the in-process driver in one process), not
+  the agent's waits, sets the ceiling here.
+- Not done, by decision: publishing to PyPI (only when the owner asks).
+- Validation: 573 offline tests passed on Python 3.13 with fixtures required (104
+  environment-gated skips); the release, workspace and CLI suites on 3.11 (24); Ruff,
+  formatting and strict mypy (160 files); `scripts/check-release.py` passed on Windows
+  with Python 3.13 and Node 24. PostgreSQL was not rerun locally.
+- Completed 2026-11-19: the owner reviewed and merged pull requests #11 (e3a8a06), #12
+  (7810e46) and #13 (1cbb617); this pull request (D) completes the milestone's "Done
+  when": a clean `uvx` install runs init, then offline eval and bench for the Python and
+  TypeScript samples with no API key from the CLI and the UI's jobs API; the example CI
+  job fails on a seeded regression; and a load test with the screen open shows no
+  measurable status-API regression.
 
 ### 23. Approvals through the agent SDKs
 

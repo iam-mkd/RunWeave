@@ -48,6 +48,36 @@ jobs:
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync mypy
 
+  clean-install:
+    name: Clean install from the wheel (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build the workspace UI that the wheel carries
+        run: npm ci && npm run build
+        working-directory: frontend
+      - run: uv sync --locked
+      - name: uvx runweave init, eval, bench and shadow (Python and TypeScript), then the UI's jobs
+        run: uv run --no-sync python scripts/check-release.py --output target/release/check.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: clean-install-${{ matrix.os }}
+          path: target/release/check.json
+
   typescript-sdk:
     name: TypeScript SDK on Node ${{ matrix.node }} (${{ matrix.os }})
     runs-on: ${{ matrix.os }}

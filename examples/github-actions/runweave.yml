@@ -1,0 +1,41 @@
+# Test your agent on every pull request with RunWeave: offline, mock model, no API key.
+# Copy to .github/workflows/runweave.yml in a project made by `runweave init`.
+#
+# The eval step fails the pull request when a gate fails: the pass rate drops below
+# [eval] min_pass_rate, or a case that passed in the committed baseline now fails.
+# Commit the baseline once with `runweave eval --save-baseline` after setting
+# [eval] baseline = ".runweave/baselines/smoke.json" in runweave.toml.
+name: Agent tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  runweave:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: '3.13'
+      # TypeScript agents also need: actions/setup-node@v4 (node-version '24') and `npm ci`.
+      - name: Evaluate the agent against the dataset and the baseline
+        run: uvx runweave eval --junit reports/runweave-junit.xml
+      - name: Load-test the agent (set [bench] max_failure_rate to gate on it)
+        run: uvx runweave bench --concurrency 1 8 --runs 40
+      - name: Keep the reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runweave-reports
+          path: |
+            reports/
+            .runweave/reports/

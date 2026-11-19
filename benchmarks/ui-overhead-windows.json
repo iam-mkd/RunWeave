@@ -1,0 +1,87 @@
+{
+  "kind": "ui-overhead",
+  "measured_at": "2026-11-19T13:00:38Z",
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "python": "3.13.9",
+    "logical_cpus": 16
+  },
+  "workload": {
+    "agent": "runweave init word-count with a 50 ms await per run",
+    "concurrency": [
+      8,
+      64
+    ],
+    "runs_per_level": 300,
+    "rounds": 5,
+    "order": "alternating cli/ui, medians across rounds",
+    "screen": "the Load tests screen's requests: job events every second, plus project, report and job lists on load"
+  },
+  "screen_requests_per_ui_run": 13,
+  "levels": [
+    {
+      "concurrency": 8,
+      "cli": {
+        "status_api_p95_ms": 33.5,
+        "latency_p95_ms": 65.8,
+        "throughput_rps": 100.5,
+        "status_api_samples": 40,
+        "rounds_status_api_p95_ms": [
+          33.5,
+          32.9,
+          33.9,
+          29.5,
+          37.7
+        ]
+      },
+      "ui": {
+        "status_api_p95_ms": 33.4,
+        "latency_p95_ms": 61.8,
+        "throughput_rps": 102.1,
+        "status_api_samples": 40,
+        "rounds_status_api_p95_ms": [
+          30.3,
+          43.5,
+          40.3,
+          33.4,
+          30.8
+        ]
+      },
+      "status_api_p95_change_ms": -0.1,
+      "within_noise": true
+    },
+    {
+      "concurrency": 64,
+      "cli": {
+        "status_api_p95_ms": 716.0,
+        "latency_p95_ms": 89.5,
+        "throughput_rps": 88.99,
+        "status_api_samples": 11,
+        "rounds_status_api_p95_ms": [
+          689.1,
+          697.0,
+          936.3,
+          1144.2,
+          716.0
+        ]
+      },
+      "ui": {
+        "status_api_p95_ms": 804.0,
+        "latency_p95_ms": 90.7,
+        "throughput_rps": 92.52,
+        "status_api_samples": 9,
+        "rounds_status_api_p95_ms": [
+          802.3,
+          696.7,
+          954.7,
+          804.0,
+          1067.7
+        ]
+      },
+      "status_api_p95_change_ms": 88.0,
+      "within_noise": true
+    }
+  ],
+  "no_measurable_regression": true,
+  "threshold": "UI status-API p95 at most 1.2x the CLI's + 1 ms, and throughput at least 90% of the CLI's"
+}

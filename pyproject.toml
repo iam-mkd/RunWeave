@@ -83,6 +83,7 @@ cache-keys = [
     "sandbox_assets/*.md",
     "templates/**/*",
     "templates/*/.gitignore",
+    "workspace_ui/**/*",
 ]
 "runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 
@@ -102,4 +103,4 @@ select = ["E", "F", "I", "UP", "B", "ASYNC"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src", "tests", "benchmarks", "examples", "scripts/check-isolation.py", "scripts/check-container.py"]
+files = ["src", "tests", "benchmarks", "examples", "scripts/check-isolation.py", "scripts/check-container.py", "scripts/check-release.py", "scripts/measure-ui-overhead.py", "scripts/bundle-workspace-ui.py"]
