@@ -13,7 +13,6 @@ import json
 import logging
 from collections.abc import AsyncIterator, Iterator
 from contextlib import AsyncExitStack, suppress
-from dataclasses import dataclass
 from typing import Any, cast
 
 from fastapi import APIRouter, Request
@@ -22,8 +21,9 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from runweave.budgets import BudgetExceeded, Reservation
 from runweave.core.runtime import Runtime
 from runweave.proxy.bindings import Binding
-from runweave.proxy.faults import ERROR_FAULTS, FaultPlan, FaultSpec
-from runweave.proxy.mock import Api, MockModel, ModelReply, ModelRequest, broken_tool_call
+from runweave.proxy.config import ProxyConfig
+from runweave.proxy.faults import ERROR_FAULTS, FaultSpec
+from runweave.proxy.mock import Api, ModelReply, ModelRequest, broken_tool_call
 from runweave.proxy.upstream import Upstream, UpstreamFailure, Usage, usage_from_body
 from runweave.proxy.wire import RENDER, STREAM, WireError, ids_for, parse
 from runweave.steps import StepEvent, StepStatus, finished_event
@@ -71,15 +71,6 @@ def install_log_filter() -> None:
         logger.addFilter(_QuietStreamCuts())
 
 
-@dataclass(frozen=True)
-class ProxyConfig:
-    mode: str
-    mock: MockModel
-    faults: FaultPlan
-    default_max_tokens: int
-    models: frozenset[str]
-
-
 def _error(
     api: Api, status: int, code: str, message: str, headers: dict[str, str] | None = None
 ) -> JSONResponse:
@@ -112,9 +103,10 @@ def _token(request: Request) -> str | None:
 class _Call:
     """One model call on the run timeline."""
 
-    def __init__(self, binding: Binding, label: str) -> None:
+    def __init__(self, binding: Binding, label: str, fault: str | None) -> None:
         self._binding = binding
         self._label = label
+        self._fault = fault
         self._event: StepEvent | None = None
 
     async def begin(self) -> None:
@@ -127,7 +119,13 @@ class _Call:
             with suppress(Exception):
                 done = finished_event(self._event, status)
                 await self._binding.steps.end(
-                    done.model_copy(update={"detail": f"{self._label} · {outcome}"[:1000]})
+                    done.model_copy(
+                        update={
+                            "detail": f"{self._label} · {outcome}"[:1000],
+                            "kind": "model_call",
+                            "fault": self._fault,
+                        }
+                    )
                 )
 
 
@@ -201,7 +199,7 @@ async def _proxy(api: Api, request: Request) -> Response:
     label = f"{LABELS[api]} · {config.mode}" + (" · stream" if model_request.stream else "")
     if fault is not None and fault.kind not in ERROR_FAULTS:
         label += f" · fault: {fault.kind}"
-    call = _Call(binding, label)
+    call = _Call(binding, label, fault.kind if fault is not None else None)
     await call.begin()
     if fault is not None and fault.kind in ERROR_FAULTS:
         response = await _error_fault(api, fault, binding)

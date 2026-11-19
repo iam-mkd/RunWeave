@@ -42,8 +42,11 @@ async def caller(input: Prompt, ctx: RunContext) -> Results:
         for _ in range(input.calls):
             response = await http.post(
                 "/llm/v1/chat/completions",
-                json={"model": "gpt-test", "max_tokens": 20,
-                      "messages": [{"role": "user", "content": "hello"}]},
+                json={
+                    "model": "gpt-test",
+                    "max_tokens": 20,
+                    "messages": [{"role": "user", "content": "hello"}],
+                },
                 headers={"Authorization": f"Bearer {ctx.proxy.token}"},
             )
             statuses.append(response.status_code)
@@ -56,12 +59,23 @@ class Upstream:
 
     async def __call__(self, request: httpx.Request) -> httpx.Response:
         self.keys.append(request.headers.get("authorization", ""))
-        return httpx.Response(200, json={
-            "id": "c", "object": "chat.completion", "created": 1, "model": "gpt-test",
-            "choices": [{"index": 0, "message": {"role": "assistant", "content": "real"},
-                         "finish_reason": "stop"}],
-            "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
-        })
+        return httpx.Response(
+            200,
+            json={
+                "id": "c",
+                "object": "chat.completion",
+                "created": 1,
+                "model": "gpt-test",
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {"role": "assistant", "content": "real"},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+            },
+        )
 
 
 @asynccontextmanager
@@ -179,8 +193,10 @@ async def test_saved_keys_are_used_for_passthrough_and_never_returned(
         saved = await client.put("/v1/settings/keys/openai", json={"key": SAVED_KEY})
         switched = await client.patch(
             "/v1/settings",
-            json={"proxy": {"mode": "passthrough", "models": ["gpt-test"]},
-                  "budgets": {k: v for k, v in PASSTHROUGH.items() if k.startswith("model_")}},
+            json={
+                "proxy": {"mode": "passthrough", "models": ["gpt-test"]},
+                "budgets": {k: v for k, v in PASSTHROUGH.items() if k.startswith("model_")},
+            },
         )
         result = await run(client, calls=1)
         view = await client.get("/v1/settings")
@@ -224,9 +240,13 @@ async def test_keys_set_by_the_environment_or_without_a_store_cannot_be_saved() 
 
 @pytest.mark.asyncio
 async def test_settings_need_their_own_scope() -> None:
-    identities = {"reader-token-0123456789": {
-        "tenant": "t", "subject": "s", "scopes": ["runs:read", "runs:submit"],
-    }}
+    identities = {
+        "reader-token-0123456789": {
+            "tenant": "t",
+            "subject": "s",
+            "scopes": ["runs:read", "runs:submit"],
+        }
+    }
     headers = {"Authorization": "Bearer reader-token-0123456789"}
     async with workspace(auth_mode="test", auth_test_identities=identities) as client:
         responses = [
@@ -239,10 +259,10 @@ async def test_settings_need_their_own_scope() -> None:
 
 
 class FakeKeyring(KeyringBackend):
-    priority = 1  # type: ignore[assignment]
+    priority = 1
 
     def __init__(self) -> None:
-        super().__init__()
+        super().__init__()  # type: ignore[no-untyped-call]
         self.values: dict[tuple[str, str], str] = {}
 
     def get_password(self, service: str, username: str) -> str | None:
@@ -271,7 +291,7 @@ async def test_keyring_store_uses_the_os_credential_store_off_the_event_loop() -
         assert await store.get("openai") is None
         from keyring.backends.fail import Keyring as FailKeyring
 
-        keyring.set_keyring(FailKeyring())
+        keyring.set_keyring(FailKeyring())  # type: ignore[no-untyped-call]
         assert KeyringStore().available is False
     finally:
         keyring.set_keyring(previous)
