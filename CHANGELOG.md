@@ -107,6 +107,12 @@ All notable changes to RunWeave are recorded here. The format follows
   hosts (and hosts in `RUNWEAVE_HTTP_AGENT_ALLOWED_HOSTS`) reach the network, for HTTP
   agents.
 - `RunContext` can record steps that ran elsewhere (`add_finished_steps`).
+- `runweave bench` costs less CPU per run. It reads each run's event stream to the end so
+  the connection is reused, keeps a connection per run in flight with `--server`, and
+  gives each block of 8 run slots its own HTTP client. Admission now counts a tenant's
+  unfinished runs without scanning the history. On one 16-CPU Windows machine, an agent
+  with a 50 ms wait went from about 51 to 187 runs/s in-process at concurrency 64, and
+  from 127 to 305 runs/s with `--server`; see `benchmarks/README.md`.
 
 ### Security
 

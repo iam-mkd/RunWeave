@@ -15,7 +15,8 @@ import os
 import platform
 import time
 from collections import Counter
-from collections.abc import Iterable
+from collections.abc import AsyncIterator, Iterable
+from contextlib import AsyncExitStack, asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -35,6 +36,9 @@ LAG_METRIC = "runweave_event_loop_lag_seconds"
 PROBE_INTERVAL_SECONDS = 0.05
 TICK_SECONDS = 0.5
 MAX_ADMISSION_ATTEMPTS = 200
+# Runs in flight per HTTP client. httpcore scans every pooled connection on each request, so
+# one pool for all runs costs driver CPU per run in proportion to concurrency.
+SHARD_SLOTS = 8
 
 
 @dataclass(frozen=True)
@@ -137,8 +141,35 @@ def _sample(snapshot: dict[str, Any], retries: int) -> Sample:
     )
 
 
+@asynccontextmanager
+async def client_shards(
+    target: Target, workers: int
+) -> AsyncIterator[tuple[httpx.AsyncClient, ...]]:
+    """The target's client plus enough like it for `SHARD_SLOTS` runs each."""
+    base = target.client
+    async with AsyncExitStack() as stack:
+        extra = [
+            await stack.enter_async_context(
+                httpx.AsyncClient(
+                    base_url=base.base_url,
+                    headers=base.headers,
+                    timeout=base.timeout,
+                    trust_env=False,
+                    limits=httpx.Limits(
+                        max_connections=SHARD_SLOTS + 2, max_keepalive_connections=SHARD_SLOTS + 2
+                    ),
+                )
+            )
+            for _ in range(ceil(workers / SHARD_SLOTS) - 1)
+        ]
+        yield (base, *extra)
+
+
 class Driver:
-    """Submits runs and waits for them, and probes the status API while they run."""
+    """Submits runs and waits for them, and probes the status API while they run.
+
+    Run slot `n` uses client `n // SHARD_SLOTS` (see `client_shards`); the probe uses the first.
+    """
 
     def __init__(
         self,
@@ -148,6 +179,7 @@ class Driver:
         progress: reports.Progress = reports.silent,
     ):
         self.target = target
+        self.clients: tuple[httpx.AsyncClient, ...] = (target.client,)
         self.inputs = inputs
         self.process = psutil.Process() if measure_memory else None
         self.latest_url: str | None = None
@@ -160,8 +192,8 @@ class Driver:
         self.next_input += 1
         return payload
 
-    async def one(self) -> Sample:
-        client = self.target.client
+    async def one(self, slot: int = 0) -> Sample:
+        client = self.clients[slot // SHARD_SLOTS % len(self.clients)]
         retries = 0
         for _ in range(MAX_ADMISSION_ATTEMPTS):
             response = await client.post(
@@ -183,20 +215,25 @@ class Driver:
             )
         url = response.json()["status_url"]
         self.latest_url = url
-        return _sample(await self.wait(url), retries)
+        return _sample(await self.wait(client, url), retries)
 
-    async def wait(self, url: str) -> dict[str, Any]:
-        client = self.target.client
+    async def wait(self, client: httpx.AsyncClient, url: str) -> dict[str, Any]:
+        final: dict[str, Any] | None = None
         try:
             async with client.stream("GET", f"{url}/events") as stream:
                 if stream.status_code == 200:
+                    # The server ends the stream after the terminal snapshot. Reading to that
+                    # end lets the connection go back to the pool; leaving early closes it, and
+                    # a new TCP connection per run costs more CPU than the run itself.
                     async for line in stream.aiter_lines():
-                        if line.startswith("data: "):
+                        if final is None and line.startswith("data: "):
                             snapshot: dict[str, Any] = json.loads(line[6:])
                             if snapshot.get("status") in TERMINAL:
-                                return snapshot
+                                final = snapshot
         except (httpx.HTTPError, ValueError):
             pass
+        if final is not None:
+            return final
         delay = 0.02  # streams are busy or ended early: poll instead
         while True:
             polled: dict[str, Any] = (await client.get(url)).json()
@@ -326,14 +363,14 @@ async def measure_level(
         asyncio.create_task(probe.run(stop)),
         asyncio.create_task(_ticks(driver, labels or {}, samples, stop, runs)),
     ]
-    slots = asyncio.Semaphore(level)
+    pending = iter(range(runs))
 
-    async def bounded() -> None:
-        async with slots:
-            samples.append(await driver.one())
+    async def worker(slot: int) -> None:
+        for _ in pending:  # shared, so the workers take the runs between them
+            samples.append(await driver.one(slot))
 
     try:
-        await asyncio.gather(*(bounded() for _ in range(runs)))
+        await asyncio.gather(*(worker(slot) for slot in range(min(level, runs))))
     finally:
         stop.set()
         await asyncio.gather(*background)
@@ -370,9 +407,9 @@ async def soak(
     rss_peak = rss_start
     stop = asyncio.Event()
 
-    async def worker() -> None:
+    async def worker(slot: int) -> None:
         while time.monotonic() < end:
-            samples.append(await driver.one())
+            samples.append(await driver.one(slot))
 
     async def sampler() -> None:
         nonlocal rss_peak
@@ -399,7 +436,7 @@ async def soak(
 
     ticking = asyncio.create_task(_ticks(driver, labels or {}, samples, stop, None))
     try:
-        await asyncio.gather(sampler(), *(worker() for _ in range(level)))
+        await asyncio.gather(sampler(), *(worker(slot) for slot in range(level)))
     finally:
         stop.set()
         await ticking
@@ -484,12 +521,16 @@ async def run_bench(project: Project, options: BenchOptions) -> tuple[dict[str, 
     driver: Driver | None = None
     for profile in profiles:
         limits = InProcessLimits(workers=max(levels), fault_profile=profile)
-        async with open_target(project, options.server, limits=limits) as target:
+        async with (
+            open_target(project, options.server, limits=limits) as target,
+            client_shards(target, max(levels)) as clients,
+        ):
             agent, mode = target.agent, target.mode
             if driver is None:
                 driver = Driver(target, inputs, options.server is None, options.progress)
             else:
                 driver.target, driver.latest_url = target, None
+            driver.clients = clients
             for level in levels:
                 labels = {"fault_profile": profile, "concurrency": level}
                 options.progress({"event": "level_started", **labels, "runs": runs})
