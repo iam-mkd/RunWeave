@@ -120,3 +120,57 @@ def test_unknown_datasets_are_named(tmp_path: Path) -> None:
     project = load_project(write(tmp_path, PYTHON))
     with pytest.raises(ProjectError, match="smoke"):
         project.dataset("nope")
+
+
+def test_bench_and_shadow_sections(tmp_path: Path) -> None:
+    project = load_project(
+        write(
+            tmp_path,
+            PYTHON
+            + """
+[bench]
+concurrency = [8, 1, 4]
+runs = 20
+fault_profiles = ["", "flaky"]
+soak_seconds = 5
+max_failure_rate = 0.1
+max_p95_latency_ms = 900
+
+[shadow]
+candidate = { python = "agent_v2:run" }
+max_cost_ratio = 1.2
+require_output_parity = true
+""",
+        )
+    )
+    assert project.bench.concurrency == (1, 4, 8)
+    assert (project.bench.runs, project.bench.soak_seconds) == (20, 5)
+    assert project.bench.fault_profiles == ("", "flaky")
+    assert project.bench.max_failure_rate == 0.1 and project.bench.max_p95_latency_ms == 900
+    candidate = project.shadow.candidate
+    assert candidate is not None and candidate.python == "agent_v2:run"
+    assert candidate.name is None
+    assert project.shadow.max_cost_ratio == 1.2 and project.shadow.require_output_parity
+    assert project.shadow.max_latency_ratio == 2.0 and project.shadow.latency_slack_ms == 50
+
+
+def test_bench_and_shadow_defaults(tmp_path: Path) -> None:
+    project = load_project(write(tmp_path, PYTHON))
+    assert project.bench.concurrency == (1, 4, 16) and project.bench.runs == 32
+    assert project.bench.fault_profiles == ("flaky",)  # from [proxy] fault_profile
+    assert project.bench.max_failure_rate is None and project.shadow.candidate is None
+
+
+@pytest.mark.parametrize(
+    ("extra", "field"),
+    [
+        ("[bench]\nconcurrency = [0]\n", "bench.concurrency"),
+        ("[bench]\nconcurrency = []\n", "bench.concurrency"),
+        ("[bench]\nruns = 0\n", "bench.runs"),
+        ("[bench]\nsoak_seconds = 99999\n", "bench.soak_seconds"),
+        ("[shadow]\ncandidate = { name = \"x\" }\n", "shadow.candidate"),
+    ],
+)
+def test_bench_and_shadow_errors_name_the_field(tmp_path: Path, extra: str, field: str) -> None:
+    with pytest.raises(ProjectError, match=field.replace(".", r"\.")):
+        load_project(write(tmp_path, PYTHON + extra))
