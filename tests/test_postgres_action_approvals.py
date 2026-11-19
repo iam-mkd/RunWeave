@@ -17,7 +17,6 @@ from uuid import uuid4
 import httpx
 import pytest
 from pydantic import BaseModel, SecretStr
-from runweave.storage.action_approvals import PostgresActionApprovals
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
@@ -26,6 +25,7 @@ from runweave.app import create_app
 from runweave.core.settings import Settings
 from runweave.sdk import RunContext, agent
 from runweave.security import ALL_SCOPES, Principal
+from runweave.storage.action_approvals import PostgresActionApprovals
 
 _DSN = "TEST_RUNWEAVE_POSTGRES_URL"
 _MIGRATIONS = Path(__file__).resolve().parents[1] / "migrations"

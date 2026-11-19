@@ -100,6 +100,10 @@ extend-exclude = [".uv-cache", ".uv-python"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "ASYNC"]
 
+[tool.ruff.lint.isort]
+# Sort the same everywhere (worktrees and checkouts can otherwise disagree).
+known-first-party = ["runweave"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true
