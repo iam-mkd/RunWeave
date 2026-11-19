@@ -1,5 +1,5 @@
 import asyncio
-from collections import OrderedDict
+from collections import Counter, OrderedDict
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -56,16 +56,15 @@ class RunRegistry:
         self._clock = clock
         self._entries: dict[UUID, RunEntry] = {}
         self._finished: OrderedDict[UUID, float] = OrderedDict()
+        # Kept with each create and finish so admission does not scan the retained history.
+        self._unfinished: Counter[str] = Counter()
         self.telemetry = telemetry or Telemetry()
 
     def __len__(self) -> int:
         return len(self._entries)
 
     def unfinished_for_tenant(self, tenant: str) -> int:
-        return sum(
-            entry.snapshot.principal.tenant == tenant and not entry.snapshot.status.terminal
-            for entry in self._entries.values()
-        )
+        return self._unfinished[tenant]
 
     def create(
         self,
@@ -91,6 +90,7 @@ class RunRegistry:
             input=input.model_dump(mode="json"),
         )
         self._entries[run_id] = RunEntry(input, snapshot, self._clock(), budget)
+        self._unfinished[principal.tenant] += 1
         return snapshot
 
     def get(self, run_id: UUID) -> RunSnapshot | None:
@@ -210,6 +210,10 @@ class RunRegistry:
             usage=entry.budget.state.summary(),
         )
         self._finished[run_id] = self._clock()
+        tenant = entry.snapshot.principal.tenant
+        self._unfinished[tenant] -= 1
+        if not self._unfinished[tenant]:
+            del self._unfinished[tenant]
         snapshot = entry.snapshot
         self.telemetry.finished(snapshot, self._finished[run_id] - entry.admitted_at)
         self.prune()

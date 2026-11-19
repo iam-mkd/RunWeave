@@ -16,9 +16,19 @@ from typing import Any
 
 import pytest
 
-from runweave.bench import failure_category, lag_p99_upper_ms, parse_metrics, percentiles
+from runweave.bench import (
+    SHARD_SLOTS,
+    Driver,
+    client_shards,
+    failure_category,
+    lag_p99_upper_ms,
+    measure_level,
+    parse_metrics,
+    percentiles,
+)
+from runweave.evals.runner import InProcessLimits, open_target
 from runweave.evals.shadow import differences, gates
-from runweave.project import ShadowSection
+from runweave.project import ShadowSection, load_project
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -372,3 +382,66 @@ def test_shadow_needs_a_candidate(tmp_path: Path) -> None:
         "shadow", "--server", "http://127.0.0.1:9", "--candidate", "agent:run", cwd=project
     )
     assert remote.returncode == 2 and "name" in remote.stderr
+
+
+# Driver cost: a new TCP connection per run cost more CPU than the run itself (benchmarks/README).
+
+
+def local_ports(client: Any) -> list[int]:
+    """Records the client-side port of every response, so tests can see connection reuse."""
+    ports: list[int] = []
+
+    async def record(response: Any) -> None:
+        ports.append(response.extensions["network_stream"].get_extra_info("client_addr")[1])
+
+    client.event_hooks["response"].append(record)
+    return ports
+
+
+async def test_driver_reuses_one_connection_for_runs_and_their_event_streams(
+    tmp_path: Path,
+) -> None:
+    project = load_project(None, start=new_project(tmp_path))
+    async with open_target(project, None) as target:
+        ports = local_ports(target.client)
+        driver = Driver(target, [{"text": "one two three"}], measure_memory=False)
+        first, second = await driver.one(), await driver.one()
+    assert (first.status, second.status) == ("SUCCEEDED", "SUCCEEDED")
+    assert len(ports) == 4  # a submission and an event stream per run
+    assert len(set(ports)) == 1
+
+
+async def test_server_mode_keeps_a_connection_per_concurrent_request(tmp_path: Path) -> None:
+    project = load_project(None, start=new_project(tmp_path))
+    async with open_target(project, None) as local:
+        url = str(local.client.base_url)
+        limits = InProcessLimits(workers=32)
+        async with open_target(project, url, limits=limits) as target:
+            client = target.client
+            ports = local_ports(client)
+            for _ in range(2):  # each round holds 32 responses open at once, like 32 streams
+                held = [
+                    await client.send(client.build_request("GET", "/health/live"), stream=True)
+                    for _ in range(32)
+                ]
+                for response in held:
+                    await response.aread()
+                    await response.aclose()
+    assert len(ports) == 64
+    assert len(set(ports)) <= 32  # the second round reuses the first round's connections
+
+
+async def test_each_client_pool_serves_a_few_runs_so_its_scan_stays_short(tmp_path: Path) -> None:
+    project = load_project(None, start=new_project(tmp_path))
+    async with open_target(project, None) as target:
+        async with client_shards(target, 2 * SHARD_SLOTS + 1) as clients:
+            assert len(clients) == 3 and clients[0] is target.client
+            assert {str(c.base_url) for c in clients} == {str(target.client.base_url)}
+            ports = [local_ports(client) for client in clients]
+            driver = Driver(target, [{"text": "one two"}], measure_memory=False)
+            driver.clients = clients
+            level = await measure_level(driver, 2 * SHARD_SLOTS, 4 * SHARD_SLOTS)
+    assert level["outcomes"] == {"SUCCEEDED": 4 * SHARD_SLOTS}
+    assert ports[0] and ports[1] and not ports[2]  # 16 slots fill two clients
+    # Each client holds a connection per run it serves, plus the probe and /metrics on the first.
+    assert all(len(set(used)) <= SHARD_SLOTS + 2 for used in ports)

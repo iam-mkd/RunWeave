@@ -161,7 +161,10 @@ in CI when a level exceeds them.
 In-process, RunWeave, your agent (if it is Python) and the load driver share one process
 and event loop, so a CPU-bound agent and the driver compete; the numbers describe this
 machine with the mock proxy, not provider capacity. `--server` loads a running RunWeave
-instead (memory is then not measured, and the server's own fault settings apply).
+instead (memory is then not measured, and the server's own fault settings apply). It also
+puts the driver in a separate process. On a 16-CPU Windows machine that raised the ceiling
+for an I/O-bound agent from about 190 to about 300 runs/s; see
+[benchmarks/README.md](../benchmarks/README.md).
 
 ## 7. Compare versions: `runweave shadow`
 

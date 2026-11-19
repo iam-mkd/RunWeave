@@ -101,6 +101,12 @@ class InProcessLimits:
 DEFAULT_LIMITS = InProcessLimits()
 
 
+def _pool(workers: int) -> httpx.Limits:
+    # One kept-alive connection per run in flight (each holds an event stream) plus a few for
+    # submissions and probes; httpx's default keeps 20, and reconnecting is costly on loopback.
+    return httpx.Limits(max_connections=workers + 8, max_keepalive_connections=workers + 8)
+
+
 @asynccontextmanager
 async def open_target(
     project: Project,
@@ -111,6 +117,7 @@ async def open_target(
 ) -> AsyncIterator[Target]:
     section = agent or project.agent
     name = section.name or project.agent.name
+    workers = max(4, project.limits.concurrency, limits.workers or 0)
     async with AsyncExitStack() as stack:
         agent_url: str | None = section.http
         if section.command is not None:
@@ -124,7 +131,9 @@ async def open_target(
             stack.push_async_callback(stop)
         if server is not None:
             client = await stack.enter_async_context(
-                httpx.AsyncClient(base_url=server.rstrip("/"), timeout=60, trust_env=False)
+                httpx.AsyncClient(
+                    base_url=server.rstrip("/"), timeout=60, trust_env=False, limits=_pool(workers)
+                )
             )
             try:
                 info = await _agent_info(client, name)
@@ -141,7 +150,7 @@ async def open_target(
                 info = await _agent_info(client, name)
             mode = f"server {server.rstrip('/')}"
         else:
-            client, mode = await _in_process(stack, project, section, agent_url, limits)
+            client, mode = await _in_process(stack, project, section, agent_url, limits, workers)
             info = await _agent_info(client, name)
         if info is None:
             raise ProjectError(
@@ -161,6 +170,7 @@ async def _in_process(
     section: AgentSection | CandidateSection,
     agent_url: str | None,
     limits: InProcessLimits,
+    workers: int,
 ) -> tuple[httpx.AsyncClient, str]:
     import uvicorn
 
@@ -184,7 +194,6 @@ async def _in_process(
     fault_profile = (
         project.proxy.fault_profile if limits.fault_profile is None else limits.fault_profile
     )
-    workers = max(4, project.limits.concurrency, limits.workers or 0)
     try:
         settings = Settings(  # type: ignore[call-arg]
             _env_file=None,
@@ -229,12 +238,7 @@ async def _in_process(
                 )
             await asyncio.sleep(0.01)
     client = await stack.enter_async_context(
-        httpx.AsyncClient(
-            base_url=url,
-            timeout=60,
-            trust_env=False,
-            limits=httpx.Limits(max_connections=workers + 8, max_keepalive_connections=workers + 8),
-        )
+        httpx.AsyncClient(base_url=url, timeout=60, trust_env=False, limits=_pool(workers))
     )
     return client, "in-process"
 

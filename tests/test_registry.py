@@ -97,3 +97,31 @@ def test_listing_keeps_admission_order_for_identical_timestamps(
     listed = registry.list(LOCAL_PRINCIPAL)
     assert [run.id for run in listed] == list(reversed(ids))
     assert len({run.submitted_at for run in listed}) == 1
+
+
+def test_unfinished_count_follows_each_tenants_runs_through_their_lifecycle() -> None:
+    now = [0.0]
+    registry = RunRegistry(1, 60, clock=lambda: now[0])
+    other = LOCAL_PRINCIPAL.model_copy(update={"tenant": "other"})
+    queued = registry.create(incident())
+    running = registry.create(incident())
+    registry.create(incident(), other)
+    registry.claim(running.id)
+    assert registry.unfinished_for_tenant("local") == 2
+    assert registry.unfinished_for_tenant("other") == 1
+    assert registry.unfinished_for_tenant("nobody") == 0
+
+    registry.finish(running.id, RunStatus.SUCCEEDED, result=result())
+    registry.finish(running.id, RunStatus.CANCELLED)  # a late result changes nothing
+    assert registry.unfinished_for_tenant("local") == 1
+
+    registry.finish(queued.id, RunStatus.CANCELLED)  # evicts `running` from history
+    assert registry.get(running.id) is None
+    assert registry.unfinished_for_tenant("local") == 0
+    assert registry.unfinished_for_tenant("other") == 1
+
+    registry.cancel_unfinished()
+    now[0] = 120  # past the TTL, so every terminal run is pruned
+    registry.prune()
+    assert len(registry) == 0
+    assert registry.unfinished_for_tenant("other") == 0

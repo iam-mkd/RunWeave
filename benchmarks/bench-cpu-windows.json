@@ -1,0 +1,49 @@
+{
+  "kind": "bench-cpu-cost",
+  "measured_at": "2026-11-19",
+  "environment": {
+    "platform": "Windows-11-10.0.26300-SP0",
+    "cpu": "AMD64 Family 23 Model 96 Stepping 1, AuthenticAMD",
+    "logical_cpus": 16,
+    "memory_mib": 15791,
+    "python": "3.13.9",
+    "loop": "asyncio Proactor (default)",
+    "packages": {"httpx": "0.28.1", "httpcore": "1.0.9", "uvicorn": "0.54.0", "h11": "0.16.0", "fastapi": "0.162.0", "httptools": null}
+  },
+  "before": "commit 1cbb617 (main)",
+  "after": "this branch: event streams read to the end, sized --server pool, 8 run slots per client, per-tenant unfinished counter",
+  "workloads": {
+    "io": "runweave init word-count with one step awaiting asyncio.sleep(0.05)",
+    "word-count": "runweave init word-count, unchanged (no I/O)",
+    "load.py": "python -m benchmarks.load --workers 128 --soak-seconds 20"
+  },
+  "rounds": [
+    {"workload": "io", "mode": "in-process", "concurrency": 64, "runs": 2000,
+     "before": {"throughput_rps": [51.33, 49.96, 61.93], "latency_p95_ms": [134.8, 169.5, 123.0], "loop_lag_p99_bucket_ms": [100, 250, 100]},
+     "after": {"throughput_rps": [187.33, 186.6, 184.0], "latency_p95_ms": [145.0, 145.5, 147.0], "loop_lag_p99_bucket_ms": [100, 100, 100]}},
+    {"workload": "io", "mode": "in-process", "concurrency": 8, "runs": 1000,
+     "before": {"throughput_rps": [39.65, 87.79, 86.14], "latency_p95_ms": [100.8, 66.4, 66.0]},
+     "after": {"throughput_rps": [124.97, 124.13, 126.69], "latency_p95_ms": [58.1, 58.4, 57.6]}},
+    {"workload": "io", "mode": "--server (separate process)", "concurrency": 64, "runs": 2000,
+     "before": {"throughput_rps": [116.01, 127.08, 149.99], "latency_p95_ms": [106.1, 83.4, 83.8], "server_cpu_ms_per_run": [6.95, 5.62, 5.24], "driver_cpu_ms_per_run": [8.48, 7.78, 6.63]},
+     "after": {"throughput_rps": [306.74, 305.16, 302.36], "latency_p95_ms": [80.0, 79.4, 80.0], "server_cpu_ms_per_run": [3.02, 3.13, 3.14], "driver_cpu_ms_per_run": [3.28, 3.27, 3.27]}},
+    {"workload": "word-count", "mode": "in-process", "concurrency": 1, "runs": 1000,
+     "before": {"throughput_rps": [93.91, 101.5], "latency_p95_ms": [2.0, 1.6]},
+     "after": {"throughput_rps": [160.41, 159.13], "latency_p95_ms": [1.2, 1.3]}},
+    {"workload": "word-count", "mode": "in-process", "concurrency": 16, "runs": 1000,
+     "before": {"throughput_rps": [102.65, 97.69], "latency_p95_ms": [11.4, 11.8]},
+     "after": {"throughput_rps": [177.5, 181.79], "latency_p95_ms": [11.2, 10.6]}},
+    {"workload": "word-count", "mode": "in-process", "concurrency": 64, "runs": 1000,
+     "before": {"throughput_rps": [88.25, 86.91], "latency_p95_ms": [18.9, 21.9], "loop_lag_p99_bucket_ms": [50, 50]},
+     "after": {"throughput_rps": [177.02, 179.42], "latency_p95_ms": [46.1, 40.2], "loop_lag_p99_bucket_ms": [250, 250]}},
+    {"workload": "load.py", "mode": "ASGI transport, soak", "concurrency": 128,
+     "before": {"throughput_rps": [143.51, 142.45]},
+     "after": {"throughput_rps": [146.63, 147.55]}}
+  ],
+  "connections": {
+    "in-process io c64, 1000 runs, before": {"driver_connects": 1001},
+    "in-process io c64, 1000 runs, event streams read to the end": {"driver_connects": 14},
+    "--server io c64, 2050 runs, streams read to the end but httpx default keep-alive (20)": {"driver_connects": 2877, "server_accepts": 4134}
+  },
+  "limitations": "Loopback, mocked or simulated I/O, one Windows machine; cProfile shares are of profiled CPU and inflate small functions. Not live-provider capacity."
+}
