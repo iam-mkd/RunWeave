@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { assertNoMotion, audit, checkScreen, focused, report } from './a11y.mjs';
 
 const frontend = dirname(fileURLToPath(import.meta.url));
 const root = resolve(frontend, '..');
@@ -123,6 +124,11 @@ async function approvalChecks(adminDsn) {
     await page.screenshot({ path: join(artifacts, 'approvals-light.png'), fullPage: true });
     await noOverflow(page, 'approvals');
     await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    assert.equal((await focused(page))?.text, 'Confirm approve', 'the confirmation takes focus');
+    await audit(page, 'approval confirmation');
+    await page.keyboard.press('Escape');
+    assert.equal((await focused(page))?.text, 'Approve', 'Escape cancels and returns focus');
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm approve' }).click();
     await page.locator('#approval-detail-title').locator('..').getByText('Approved', { exact: true }).waitFor();
     const approved = await until(async () => {
@@ -134,14 +140,22 @@ async function approvalChecks(adminDsn) {
     await until(async () => (await inboxRows.count()) === 1, 'one pending request');
     await inboxRows.first().click();
     await page.locator('#approval-arguments').filter({ hasText: '"order": "B-2"' }).waitFor();
-    await page.getByRole('button', { name: 'Reject', exact: true }).click();
-    await page.getByRole('button', { name: 'Confirm reject' }).click();
+    await page.getByRole('button', { name: 'Reject', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    assert.equal((await focused(page))?.text, 'Confirm reject');
+    await page.keyboard.press('Enter');
     const rejected = await until(async () => {
       const run = await runStatus(second);
       return run.status === 'SUCCEEDED' && run;
     }, 'the rejected run');
     assert.equal(rejected.result.approved, false);
     await page.getByText('No pending requests', { exact: false }).first().waitFor();
+    assert.notEqual(await focused(page), null, 'focus is not lost after a decision');
+    await audit(page, 'approvals after decisions');
+    // This RunWeave has no project: the testing screens explain how to get one.
+    await page.goto(`${durableBase}/#/load-tests`);
+    await page.getByText('No project in this workspace', { exact: true }).waitFor();
+    await audit(page, 'no project');
     assert.deepEqual(await page.evaluate(() => window.__cspViolations), []);
     assert.deepEqual(errors, []);
     await context.close();
@@ -152,6 +166,7 @@ async function approvalChecks(adminDsn) {
     await darkPage.page.getByRole('checkbox', { name: 'Show decided' }).check();
     await darkPage.page.locator('section[aria-labelledby="inbox-title"] tbody tr').nth(1).waitFor();
     await darkPage.page.screenshot({ path: join(artifacts, 'approvals-dark.png'), fullPage: true });
+    await noOverflow(darkPage.page, 'approvals (dark)');
     assert.deepEqual(darkPage.errors, []);
     await dark.close();
   } finally {
@@ -188,10 +203,10 @@ async function newPage(context) {
   return { page, errors };
 }
 
+// Every screen this test reaches is audited (axe-core, WCAG 2.1 AA) at desktop width and
+// at 390 px, where it must not scroll sideways.
 async function noOverflow(page, label) {
-  await page.setViewportSize({ width: 390, height: 844 });
-  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${label} overflows at 390px`);
-  await page.setViewportSize({ width: 1360, height: 980 });
+  await checkScreen(page, label);
 }
 
 try {
@@ -222,7 +237,9 @@ try {
   await page.getByRole('button', { name: 'Start run' }).click();
   await page.locator('#run-service-error').waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'Service', exact: true }).getAttribute('aria-invalid'), 'true');
+  assert.equal((await focused(page))?.id, 'run-service', 'the invalid field takes focus');
   assert.equal(admissions, 0);
+  await audit(page, 'new run with field errors');
 
   // A real run: live updates, findings and evidence, untrusted text stays text.
   await page.getByRole('textbox', { name: 'Service', exact: true }).fill('payments');
@@ -262,6 +279,7 @@ try {
   await page.getByRole('button', { name: 'Start run' }).click();
   await page.getByRole('button', { name: 'Cancel run', exact: true }).click();
   await page.locator('.run-state .status.cancelled').waitFor();
+  await audit(page, 'cancelled run');
 
   // Admission failure and expired runs.
   await page.goto(`${base}/#/runs/new?agent=incident-triage`);
@@ -271,9 +289,11 @@ try {
     : route.continue());
   await page.getByRole('button', { name: 'Start run' }).click();
   await page.getByRole('alert').filter({ hasText: 'Queue is full' }).waitFor();
+  await audit(page, 'admission error');
   await page.unroute('**/v1/runs');
   await page.goto(`${base}/#/runs/00000000-0000-4000-8000-000000000000`);
   await page.getByText('This run expired or is unavailable.', { exact: true }).waitFor();
+  await audit(page, 'expired run');
 
   // An SDK agent: generated form, step timeline, JSON output and re-run.
   await page.goto(`${base}/#/runs/new?agent=text-report`);
@@ -287,6 +307,7 @@ try {
   assert.match(await page.locator('section[aria-labelledby="output-title"] .json-block').innerText(), /"keyword_hits"/);
   assert.equal(await page.locator('pre img').count(), 0);
   await page.screenshot({ path: join(artifacts, 'sdk-run-light.png'), fullPage: true });
+  await noOverflow(page, 'sdk run');
   await page.getByRole('link', { name: 'Re-run' }).click();
   await page.getByRole('textbox', { name: 'Text', exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'Text', exact: true }).inputValue(), `Hello there. ${hostile} Bye.`);
@@ -298,6 +319,7 @@ try {
   await page.getByText('runweave serve --agent sample_agent:text_report', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'I restarted RunWeave' }).click();
   await page.getByRole('link', { name: 'Run a smoke test' }).waitFor();
+  await noOverflow(page, 'setup');
 
   // Connect an HTTP agent from the UI, run it, then remove it.
   const agentUrl = await httpAgentUrl;
@@ -396,6 +418,7 @@ try {
   await page.goto(`${base}/#/runs/${fixtureId}`);
   await page.getByRole('button', { name: 'Approve ticket', exact: true }).waitFor();
   assert.equal(await page.locator('pre b').count(), 0);
+  await audit(page, 'ticket approval');
   await page.getByText('Refreshing every second', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Approve ticket', exact: true }).click();
   await page.locator('.run-state .status.succeeded').waitFor();
@@ -418,24 +441,81 @@ try {
   assert.match(page.url(), /#\/evals\?report=eval-/);
   await page.locator('.stat-value').filter({ hasText: /^4 \/ 4$/ }).waitFor();
   await noOverflow(page, 'evals');
+  await page.getByRole('button', { name: 'records-steps', exact: true }).focus();
+  await page.keyboard.press('Enter');
+  await page.locator('#eval-case-title').filter({ hasText: 'records-steps' }).waitFor();
   await page.goto(`${base}/#/load-tests`);
   await page.getByLabel('Concurrency levels').fill('1 2');
   await page.getByLabel('Runs per level').fill('6');
+  await page.getByLabel('Soak afterwards (seconds)').fill('2');
   await page.getByRole('button', { name: 'Start load test' }).click();
   await page.getByRole('heading', { name: 'Results by level' }).waitFor({ timeout: 60000 });
   assert.match(page.url(), /#\/load-tests\?report=bench-/);
   assert.equal(await page.locator('section[aria-labelledby="bench-levels-title"] tbody tr').count(), 2);
   await page.screenshot({ path: join(artifacts, 'load-tests-light.png'), fullPage: true });
   await noOverflow(page, 'load tests');
+  const chart = page.locator('figure.chart svg').first();
+  await chart.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.locator('.chart-tooltip').first().waitFor();
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('.chart-tooltip').count(), 0, 'Escape closes the chart tooltip');
   await page.goto(`${base}/#/shadow`);
   await page.getByLabel('Candidate').fill('agent:run');
   await page.getByRole('button', { name: 'Compare' }).click();
   await page.getByText('Eligible for promotion', { exact: true }).waitFor({ timeout: 60000 });
   await page.screenshot({ path: join(artifacts, 'shadow-light.png'), fullPage: true });
   await noOverflow(page, 'shadow');
+
+  // Keyboard paths: the skip link, the sidebar in visual order, navigation and the theme.
+  await page.goto(`${base}/#/agents`);
+  await page.getByRole('heading', { name: 'Agents', level: 1 }).waitFor();
+  await page.evaluate(() => document.activeElement?.blur());
+  await page.keyboard.press('Tab');
+  assert.equal((await focused(page))?.href, '#main', 'the skip link comes first');
+  await page.keyboard.press('Enter');
+  assert.equal((await focused(page))?.id, 'main', 'the skip link moves focus to the content');
+  await page.evaluate(() => document.activeElement?.blur());
+  const order = [];
+  for (let i = 0; i < 12; i += 1) {
+    await page.keyboard.press('Tab');
+    const now = await focused(page);
+    if (now?.href) order.push(now.href);
+  }
+  const expected = ['#main', '#/agents', '#/agents', '#/runs', '#/load-tests', '#/evals', '#/shadow', '#/approvals', '#/settings'];
+  assert.deepEqual(order.slice(0, expected.length), expected, `sidebar tab order: ${order.join(', ')}`);
+  await page.locator('nav a[href="#/runs"]').focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('heading', { name: 'Runs', level: 1 }).waitFor();
+  assert.equal(await page.locator('nav a[href="#/runs"]').getAttribute('aria-current'), 'page');
+  assert.equal((await focused(page))?.id, 'main', 'focus moves to the new screen, not the page body');
+  await page.getByRole('radio', { name: 'System' }).focus();
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'dark');
+  await page.keyboard.press('ArrowRight');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+  await page.getByRole('radio', { name: 'System' }).check();
+
+  // The API is down: the shell explains it.
+  await page.route('**/v1/workspace', (route) => route.fulfill({ status: 503, json: { detail: { code: 'SCHEDULER_UNAVAILABLE', message: 'Application is not ready' } } }));
+  await page.goto(`${base}/#/agents`);
+  await page.getByRole('alert').filter({ hasText: 'Application is not ready' }).first().waitFor();
+  await audit(page, 'API unavailable');
+  await page.unroute('**/v1/workspace');
   assert.deepEqual(await page.evaluate(() => window.__cspViolations), []);
   assert.deepEqual(errors, []);
   await context.close();
+
+  // Reduced motion: a live run shows no animation or transition.
+  const calm = await browser.newContext({ viewport: { width: 1360, height: 980 }, colorScheme: 'light', reducedMotion: 'reduce' });
+  const calmPage = await newPage(calm);
+  await calmPage.page.goto(`${base}/#/runs/new?agent=incident-triage`);
+  await calmPage.page.getByRole('button', { name: 'Load example' }).click();
+  await calmPage.page.getByRole('button', { name: 'Start run' }).click();
+  await calmPage.page.locator('.run-state .status.running').waitFor();
+  await assertNoMotion(calmPage.page, 'live run');
+  await calmPage.page.locator('.run-state .status.succeeded').waitFor({ timeout: 15000 });
+  await calm.close();
 
   // Dark theme renders the same screens.
   const dark = await browser.newContext({ viewport: { width: 1360, height: 980 }, colorScheme: 'dark' });
@@ -443,16 +523,27 @@ try {
   await darkPage.page.goto(`${base}/#/agents`);
   await darkPage.page.getByRole('heading', { name: 'Agents', level: 1 }).waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'agents-dark.png'), fullPage: true });
+  await noOverflow(darkPage.page, 'agents (dark)');
   await darkPage.page.goto(`${base}/#/runs/${runId}`);
   await darkPage.page.locator('.run-state .status.succeeded').waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'run-result-dark.png'), fullPage: true });
+  await noOverflow(darkPage.page, 'run detail (dark)');
   await darkPage.page.goto(`${base}/#/settings`);
   await darkPage.page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'settings-dark.png'), fullPage: true });
+  await noOverflow(darkPage.page, 'settings (dark)');
   await darkPage.page.goto(`${base}/#/load-tests`);
   await darkPage.page.getByRole('link', { name: /^bench-/ }).first().click();
   await darkPage.page.getByRole('heading', { name: 'Results by level' }).waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'load-tests-dark.png'), fullPage: true });
+  await noOverflow(darkPage.page, 'load tests (dark)');
+  for (const [path, label] of [['#/evals', 'evals (dark)'], ['#/shadow', 'shadow (dark)'], ['#/runs', 'runs (dark)'], [`#/runs/new?agent=text-report`, 'new run (dark)']]) {
+    await darkPage.page.goto(`${base}/${path}`);
+    await darkPage.page.locator('h1').waitFor();
+    if (path === '#/evals' || path === '#/shadow') await darkPage.page.getByRole('link', { name: /^(eval|shadow)-/ }).first().click();
+    await darkPage.page.waitForLoadState('networkidle');
+    await noOverflow(darkPage.page, label);
+  }
   assert.deepEqual(await darkPage.page.evaluate(() => window.__cspViolations), []);
   assert.deepEqual(darkPage.errors, []);
   await dark.close();
@@ -462,7 +553,9 @@ try {
   else if (process.env.CI) throw new Error('Set RUNWEAVE_SMOKE_POSTGRES_URL: CI runs the approvals checks on PostgreSQL');
   else console.log('Skipped the approvals checks: set RUNWEAVE_SMOKE_POSTGRES_URL to a PostgreSQL server to run them.');
 
-  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, eval/load-test/shadow jobs and reports, approving and rejecting agent approvals (with PostgreSQL), mobile overflow, safe text, both themes.');
+  const audits = report(join(artifacts, 'a11y-report.json'));
+  console.log(`Accessibility: ${audits} audits (axe-core, WCAG 2.1 AA), no violations.`);
+  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, eval/load-test/shadow jobs and reports, approving and rejecting agent approvals (with PostgreSQL), keyboard paths, reduced motion, mobile overflow, safe text, both themes.');
   console.log(`Screenshots: ${artifacts}`);
 } finally {
   if (browser) await browser.close();
