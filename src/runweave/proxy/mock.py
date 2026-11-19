@@ -134,3 +134,20 @@ class MockModel:
         return ModelReply(
             text, (), input_tokens, min(output_limit, _tokens(len(text.encode()))), truncated
         )
+
+
+def broken_tool_call(request: ModelRequest, *, unknown: bool, output_limit: int) -> ModelReply:
+    """A tool call with JSON cut off mid-value, or naming a tool the request did not declare."""
+    name = request.tool_names[0] if request.tool_names else "tool"
+    if unknown:
+        name = "runweave_unknown_tool"
+        while name in request.tool_names:
+            name += "_x"
+    arguments = '{"value":"runweave fault"}' if unknown else '{"value":"runwe'
+    return ModelReply(
+        None,
+        (ToolCall(name, arguments),),
+        _tokens(request.payload_bytes),
+        min(output_limit, _tokens(len(name) + len(arguments))),
+        False,
+    )

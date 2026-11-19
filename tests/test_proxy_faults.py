@@ -16,8 +16,15 @@ from runweave.proxy.mock import ModelRequest
 
 def request(*, stream: bool = False, tools: tuple[str, ...] = ()) -> ModelRequest:
     return ModelRequest(
-        api="chat", model="m", last_role="user", last_user_text="hi", tool_names=tools,
-        stream=stream, include_usage=False, max_tokens=None, payload_bytes=100,
+        api="chat",
+        model="m",
+        last_role="user",
+        last_user_text="hi",
+        tool_names=tools,
+        stream=stream,
+        include_usage=False,
+        max_tokens=None,
+        payload_bytes=100,
     )
 
 
@@ -26,7 +33,9 @@ def profile(*faults: dict[str, Any]) -> FaultProfile:
 
 
 def test_built_in_profiles_are_valid_and_named() -> None:
-    assert {"flaky", "rate-limited", "outage", "slow", "broken-tools", "chaos"} <= set(BUILT_IN_PROFILES)
+    assert {"flaky", "rate-limited", "outage", "slow", "broken-tools", "chaos"} <= set(
+        BUILT_IN_PROFILES
+    )
     assert all(sum(f.probability for f in p.faults) <= 1 for p in BUILT_IN_PROFILES.values())
 
 
@@ -48,9 +57,15 @@ def test_invalid_profiles_are_rejected(faults: list[dict[str, Any]]) -> None:
 
 def test_the_same_seed_reproduces_the_same_faults() -> None:
     chaos = BUILT_IN_PROFILES["chaos"]
-    first = [FaultPlan(chaos, seed=7).choose(i, request(stream=True, tools=("t",))) for i in range(200)]
-    again = [FaultPlan(chaos, seed=7).choose(i, request(stream=True, tools=("t",))) for i in range(200)]
-    other = [FaultPlan(chaos, seed=8).choose(i, request(stream=True, tools=("t",))) for i in range(200)]
+    first = [
+        FaultPlan(chaos, seed=7).choose(i, request(stream=True, tools=("t",))) for i in range(200)
+    ]
+    again = [
+        FaultPlan(chaos, seed=7).choose(i, request(stream=True, tools=("t",))) for i in range(200)
+    ]
+    other = [
+        FaultPlan(chaos, seed=8).choose(i, request(stream=True, tools=("t",))) for i in range(200)
+    ]
     kinds = [f.kind if f else None for f in first]
     assert kinds == [f.kind if f else None for f in again]
     assert kinds != [f.kind if f else None for f in other]
@@ -65,28 +80,52 @@ def test_probabilities_are_respected_over_many_calls() -> None:
 
 def test_faults_only_apply_where_they_make_sense() -> None:
     plan = FaultPlan(
-        profile({"kind": "stream_disconnect", "probability": 0.5},
-                {"kind": "unknown_tool", "probability": 0.5}),
+        profile(
+            {"kind": "stream_disconnect", "probability": 0.5},
+            {"kind": "unknown_tool", "probability": 0.5},
+        ),
         seed=3,
     )
     assert all(plan.choose(i, request()) is None for i in range(100))
     streamed = {f.kind for i in range(100) if (f := plan.choose(i, request(stream=True)))}
     assert streamed == {"stream_disconnect"}
-    restricted = FaultPlan(profile({"kind": "rate_limit", "probability": 1, "apis": ["messages"]}), seed=1)
+    restricted = FaultPlan(
+        profile({"kind": "rate_limit", "probability": 1, "apis": ["messages"]}), seed=1
+    )
     assert restricted.choose(0, request()) is None
 
 
 def test_profile_files_add_named_profiles(tmp_path: Path) -> None:
     path = tmp_path / "faults.json"
-    path.write_text(json.dumps({"version": 1, "profiles": [
-        {"name": "my-flaky", "description": "Mine", "faults": [{"kind": "rate_limit", "probability": 0.2}]},
-    ]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "profiles": [
+                    {
+                        "name": "my-flaky",
+                        "description": "Mine",
+                        "faults": [{"kind": "rate_limit", "probability": 0.2}],
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     profiles = load_profiles(path)
     assert set(profiles) == set(BUILT_IN_PROFILES) | {"my-flaky"}
     clash = tmp_path / "clash.json"
-    clash.write_text(json.dumps({"version": 1, "profiles": [
-        {"name": "chaos", "faults": [{"kind": "rate_limit", "probability": 0.2}]},
-    ]}), encoding="utf-8")
+    clash.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "profiles": [
+                    {"name": "chaos", "faults": [{"kind": "rate_limit", "probability": 0.2}]},
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     with pytest.raises(ValueError, match="built-in"):
         load_profiles(clash)
 
@@ -100,7 +139,10 @@ def test_unknown_active_profiles_fail_at_startup() -> None:
 
 
 def always(kind: str, **params: Any) -> dict[str, Any]:
-    return {"proxy_fault_profile": "custom", "proxy_fault_inline": [{"kind": kind, "probability": 1, **params}]}
+    return {
+        "proxy_fault_profile": "custom",
+        "proxy_fault_inline": [{"kind": kind, "probability": 1, **params}],
+    }
 
 
 @pytest.mark.asyncio
@@ -171,7 +213,10 @@ async def test_stream_disconnect_cuts_the_stream_and_keeps_the_reservation(
     async with proxy_session(**always("stream_disconnect", after_chunks=2)) as s:
         with pytest.raises((httpx.RemoteProtocolError, httpx.ReadError, RuntimeError)):
             async with s.client.stream(
-                "POST", "/llm/v1/chat/completions", json={**CHAT, "stream": True}, headers=s.openai()
+                "POST",
+                "/llm/v1/chat/completions",
+                json={**CHAT, "stream": True},
+                headers=s.openai(),
             ) as response:
                 async for _ in response.aiter_bytes():
                     pass
@@ -185,10 +230,14 @@ async def test_stream_disconnect_cuts_the_stream_and_keeps_the_reservation(
 @pytest.mark.asyncio
 async def test_tool_faults_break_tool_calls() -> None:
     async with proxy_session(**always("malformed_tool_call")) as s:
-        malformed = await s.client.post("/llm/v1/chat/completions", json=CHAT_TOOLS, headers=s.openai())
+        malformed = await s.client.post(
+            "/llm/v1/chat/completions", json=CHAT_TOOLS, headers=s.openai()
+        )
         untouched = await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())
     async with proxy_session(**always("unknown_tool")) as s:
-        unknown = await s.client.post("/llm/v1/chat/completions", json=CHAT_TOOLS, headers=s.openai())
+        unknown = await s.client.post(
+            "/llm/v1/chat/completions", json=CHAT_TOOLS, headers=s.openai()
+        )
     call = malformed.json()["choices"][0]["message"]["tool_calls"][0]["function"]
     assert call["name"] == "lookup_weather"
     with pytest.raises(json.JSONDecodeError):
@@ -203,7 +252,9 @@ async def test_the_same_seed_gives_the_same_outcomes_end_to_end() -> None:
     async def outcomes(seed: int) -> list[int]:
         async with proxy_session(proxy_fault_profile="flaky", proxy_fault_seed=seed) as s:
             return [
-                (await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())).status_code
+                (
+                    await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())
+                ).status_code
                 for _ in range(40)
             ]
 

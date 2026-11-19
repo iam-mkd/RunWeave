@@ -22,7 +22,10 @@ class Steps:
 
     async def begin(self, title: str, detail: str | None) -> StepEvent | None:
         event = StepEvent(
-            index=len(self.events), title=title, detail=detail, status="running",
+            index=len(self.events),
+            title=title,
+            detail=detail,
+            status="running",
             started_at=datetime.now(UTC),
         )
         self.events[event.index] = event
@@ -63,7 +66,11 @@ async def proxy_session(
         steps = Steps()
         expires = asyncio.get_running_loop().time() + deadline
         with app.state.runtime.proxy.bound(
-            run_id=uuid4(), attempt=1, agent="harness", ledger=ledger, steps=steps,
+            run_id=uuid4(),
+            attempt=1,
+            agent="harness",
+            ledger=ledger,
+            steps=steps,
             expires_at=expires,
         ) as proxy:
             yield Session(client, proxy.token, ledger, steps)
@@ -72,6 +79,15 @@ async def proxy_session(
 CHAT = {"model": "gpt-test", "messages": [{"role": "user", "content": "hello"}]}
 CHAT_TOOLS = {
     **CHAT,
-    "tools": [{"type": "function", "function": {"name": "lookup_weather", "parameters": {"type": "object"}}}],
+    "tools": [
+        {
+            "type": "function",
+            "function": {"name": "lookup_weather", "parameters": {"type": "object"}},
+        }
+    ],
 }
-MESSAGES = {"model": "claude-test", "max_tokens": 100, "messages": [{"role": "user", "content": "hello"}]}
+MESSAGES = {
+    "model": "claude-test",
+    "max_tokens": 100,
+    "messages": [{"role": "user", "content": "hello"}],
+}

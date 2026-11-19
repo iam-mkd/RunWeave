@@ -358,6 +358,15 @@ def _anthropic_usage(reply: ModelReply, *, output: int | None = None) -> dict[st
     }
 
 
+def _tool_input(arguments: str) -> dict[str, Any]:
+    # The real API always returns an object here; malformed JSON only shows up while streaming.
+    try:
+        value = json.loads(arguments)
+    except ValueError:
+        return {"runweave_malformed_json": arguments}
+    return value if isinstance(value, dict) else {"value": value}
+
+
 def _anthropic_blocks(reply: ModelReply, ids: Ids) -> list[dict[str, Any]]:
     if reply.tool_calls:
         return [
@@ -365,7 +374,7 @@ def _anthropic_blocks(reply: ModelReply, ids: Ids) -> list[dict[str, Any]]:
                 "type": "tool_use",
                 "id": ids.calls[i],
                 "name": c.name,
-                "input": json.loads(c.arguments),
+                "input": _tool_input(c.arguments),
             }
             for i, c in enumerate(reply.tool_calls)
         ]
@@ -427,7 +436,7 @@ def messages_stream(request: ModelRequest, reply: ModelReply, ids: Ids) -> Itera
                     "index": index,
                     "delta": {
                         "type": "input_json_delta",
-                        "partial_json": json.dumps(block["input"]),
+                        "partial_json": reply.tool_calls[index].arguments,
                     },
                 },
                 "content_block_delta",

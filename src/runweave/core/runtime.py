@@ -1,6 +1,7 @@
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -18,11 +19,13 @@ from runweave.agents.providers import ProviderAgentModel
 from runweave.agents.runner import AgentRunner
 from runweave.agents.triage import TriageSteps
 from runweave.core.settings import Settings
+from runweave.limits import ProviderLimiter
 from runweave.orchestration.backend import MemoryBackend, RunBackend
 from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
 from runweave.orchestration.scheduler import Scheduler
 from runweave.proxy.bindings import ProxyBindings
+from runweave.proxy.upstream import Provider, Upstream
 from runweave.security import ContentPolicy
 from runweave.storage.engine import postgres_engine
 from runweave.storage.postgres import PostgresRuns
@@ -44,6 +47,7 @@ class Runtime:
     agents: AgentCatalog | None = None
     connector: HttpAgentConnector | None = None
     proxy: ProxyBindings | None = None
+    upstream: Upstream | None = None
 
 
 def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
@@ -56,6 +60,51 @@ def _agent_mounts(settings: Settings) -> dict[str, httpx.AsyncBaseTransport]:
     )
     hosts = ["127.0.0.1", "localhost", "[::1]", *settings.http_agent_allowed_hosts]
     return {f"all://{host}": real for host in hosts}
+
+
+def _upstream_mounts(
+    settings: Settings, transport: httpx.AsyncBaseTransport | None
+) -> dict[str, httpx.AsyncBaseTransport]:
+    """Passthrough providers get a real transport even in offline mode (or a test double)."""
+    if settings.proxy_mode != "passthrough":
+        return {}
+    real = transport or httpx.AsyncHTTPTransport(
+        limits=httpx.Limits(
+            max_connections=settings.http_max_connections,
+            max_keepalive_connections=settings.http_max_connections,
+        ),
+        trust_env=False,
+    )
+    hosts = {
+        urlsplit(url).hostname
+        for url in (settings.proxy_openai_base_url, settings.proxy_anthropic_base_url)
+    }
+    return {f"https://{host}": real for host in hosts if host}
+
+
+def _upstream(client: httpx.AsyncClient, settings: Settings) -> Upstream | None:
+    if settings.proxy_mode != "passthrough":
+        return None
+    return Upstream(
+        client,
+        openai=Provider(
+            settings.proxy_openai_base_url.rstrip("/"),
+            settings.proxy_openai_api_key,
+            ProviderLimiter(
+                concurrency=settings.proxy_openai_concurrency,
+                requests_per_minute=settings.proxy_openai_requests_per_minute,
+            ),
+        ),
+        anthropic=Provider(
+            settings.proxy_anthropic_base_url.rstrip("/"),
+            settings.proxy_anthropic_api_key,
+            ProviderLimiter(
+                concurrency=settings.proxy_anthropic_concurrency,
+                requests_per_minute=settings.proxy_anthropic_requests_per_minute,
+            ),
+        ),
+        max_response_bytes=settings.proxy_upstream_max_bytes,
+    )
 
 
 async def connect_startup_agents(
@@ -82,6 +131,7 @@ async def open_runtime(
     mock_transport: httpx.AsyncBaseTransport | None = None,
     agents: Sequence[RegisteredAgent] = (),
     http_agents: Sequence[str] | None = None,
+    upstream_transport: httpx.AsyncBaseTransport | None = None,
 ) -> AsyncIterator[Runtime]:
     mock_transport = mock_transport or httpx.MockTransport(fake_health_response)
     provider = settings.model_provider
@@ -91,7 +141,10 @@ async def open_runtime(
         transport=None if live else mock_transport,
         # Offline mode sends everything to the mock except HTTP agents, which are real
         # processes on loopback (or explicitly allowed hosts).
-        mounts={"https://mock-tools.invalid": mock_transport} if live else _agent_mounts(settings),
+        mounts={
+            **({"https://mock-tools.invalid": mock_transport} if live else _agent_mounts(settings)),
+            **_upstream_mounts(settings, upstream_transport),
+        },
         timeout=httpx.Timeout(settings.http_timeout_seconds),
         limits=httpx.Limits(
             max_connections=settings.http_max_connections,
@@ -107,6 +160,8 @@ async def open_runtime(
                 settings.model_api_key.get_secret_value(),
                 settings.auth_signing_key.get_secret_value(),
                 settings.sandbox_fixture_credential.get_secret_value(),
+                settings.proxy_openai_api_key.get_secret_value(),
+                settings.proxy_anthropic_api_key.get_secret_value(),
                 *settings.auth_test_identities.keys(),
                 *(value.get_secret_value() for value in settings.protected_values),
             )
@@ -208,6 +263,7 @@ async def open_runtime(
                 limit=settings.http_agent_max_registered,
             )
             proxy = ProxyBindings(settings.proxy_public_url)
+            upstream = _upstream(client, settings)
             catalog = AgentCatalog.with_triage(
                 run_executor,
                 version=settings.agent_workflow if executor is None else "custom",
@@ -236,6 +292,7 @@ async def open_runtime(
                             catalog,
                             connector,
                             proxy,
+                            upstream,
                         )
                 finally:
                     await engine.dispose()
@@ -269,6 +326,7 @@ async def open_runtime(
                         catalog,
                         connector,
                         proxy,
+                        upstream,
                     )
         finally:
             await isolated.close()

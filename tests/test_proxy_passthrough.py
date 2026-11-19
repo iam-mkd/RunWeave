@@ -45,17 +45,36 @@ class Upstream:
             if self._handler:
                 return await self._handler(request)
             if request.url.path.endswith("/messages"):
-                return httpx.Response(200, json={
-                    "id": "msg_up", "type": "message", "role": "assistant", "model": "claude-test",
-                    "content": [{"type": "text", "text": "upstream says hi"}], "stop_reason": "end_turn",
-                    "stop_sequence": None, "usage": {"input_tokens": 11, "output_tokens": 5},
-                })
-            return httpx.Response(200, json={
-                "id": "chatcmpl-up", "object": "chat.completion", "created": 1, "model": "gpt-test",
-                "choices": [{"index": 0, "message": {"role": "assistant", "content": "upstream says hi"},
-                             "finish_reason": "stop"}],
-                "usage": {"prompt_tokens": 12, "completion_tokens": 6, "total_tokens": 18},
-            })
+                return httpx.Response(
+                    200,
+                    json={
+                        "id": "msg_up",
+                        "type": "message",
+                        "role": "assistant",
+                        "model": "claude-test",
+                        "content": [{"type": "text", "text": "upstream says hi"}],
+                        "stop_reason": "end_turn",
+                        "stop_sequence": None,
+                        "usage": {"input_tokens": 11, "output_tokens": 5},
+                    },
+                )
+            return httpx.Response(
+                200,
+                json={
+                    "id": "chatcmpl-up",
+                    "object": "chat.completion",
+                    "created": 1,
+                    "model": "gpt-test",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {"role": "assistant", "content": "upstream says hi"},
+                            "finish_reason": "stop",
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 12, "completion_tokens": 6, "total_tokens": 18},
+                },
+            )
         finally:
             self.in_flight -= 1
 
@@ -66,7 +85,7 @@ class Upstream:
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"proxy_openai_api_key": SecretStr("")},
+        {"proxy_openai_api_key": SecretStr(""), "proxy_anthropic_api_key": SecretStr("")},
         {"proxy_models": ()},
         {"model_input_usd_per_million": None},
         {"proxy_openai_base_url": "http://openai.upstream.test/v1"},
@@ -96,7 +115,9 @@ async def test_chat_is_forwarded_with_the_provider_key_and_a_capped_limit(
     assert s.token not in sent.headers.get("authorization", "") + str(dict(sent.headers))
     body = json.loads(sent.content)
     assert body["model"] == "gpt-test"
-    assert body.get("max_completion_tokens", body.get("max_tokens")) <= state.policy.max_output_tokens
+    assert (
+        body.get("max_completion_tokens", body.get("max_tokens")) <= state.policy.max_output_tokens
+    )
     assert (state.input_tokens, state.output_tokens) == (12, 6)
     assert state.summary().estimated_cost_usd > 0
     detail = s.steps.details()[0][1] or ""
@@ -118,7 +139,9 @@ async def test_models_outside_the_allowlist_are_never_forwarded() -> None:
 @pytest.mark.asyncio
 async def test_budgets_stop_overspend_before_forwarding() -> None:
     upstream = Upstream()
-    async with proxy_session(upstream=upstream.transport(), agent_request_limit=1, **PASSTHROUGH) as s:
+    async with proxy_session(
+        upstream=upstream.transport(), agent_request_limit=1, **PASSTHROUGH
+    ) as s:
         first = await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())
         second = await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())
     assert (first.status_code, second.status_code) == (200, 402)
@@ -131,13 +154,27 @@ async def test_streams_relay_chunks_and_settle_streamed_usage() -> None:
         body = json.loads(request.content)
         assert body["stream_options"] == {"include_usage": True}
         chunks = [
-            {"id": "c", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {"content": "up"}}]},
-            {"id": "c", "object": "chat.completion.chunk", "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]},
-            {"id": "c", "object": "chat.completion.chunk", "choices": [],
-             "usage": {"prompt_tokens": 20, "completion_tokens": 3, "total_tokens": 23}},
+            {
+                "id": "c",
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": {"content": "up"}}],
+            },
+            {
+                "id": "c",
+                "object": "chat.completion.chunk",
+                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+            },
+            {
+                "id": "c",
+                "object": "chat.completion.chunk",
+                "choices": [],
+                "usage": {"prompt_tokens": 20, "completion_tokens": 3, "total_tokens": 23},
+            },
         ]
         text = "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + "data: [DONE]\n\n"
-        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, content=text.encode())
+        return httpx.Response(
+            200, headers={"Content-Type": "text/event-stream"}, content=text.encode()
+        )
 
     upstream = Upstream(stream)
     async with proxy_session(upstream=upstream.transport(), **PASSTHROUGH) as s:
@@ -159,13 +196,35 @@ async def test_anthropic_streams_settle_usage_from_message_events() -> None:
         assert request.headers["x-api-key"] == ANTHROPIC_KEY
         assert request.headers["anthropic-version"] == "2023-06-01"
         events = [
-            ("message_start", {"type": "message_start", "message": {"id": "m", "usage": {"input_tokens": 9, "output_tokens": 1}}}),
-            ("content_block_delta", {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "hi"}}),
-            ("message_delta", {"type": "message_delta", "delta": {"stop_reason": "end_turn"}, "usage": {"output_tokens": 4}}),
+            (
+                "message_start",
+                {
+                    "type": "message_start",
+                    "message": {"id": "m", "usage": {"input_tokens": 9, "output_tokens": 1}},
+                },
+            ),
+            (
+                "content_block_delta",
+                {
+                    "type": "content_block_delta",
+                    "index": 0,
+                    "delta": {"type": "text_delta", "text": "hi"},
+                },
+            ),
+            (
+                "message_delta",
+                {
+                    "type": "message_delta",
+                    "delta": {"stop_reason": "end_turn"},
+                    "usage": {"output_tokens": 4},
+                },
+            ),
             ("message_stop", {"type": "message_stop"}),
         ]
         text = "".join(f"event: {e}\ndata: {json.dumps(d)}\n\n" for e, d in events)
-        return httpx.Response(200, headers={"Content-Type": "text/event-stream"}, content=text.encode())
+        return httpx.Response(
+            200, headers={"Content-Type": "text/event-stream"}, content=text.encode()
+        )
 
     upstream = Upstream(stream)
     async with proxy_session(upstream=upstream.transport(), **PASSTHROUGH) as s:
@@ -182,8 +241,16 @@ async def test_anthropic_streams_settle_usage_from_message_events() -> None:
 async def test_responses_api_usage_is_settled() -> None:
     async def respond(request: httpx.Request) -> httpx.Response:
         assert json.loads(request.content)["max_output_tokens"] >= 1
-        return httpx.Response(200, json={"id": "resp", "object": "response", "status": "completed",
-                                         "output": [], "usage": {"input_tokens": 7, "output_tokens": 2}})
+        return httpx.Response(
+            200,
+            json={
+                "id": "resp",
+                "object": "response",
+                "status": "completed",
+                "output": [],
+                "usage": {"input_tokens": 7, "output_tokens": 2},
+            },
+        )
 
     upstream = Upstream(respond)
     async with proxy_session(upstream=upstream.transport(), **PASSTHROUGH) as s:
@@ -210,8 +277,11 @@ async def test_missing_usage_is_charged_conservatively() -> None:
 async def test_upstream_errors_pass_through_without_retries_or_charges() -> None:
     async def limited(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
-            429, headers={"Retry-After": "3", "Set-Cookie": "x=1"},
-            json={"error": {"message": "slow down", "type": "requests", "code": "rate_limit_exceeded"}},
+            429,
+            headers={"Retry-After": "3", "Set-Cookie": "x=1"},
+            json={
+                "error": {"message": "slow down", "type": "requests", "code": "rate_limit_exceeded"}
+            },
         )
 
     upstream = Upstream(limited)
@@ -250,6 +320,17 @@ async def test_upstream_transport_failures_are_classified(failure: str, code: st
 
 
 @pytest.mark.asyncio
+async def test_a_provider_without_a_key_is_never_called() -> None:
+    upstream = Upstream()
+    settings = {**PASSTHROUGH, "proxy_anthropic_api_key": SecretStr("")}
+    async with proxy_session(upstream=upstream.transport(), **settings) as s:
+        response = await s.client.post("/llm/v1/messages", json=MESSAGES, headers=s.anthropic())
+    assert response.status_code == 400
+    assert "not configured" in response.json()["error"]["message"]
+    assert upstream.requests == []
+
+
+@pytest.mark.asyncio
 async def test_faults_apply_before_forwarding_in_passthrough() -> None:
     upstream = Upstream()
     settings = {**PASSTHROUGH, "proxy_fault_profile": "outage"}
@@ -267,10 +348,19 @@ async def test_provider_concurrency_is_bounded_per_provider() -> None:
     upstream = Upstream(slow)
     settings = {**PASSTHROUGH, "proxy_openai_concurrency": 1, "proxy_anthropic_concurrency": 1}
     async with proxy_session(upstream=upstream.transport(), **settings) as s:
-        await asyncio.gather(
-            *(s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai()) for _ in range(3)),
-            s.client.post("/llm/v1/messages", json=MESSAGES, headers=s.anthropic()),
+        responses = await asyncio.gather(
+            # Small limits so all four reservations fit the run's output budget at once.
+            *(
+                s.client.post(
+                    "/llm/v1/chat/completions", json={**CHAT, "max_tokens": 50}, headers=s.openai()
+                )
+                for _ in range(3)
+            ),
+            s.client.post(
+                "/llm/v1/messages", json={**MESSAGES, "max_tokens": 50}, headers=s.anthropic()
+            ),
         )
+        assert all(r.status_code == 200 for r in responses)
     # One OpenAI call at a time, but the Anthropic call ran alongside it.
     assert upstream.peak == 2
 

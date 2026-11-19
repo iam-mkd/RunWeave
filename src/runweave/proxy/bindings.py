@@ -28,6 +28,8 @@ class Binding:
     steps: StepLog | None
     expires_at: float
     sequence: Iterator[int] = field(default_factory=count)
+    # Position of each proxied call in this attempt; seeded faults are drawn from it.
+    calls: Iterator[int] = field(default_factory=count)
 
     def expired(self) -> bool:
         return asyncio.get_running_loop().time() >= self.expires_at
