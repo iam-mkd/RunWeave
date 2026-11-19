@@ -85,13 +85,12 @@ class Upstream:
 @pytest.mark.parametrize(
     "overrides",
     [
-        {"proxy_openai_api_key": SecretStr(""), "proxy_anthropic_api_key": SecretStr("")},
         {"proxy_models": ()},
         {"model_input_usd_per_million": None},
         {"proxy_openai_base_url": "http://openai.upstream.test/v1"},
     ],
 )
-def test_passthrough_requires_keys_models_prices_and_https(overrides: dict[str, Any]) -> None:
+def test_passthrough_requires_models_prices_and_https(overrides: dict[str, Any]) -> None:
     with pytest.raises(ValidationError):
         Settings(**{**PASSTHROUGH, **overrides})
 

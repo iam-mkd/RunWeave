@@ -20,6 +20,9 @@ const python = process.env.RUNWEAVE_TEST_PYTHON || join(root, '.venv', process.p
 const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('RUNWEAVE_')));
 env.PYTHONPATH = [join(root, 'src'), join(root, 'examples', 'sample-agent')].join(delimiter);
 env.RUNWEAVE_MOCK_RUNBOOK_DELAY_SECONDS = '1.2';
+// Keys saved in the smoke test stay in memory; never touch the developer's credential store.
+env.RUNWEAVE_KEY_STORE = 'memory';
+const smokeKey = 'sk-smoke-test-only-7c1e9a2b4d';
 const server = spawn(python, ['-m', 'runweave.cli', 'serve', '--demo', '--port', String(port), '--agent', 'sample_agent:text_report'],
   { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '';
@@ -207,6 +210,43 @@ try {
   await row.getByRole('button', { name: 'Confirm remove' }).click();
   await page.getByRole('link', { name: 'contract-echo', exact: true }).waitFor({ state: 'detached' });
 
+  // Settings: a saved key never reaches the browser; settings survive a reload.
+  const bodies = [];
+  const collect = async (response) => {
+    if (response.url().startsWith(`${base}/v1/`)) bodies.push(await response.text().catch(() => ''));
+  };
+  page.on('response', collect);
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
+  const openai = page.getByRole('region', { name: 'OpenAI' });
+  await openai.getByLabel('OpenAI API key').fill(smokeKey);
+  await openai.getByRole('button', { name: 'Save key' }).click();
+  await openai.getByText('Saved in the credential store').waitFor();
+  assert.equal(await openai.getByLabel('OpenAI API key').inputValue(), '');
+  await page.getByLabel('Fault profile').selectOption('outage');
+  await page.getByLabel('Seed').fill('7');
+  await page.getByRole('button', { name: 'Save fault settings' }).click();
+  await page.getByRole('status').filter({ hasText: 'Fault settings saved' }).waitFor();
+  await page.getByLabel('Model calls per run').fill('5');
+  await page.getByRole('button', { name: 'Save budgets' }).click();
+  await page.getByRole('status').filter({ hasText: 'Budgets saved' }).waitFor();
+  await page.screenshot({ path: join(artifacts, 'settings-light.png'), fullPage: true });
+  await noOverflow(page, 'settings');
+  await page.reload();
+  await page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
+  assert.equal(await page.getByLabel('Fault profile').inputValue(), 'outage');
+  assert.equal(await page.getByLabel('Model calls per run').inputValue(), '5');
+  await page.getByText('RUNWEAVE_PROXY_FAULT_PROFILE=outage').waitFor();
+  await page.getByRole('region', { name: 'OpenAI' }).getByRole('button', { name: 'Remove key' }).click();
+  await page.getByRole('region', { name: 'OpenAI' }).getByText('Not set').waitFor();
+  await page.getByLabel('Fault profile').selectOption('');
+  await page.getByRole('button', { name: 'Save fault settings' }).click();
+  await page.getByRole('status').filter({ hasText: 'Fault settings saved' }).waitFor();
+  page.off('response', collect);
+  assert.ok(bodies.length > 3);
+  assert.ok(bodies.every((body) => !body.includes(smokeKey)), 'A saved key reached the browser');
+  assert.ok(!(await page.content()).includes(smokeKey));
+
   // Durable approval bindings against an intercepted fixture.
   const fixtureId = '11111111-1111-4111-8111-111111111111';
   const approval = {
@@ -262,11 +302,14 @@ try {
   await darkPage.page.goto(`${base}/#/runs/${runId}`);
   await darkPage.page.locator('.run-state .status.succeeded').waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'run-result-dark.png'), fullPage: true });
+  await darkPage.page.goto(`${base}/#/settings`);
+  await darkPage.page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
+  await darkPage.page.screenshot({ path: join(artifacts, 'settings-dark.png'), fullPage: true });
   assert.deepEqual(await darkPage.page.evaluate(() => window.__cspViolations), []);
   assert.deepEqual(darkPage.errors, []);
   await dark.close();
 
-  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, approval bindings, mobile overflow, safe text, both themes.');
+  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, mobile overflow, safe text, both themes.');
   console.log(`Screenshots: ${artifacts}`);
 } finally {
   if (browser) await browser.close();
