@@ -3,7 +3,7 @@ import { api, approvalBody, terminal } from '../api.js';
 import { ErrorState, KeyValueList, LoadingState, PageHeader, Panel, StatTile, StatusBadge } from '../components/index.js';
 import { compactNumber, duration, usd } from '../format.js';
 import { href } from '../router.js';
-import { JsonBlock, RunOutput, RunTimeline } from './parts.jsx';
+import { JsonBlock, RunOutput, RunTimeline, runModelSummary } from './parts.jsx';
 import { useApproval, useLiveRun } from './useLiveRun.js';
 
 function dateLabel(value) {
@@ -45,6 +45,7 @@ export function RunDetailScreen({ id }) {
   }
   const running = snapshot && !terminal.has(snapshot.status);
   const usage = snapshot?.usage;
+  const models = runModelSummary(snapshot?.steps ?? []);
 
   return <>
     <PageHeader
@@ -93,6 +94,8 @@ export function RunDetailScreen({ id }) {
               { label: 'Started', value: dateLabel(snapshot.started_at) },
               { label: 'Finished', value: dateLabel(snapshot.finished_at) },
               { label: 'Model requests', value: usage ? usage.requests : '—' },
+              { label: 'Proxied model calls', value: String(models.calls) },
+              { label: 'Injected faults', value: String(models.faults) },
               ...(snapshot.approval_wait_seconds ? [{ label: 'Approval wait', value: duration(snapshot.approval_wait_seconds * 1000) }] : []),
             ]} />
           </Panel>

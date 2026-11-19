@@ -74,6 +74,27 @@ export async function removeAgent(name, options) {
   return api(`/v1/agents/${name}`, { ...options, method: 'DELETE' });
 }
 
+const providers = new Set(['openai', 'anthropic']);
+
+export function getSettings(options) {
+  return api('/v1/settings', options);
+}
+
+export function updateSettings(patch, options) {
+  return api('/v1/settings', { ...options, data: patch, method: 'PATCH' });
+}
+
+// Keys are write-only: they go to the server once and are never read back.
+export async function saveProviderKey(provider, key, options) {
+  if (!providers.has(provider)) throw new Error('Unknown provider');
+  return api(`/v1/settings/keys/${provider}`, { ...options, data: { key }, method: 'PUT' });
+}
+
+export async function removeProviderKey(provider, options) {
+  if (!providers.has(provider)) throw new Error('Unknown provider');
+  return api(`/v1/settings/keys/${provider}`, { ...options, method: 'DELETE' });
+}
+
 export function listRuns({ agent, status, limit = 50, before } = {}, options) {
   const query = new URLSearchParams();
   if (agentNamePattern.test(agent ?? '')) query.set('agent', agent);

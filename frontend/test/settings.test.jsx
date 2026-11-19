@@ -3,8 +3,8 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, describe, test, vi } from 'vitest';
 import { getSettings, removeProviderKey, saveProviderKey, updateSettings } from '../src/api.js';
-import { RunTimeline } from '../src/screens/parts.jsx';
-import { ProviderKeyCard, environmentLines, runModelSummary } from '../src/screens/SettingsScreen.jsx';
+import { RunTimeline, runModelSummary } from '../src/screens/parts.jsx';
+import { ProviderKeyCard, environmentLines } from '../src/screens/SettingsScreen.jsx';
 
 const render = (element) => renderToStaticMarkup(element);
 afterEach(() => vi.restoreAllMocks());

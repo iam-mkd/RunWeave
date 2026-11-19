@@ -21,6 +21,7 @@ export function parseRoute(hash, search) {
     return isRunId(legacy) ? { screen: 'run', id: legacy, params: {} } : { screen: 'agents', params: {} };
   }
   if (parts[0] === 'setup') return { screen: 'setup', params: {} };
+  if (parts[0] === 'settings') return { screen: 'settings', params: {} };
   if (parts[0] === 'runs' && parts[1] === 'new') return { screen: 'new-run', params };
   if (parts[0] === 'runs' && parts.length > 1) {
     return { screen: 'run', id: parts.length === 2 && isRunId(parts[1]) ? parts[1] : null, params: {} };
@@ -43,5 +44,6 @@ export function href({ screen, id, params }) {
   if (screen === 'new-run') return `#/runs/new${query(params)}`;
   if (screen === 'runs') return `#/runs${query(params)}`;
   if (screen === 'setup') return '#/setup';
+  if (screen === 'settings') return '#/settings';
   return '#/agents';
 }
