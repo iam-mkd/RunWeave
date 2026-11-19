@@ -1,0 +1,3 @@
+.runweave/reports/
+node_modules/
+__pycache__/

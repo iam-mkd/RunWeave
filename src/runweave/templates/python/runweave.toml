@@ -1,0 +1,21 @@
+# RunWeave project: `runweave eval` runs the datasets below through the agent.
+[agent]
+name = "word-count"
+python = "agent:run"
+
+[limits]
+run_timeout_seconds = 30
+concurrency = 4
+
+[proxy]
+mode = "mock"          # model calls through ctx.proxy get deterministic offline replies
+fault_profile = ""     # for example "flaky" or "chaos" to inject provider failures
+fault_seed = 0
+
+[[datasets]]
+name = "smoke"
+path = "datasets/smoke.jsonl"
+
+[eval]
+min_pass_rate = 1.0
+# baseline = ".runweave/baselines/smoke.json"   # created by `runweave eval --save-baseline`

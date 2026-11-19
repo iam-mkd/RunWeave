@@ -1,0 +1,14 @@
+{
+  "name": "word-count-agent",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "^22.12.0 || >=24"
+  },
+  "scripts": {
+    "start": "node agent.mjs"
+  },
+  "dependencies": {
+    "@runweave/agent": "file:vendor/runweave-agent"
+  }
+}

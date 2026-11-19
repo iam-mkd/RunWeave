@@ -27,6 +27,19 @@ Open **http://127.0.0.1:8000** and select **Load example**. Use `npm` instead of
 `npm.cmd` on macOS/Linux. See the [workspace guide](docs/workspace.md) for local
 development, verification, provider configuration boundaries and storage behavior.
 
+## Test your agent
+
+```bash
+runweave init my-agent          # or --language typescript
+cd my-agent
+runweave eval                   # offline, no API key; exits 1 when a gate fails
+```
+
+`runweave eval` runs a dataset through your agent with built-in assertions (output, schema,
+tools, canaries, latency, cost), custom Python checks and Pydantic Evals, writes JSON,
+JUnit and Markdown reports, and compares against a saved baseline. See
+[Test your agent](docs/testing.md).
+
 ## Run your own agent
 
 Decorate an async Python function with `@runweave.sdk.agent`, then start RunWeave with it:

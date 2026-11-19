@@ -42,7 +42,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 18. Developer UI design system and mockups
 - [x] 19. Generic run core, Python agent adapter, and core screens
 - [x] 20. HTTP agent adapter and TypeScript SDK
-- [ ] 21. LLM proxy and fault injection
+- [x] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
 - [ ] 23. Approvals through the agent SDKs
 - [ ] 24. UI polish and accessibility audit
@@ -1289,6 +1289,12 @@ Implementation notes, pull request C (2026-11-19):
   a key saved and absent from every response and the page, both themes, no CSP
   violations or page errors) passed. This completes milestone 21's "Done when"; check
   it off after the owner merges this pull request.
+- Completed 2026-11-19: the owner reviewed and merged pull requests #8 (8fc0dcc), #9
+  (89f087e) and #10 (merge commit 316e932). Hosted CI passed on each: the Python
+  3.11–3.13 Linux/Windows jobs (contract suite and Node SDK compatibility required), the
+  TypeScript SDK job, the dependency audit, the offline evaluation workflow with its
+  PostgreSQL suite, and the React workspace checks including the Settings and key
+  secrecy browser flow.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 
@@ -1314,6 +1320,40 @@ Implementation notes, pull request C (2026-11-19):
   eval against the sample Python and TypeScript agents with no API key, from both
   the CLI and the UI; the example CI job fails on a seeded regression; and a
   load test with the UI open shows no measurable status-API regression.
+
+Decisions with the owner (2026-11-19): deliver in four pull requests (A: `runweave.toml`,
+`runweave init` and `runweave eval`; B: `runweave bench` and `runweave shadow`; C: a
+shared jobs API with the Load tests, Evals and Shadow screens; D: the example GitHub
+Actions job, the UI bundled in the wheel, and the clean-machine `uvx` check, publishing
+only when the owner asks). CLI commands run RunWeave in-process by default and accept
+`--server URL` to submit to a running instance; both paths drive the same HTTP API.
+
+Implementation notes, pull request A (2026-11-19):
+- Test first: `tests/test_project_config.py`, `tests/test_eval_cases.py` and
+  `tests/test_eval_cli.py` (subprocesses, like a developer: init, eval, failures,
+  baselines, config errors, `--server`, a TypeScript project, vendored SDK drift).
+- `runweave.project` loads `runweave.toml` (found upward from the working folder):
+  Python agents, or HTTP agents with an optional start command; limits, proxy and fault
+  settings, datasets and eval gates; paths must stay inside the project; errors name the
+  field and say what to fix.
+- `runweave init` copies a starter project from package data. TypeScript projects get
+  the SDK under `vendor/` (it is not on npm), copied by `scripts/vendor-typescript-sdk.py`
+  and checked against the build.
+- `runweave.evals`: JSONL/YAML cases with line-numbered errors; built-in assertions
+  (status including admission rejection, error code, schema, output subset/equality,
+  contains, regex, tool called, canaries, latency, cost, token and model-call ceilings),
+  custom Python checks and Pydantic Evals evaluators; failure messages are short and do
+  not dump outputs.
+- The runner drives RunWeave's HTTP API in-process (ASGI client, in-memory, offline,
+  mock proxy; a `command` agent is started and stopped) or against `--server`, with
+  bounded concurrency and queue-full retries.
+- Reports: `report.json` (source of truth for the coming screens), `junit.xml` and
+  `report.md` under `.runweave/reports/`; gates on minimum pass rate and baseline
+  regressions; exit 0/1/2. `runweave serve --api-only` serves the API without the UI.
+- Validation: 529 offline tests passed on Python 3.13 with the TypeScript fixtures
+  required, and the new and CLI suites on 3.11 (47). Ruff, formatting and strict mypy
+  (150 files) passed. A built wheel contains all 21 template files. PostgreSQL was not
+  rerun locally (no durable code changed); CI runs it.
 
 ### 23. Approvals through the agent SDKs
 

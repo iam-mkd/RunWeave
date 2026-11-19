@@ -33,6 +33,7 @@ dependencies = [
     "pydantic>=2.10,<3",
     "pydantic-settings>=2.7,<3",
     "pyjwt==2.15.1",
+    "pyyaml>=6.0.2,<7",
     "sqlalchemy[asyncio]>=2.0.54,<2.1",
     "uvicorn>=0.34,<1",
 ]
@@ -61,6 +62,7 @@ dev = [
     "pytest-asyncio>=0.25,<2",
     "ruff>=0.9,<1",
     "types-jsonschema>=4.23",
+    "types-pyyaml>=6",
 ]
 
 [tool.setuptools.packages.find]
@@ -75,7 +77,13 @@ cache-keys = [
 ]
 
 [tool.setuptools.package-data]
-"runweave" = ["sandbox_assets/*.json", "sandbox_assets/*LICENSE", "sandbox_assets/*.md"]
+"runweave" = [
+    "sandbox_assets/*.json",
+    "sandbox_assets/*LICENSE",
+    "sandbox_assets/*.md",
+    "templates/**/*",
+    "templates/*/.gitignore",
+]
 "runweave.evaluation" = ["fixtures-v1.json", "fixtures-v2.json"]
 
 [tool.pytest.ini_options]
