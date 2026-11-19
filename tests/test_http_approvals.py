@@ -40,7 +40,7 @@ async def runweave(dsn: str, agent: str, **overrides: Any) -> AsyncIterator[http
         key_store="none",
         http_agents=(agent,),
         proxy_public_url=url,
-        worker_count=2,
+        worker_count=overrides.pop("worker_count", 2),
         db_poll_seconds=0.05,
         lease_seconds=1,
         http_agent_retry_base_delay_seconds=0.01,

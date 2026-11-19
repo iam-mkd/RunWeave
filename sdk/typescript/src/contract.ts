@@ -8,6 +8,7 @@ export const MAX_DEADLINE_MS = 86_400_000;
 export const TITLE_LIMIT = 120;
 export const DETAIL_LIMIT = 1000;
 export const STEP_EVENT_CAP = 200;
+export const ACTION_PATTERN = /^[a-z][a-z0-9_.:-]{0,99}$/;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -40,6 +41,8 @@ export interface RunRequest {
   input: JsonObject;
   deadline_ms: number;
   proxy: ProxyBinding | null;
+  /** Where to request approvals (durable RunWeave only). */
+  approvals_url: string | null;
 }
 
 const TOKEN_PATTERN = /^rwp_[A-Za-z0-9_-]{20,200}$/;
@@ -87,7 +90,12 @@ export function parseRunRequest(value: unknown): RunRequest | null {
   if (!isInteger(attempt, 1, 1000) || !isInteger(deadlineMs, 1, MAX_DEADLINE_MS) || !isObject(input)) return null;
   const proxy = parseProxy(value['proxy']);
   if (proxy === undefined) return null;
-  return { run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs, proxy };
+  const approvals = value['approvals_url'];
+  if (approvals !== undefined && approvals !== null && (typeof approvals !== 'string' || approvals.length > 2048)) return null;
+  return {
+    run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs, proxy,
+    approvals_url: typeof approvals === 'string' ? approvals : null,
+  };
 }
 
 export function isUuid(value: string): boolean {

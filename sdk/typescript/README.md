@@ -35,6 +35,7 @@ workspace (Agents → Connect agent → HTTP endpoint).
 | `ctx.log(message)` | JSON log line with `protectedValues` redacted (1,000 characters max) |
 | `ctx.proxy` | The run's LLM proxy binding: `token`, `openaiBaseUrl`, `anthropicBaseUrl` and `env()`. Pass them to the OpenAI or Anthropic SDK; `null` if RunWeave sent none |
 | `ctx.usage()` | `null`; RunWeave meters proxied calls and shows usage on the run |
+| `await ctx.requestApproval(action, args, { expiresIn })` | Waits for a person to approve these exact arguments (durable RunWeave only); returns `{ approved, status, decidedBy }`, throws `ApprovalExpired`. The deadline is paused while waiting. See [approvals](../../docs/agent-approvals.md) |
 
 RunWeave validates input against `inputSchema` before calling you and output against
 `outputSchema` afterwards. For local validation (for example with zod or ajv), pass

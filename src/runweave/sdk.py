@@ -157,11 +157,14 @@ class RunContext:
         max_steps: int = 50,
         content_policy: ContentPolicy | None = None,
         proxy: ModelProxy | None = None,
+        approvals_url: str | None = None,
     ) -> None:
         self.run_id = run_id
         self.agent = agent
         self.attempt = attempt
         self.proxy = proxy
+        # Where an HTTP agent sends approval requests (durable mode with the proxy only).
+        self.approvals_url = approvals_url
         self._max_steps = max_steps
         self._steps = 0
         self._policy = content_policy or ContentPolicy()

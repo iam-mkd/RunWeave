@@ -8,6 +8,12 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Agent approvals for HTTP agents (milestone 23, part 2): `ctx.requestApproval` in the
+  TypeScript SDK and `ctx.request_approval` for agents served with `runweave.sdk_http`.
+  Durable run requests carry an `approvals_url`; agents call `POST /agent/v1/approvals`
+  with their run token, repeating a bounded wait until decided, with their own deadline
+  paused. Unreachable callbacks are retried until RunWeave ends the run. The shared contract
+  suite covers both SDKs on PostgreSQL.
 - Agent approvals (milestone 23, part 1): `ctx.request_approval(action, arguments,
   expires_in)` for Python agents in durable mode. Requests are bound to tenant, run,
   action, argument digest, policy version and expiry; decisions are idempotent and

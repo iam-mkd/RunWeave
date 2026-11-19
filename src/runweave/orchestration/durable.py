@@ -273,6 +273,18 @@ class DurableScheduler:
             raise AgentInputIncompatible() from None
         ledger = self._store.ledger(claim)
         steps = self._store.steps(claim)
+        approvals = PostgresActionGate(
+            self._store.engine,
+            claim,
+            agent=claim.snapshot.agent,
+            version=claim.snapshot.agent_version,
+            ttl=self._settings.approval_ttl_seconds,
+            # A waiting agent keeps its worker slot, so at most half the pool waits.
+            limit=max(
+                1, min(self._settings.approval_max_pending, self._settings.worker_count // 2)
+            ),
+            poll=self._settings.db_poll_seconds,
+        )
         with (
             principal_scope(authorize()),
             budget_scope(ledger),
@@ -288,21 +300,7 @@ class DurableScheduler:
                 )
             ),
             step_scope(steps),
-            approval_scope(
-                PostgresActionGate(
-                    self._store.engine,
-                    claim,
-                    agent=claim.snapshot.agent,
-                    version=claim.snapshot.agent_version,
-                    ttl=self._settings.approval_ttl_seconds,
-                    # A waiting agent keeps its worker slot, so at most half the pool waits.
-                    limit=max(
-                        1,
-                        min(self._settings.approval_max_pending, self._settings.worker_count // 2),
-                    ),
-                    poll=self._settings.db_poll_seconds,
-                )
-            ),
+            approval_scope(approvals),
             bind_run(
                 self._proxy,
                 run_id=claim.snapshot.id,
@@ -311,6 +309,7 @@ class DurableScheduler:
                 ledger=ledger,
                 steps=steps,
                 expires_at=deadline,
+                approvals=approvals,
             ) as proxy,
             self._telemetry.span("agent.run", run_id=claim.snapshot.id),
         ):
@@ -321,16 +320,24 @@ class DurableScheduler:
                 max_steps=definition.info.max_steps,
                 content_policy=self._content_policy,
                 proxy=proxy,
+                approvals_url=self._proxy.approvals_url
+                if proxy is not None and self._proxy is not None
+                else None,
             )
             async with deadline_scope(deadline, RUN_DEADLINE):
                 budget = current_deadline()
+                approvals.deadline = budget
                 if budget is not None and proxy is not None and self._proxy is not None:
                     # Time spent waiting on an approval extends the proxy token too.
                     bindings, token = self._proxy, proxy.token
                     budget.listeners.append(lambda shift: bindings.extend(token, shift))
                 claim.snapshot.principal.require("runs:submit")
                 self._content_policy.check(input_json(parsed))
-                output = await definition.run(parsed, context)
+                try:
+                    output = await definition.run(parsed, context)
+                finally:
+                    # An HTTP agent may stop while a request is still pending.
+                    await asyncio.shield(approvals.settle())
                 return output_json(
                     output,
                     max_bytes=self._settings.agent_output_max_bytes,

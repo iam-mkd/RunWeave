@@ -1,6 +1,6 @@
 export {
-  AgentError, InputError, RunAborted, StepLimitError, defineAgent,
-  type AgentDefinition, type AgentOptions, type ModelProxy, type RunContext,
+  AgentError, ApprovalExpired, ApprovalUnavailable, InputError, RunAborted, StepLimitError, defineAgent,
+  type AgentDefinition, type AgentOptions, type Approval, type ModelProxy, type RunContext,
 } from './agent.js';
 export {
   CONTRACT_VERSION, MANIFEST_PATH,

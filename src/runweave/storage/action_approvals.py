@@ -20,7 +20,7 @@ from runweave.action_approvals import (
     canonical,
 )
 from runweave.approvals import ApprovalError
-from runweave.deadline import paused_deadline
+from runweave.deadline import Budget, current_deadline
 from runweave.security import Principal
 from runweave.storage.postgres import Claim
 
@@ -189,7 +189,13 @@ class PostgresActionApprovals:
 
 
 class PostgresActionGate:
-    """`ctx.request_approval` for one claimed run attempt."""
+    """`ctx.request_approval` for one claimed run attempt.
+
+    In-process agents call `request`, which waits for the decision. HTTP agents call
+    `submit` through RunWeave's callback with a bounded `wait` and repeat it until decided;
+    their calls arrive outside the run's task, so the run's deadline handle is kept here.
+    The run is `WAITING_APPROVAL` while any of its requests is pending.
+    """
 
     def __init__(
         self,
@@ -209,16 +215,53 @@ class PostgresActionGate:
         self.ttl = ttl
         self.limit = limit
         self.poll = poll
+        self.deadline: Budget | None = None
+        self._pending: set[UUID] = set()
+        self._waiting = False
 
     async def request(self, action: str, arguments: Any, expires_in: float | None) -> Approval:
+        return self.outcome(await self.submit(action, arguments, expires_in, wait=None))
+
+    async def submit(
+        self, action: str, arguments: Any, expires_in: float | None, *, wait: float | None
+    ) -> RowMapping:
+        """Record (or find) the request and wait up to `wait` seconds (None: until decided)."""
         seconds = min(self.ttl, expires_in) if expires_in is not None else self.ttl
         row = await self._record(action, arguments, seconds)
         if row["status"] == "pending":
-            loop = asyncio.get_running_loop()
-            until = loop.time() + max(0.0, float(row["left"])) + self.poll * 4
-            async with paused_deadline(until):
-                row = await self._wait(row["id"])
+            if row["id"] not in self._pending:
+                self._pending.add(row["id"])
+                budget = self.deadline or current_deadline()
+                if budget is not None:
+                    loop = asyncio.get_running_loop()
+                    budget.pause(loop.time() + max(0.0, float(row["left"])) + self.poll * 4)
+            row = await self._wait(row["id"], wait)
+            if row["status"] == "pending":
+                return row
+        await self._decided(row["id"])
+        return row
+
+    async def settle(self) -> None:
+        """At the end of the attempt: leave WAITING_APPROVAL if the agent stopped waiting."""
+        self._pending.clear()
+        if self._waiting:
+            self._waiting = False
+            await self._resume(strict=False)
+            budget = self.deadline or current_deadline()
+            if budget is not None:
+                budget.resume()
+
+    async def _decided(self, approval_id: UUID) -> None:
+        self._pending.discard(approval_id)
+        if self._waiting and not self._pending:
+            self._waiting = False
             await self._resume()
+            budget = self.deadline or current_deadline()
+            if budget is not None:
+                budget.resume()
+
+    @staticmethod
+    def outcome(row: RowMapping) -> Approval:
         if row["status"] in ("approved", "rejected"):
             return Approval(
                 id=row["id"],
@@ -237,7 +280,8 @@ class PostgresActionGate:
         async with self.engine.begin() as conn:
             locked = await conn.scalar(
                 text("""
-                SELECT id FROM runweave_runs WHERE id = :id AND status = 'RUNNING'
+                SELECT id FROM runweave_runs WHERE id = :id
+                    AND status IN ('RUNNING', 'WAITING_APPROVAL')
                     AND lease_token = :token AND lease_until > clock_timestamp() FOR UPDATE
             """),
                 {"id": run_id, "token": token},
@@ -289,10 +333,12 @@ class PostgresActionGate:
                 await conn.execute(
                     text("""
                     UPDATE runweave_runs SET status = 'WAITING_APPROVAL',
-                        approval_wait_started_at = clock_timestamp() WHERE id = :id
+                        approval_wait_started_at = COALESCE(approval_wait_started_at,
+                            clock_timestamp()) WHERE id = :id
                 """),
                     {"id": run_id},
                 )
+                self._waiting = True
         if refused is not None:
             raise ApprovalRefused(refused)
         assert existing is not None
@@ -314,7 +360,9 @@ class PostgresActionGate:
             .one_or_none()
         )
 
-    async def _wait(self, approval_id: UUID) -> RowMapping:
+    async def _wait(self, approval_id: UUID, wait: float | None) -> RowMapping:
+        loop = asyncio.get_running_loop()
+        until = None if wait is None else loop.time() + wait
         while True:
             async with self.engine.begin() as conn:
                 row = (
@@ -349,9 +397,11 @@ class PostgresActionGate:
                     if expired is not None:
                         return expired
                     continue
+                if until is not None and loop.time() >= until:
+                    return row
             await asyncio.sleep(self.poll)
 
-    async def _resume(self) -> None:
+    async def _resume(self, *, strict: bool = True) -> None:
         """Back to RUNNING; the waited time is added to the stored deadline."""
         async with self.engine.begin() as conn:
             resumed = await conn.scalar(
@@ -367,5 +417,5 @@ class PostgresActionGate:
             """),
                 {"id": self.claim.snapshot.id, "token": self.claim.token},
             )
-        if resumed is None:
+        if resumed is None and strict:
             raise ApprovalRefused("CHECKPOINT_LEASE_LOST")

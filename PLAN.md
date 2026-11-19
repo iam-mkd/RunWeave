@@ -1486,6 +1486,31 @@ Implementation notes, pull request A (2026-11-19):
   restores the remaining time afterwards; listeners move the run's proxy token expiry too.
 - `/v1/approvals` (list, get, decide) for the screen and CLI, owner-scoped like runs.
 
+Implementation notes, pull request B (2026-11-19):
+- Test first: `tests/test_http_approvals.py` runs both fixture agents (Python
+  `runweave.sdk_http` and the TypeScript SDK) against a durable RunWeave over TCP on
+  PostgreSQL: approve and reject, waiting longer than the deadline on both sides, expiry,
+  cancellation, concurrent decisions, and a restarted RunWeave whose re-run reuses the
+  request. The contract suite checks memory mode refuses approvals for both SDKs;
+  `tests/test_agent_callbacks.py` checks the callback's token check; the TypeScript SDK
+  has its own tests against a stand-in callback.
+- Durable run requests carry `approvals_url`; `POST /agent/v1/approvals` resolves the run
+  attempt from its proxy token (whose binding now carries the attempt's approval gate),
+  records or finds the request and waits a bounded `wait_seconds`. The gate keeps the
+  run's deadline handle, pauses it until the last pending request is decided, and settles
+  when the attempt ends (an agent may stop while a request is pending).
+- `deadline.Budget.pause/resume` replace the context-only pause so callbacks, which run
+  outside the run's task, can pause and resume it. The HTTP adapter drops its backup read
+  timeout for runs with an approvals URL; `APPROVAL_EXPIRED` reported by an agent times the
+  run out.
+- Both SDKs pause their local deadline while waiting and retry an unreachable callback
+  until the run is aborted: the first restart test showed a capped retry let a shutting
+  down RunWeave record the agent's give-up as a failure instead of re-running the run.
+- Validation: 700 tests passed on Python 3.13 with PostgreSQL 18 and fixtures required (14
+  skips need sandbox images); the approval and contract suites on 3.11 with PostgreSQL
+  (57); the TypeScript SDK's 32 tests; Ruff, formatting and strict mypy (168 files). The
+  restart, deadline and cancellation scenarios passed three repeated runs.
+
 ### 24. UI polish and accessibility audit
 
 - Review every screen against the approved mockups. Fix inconsistencies in

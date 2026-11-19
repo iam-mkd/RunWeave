@@ -20,8 +20,9 @@ async def refunder(input: Refund, ctx: RunContext) -> Outcome:
 
 The run shows `WAITING_APPROVAL` until someone decides in the workspace's Approvals screen,
 with `runweave approvals` (coming with the screen), or through the API below. The agent's
-call then returns and the agent continues where it was. Agents served over HTTP and the
-TypeScript SDK get the same call in the next release of this milestone.
+call then returns and the agent continues where it was. Agents served over HTTP have the
+same call (`ctx.request_approval` with `runweave.sdk_http`, `ctx.requestApproval` in the
+TypeScript SDK); see [below](#http-agents-and-the-typescript-sdk).
 
 ## What you get back
 
@@ -71,6 +72,30 @@ idempotent**: pass an idempotency key to the downstream API (the run id is a goo
 check whether the action already happened before doing it again. Also keep the code before
 `request_approval` deterministic enough that a re-run asks with the same arguments; a
 different request is a new request.
+
+## HTTP agents and the TypeScript SDK
+
+```ts
+const decision = await ctx.requestApproval('issue_refund', { order: input.order }, { expiresIn: 900 });
+if (!decision.approved) return { refunded: false, reason: `rejected by ${decision.decidedBy}` };
+```
+
+Rejections return `approved: false`; expiry throws `ApprovalExpired` (`APPROVAL_EXPIRED`,
+the run times out); without a durable RunWeave the call throws `ApprovalUnavailable`. The
+agent's own deadline (`ctx.remainingMs()`, `ctx.signal`) is paused while it waits, like the
+run's.
+
+Under the hood, in durable mode each run request carries an `approvals_url`. The SDK posts
+`{"action", "arguments", "expires_in", "wait_seconds"}` there with the run attempt's proxy
+token as a bearer token; RunWeave records the request (or finds the one it already has),
+waits up to `wait_seconds` (at most 25) for a decision and answers
+`{"approval": {"id", "status", "decided_by", "decided_at", "expires_at"}}`. While the
+status is `pending` the SDK repeats the same call, which is safe because requests are
+deduplicated by run, action and arguments. If RunWeave is unreachable (restarting, say) the
+SDK keeps trying; RunWeave ends the run's request, aborting the agent, if it gives up.
+Errors use the contract shape (`401 APPROVAL_TOKEN_INVALID`, `409` with
+`APPROVAL_CAPACITY_EXCEEDED` and similar, `422 APPROVAL_REQUEST_INVALID`). Agents in other
+languages can implement the same loop.
 
 ## API
 

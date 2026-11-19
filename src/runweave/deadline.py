@@ -22,6 +22,40 @@ class Budget:
     timeout: asyncio.Timeout | None = field(default=None, repr=False)
     # Called with the seconds a pause added, so run-bound resources can follow the deadline.
     listeners: list[Callable[[float], None]] = field(default_factory=list, repr=False)
+    _paused: tuple[float, float] | None = field(default=None, repr=False)  # (left, original)
+
+    def pause(self, until: float) -> None:
+        """Stop the clock while waiting on a person; the wait itself is bounded by `until`.
+
+        Pausing an already paused deadline only extends the bound. A deadline that has
+        already passed cannot be paused.
+        """
+        if self.timeout is None:
+            return
+        now = asyncio.get_running_loop().time()
+        if self._paused is None:
+            left = self.expires_at - now
+            if left <= 0:
+                raise DeadlineExceeded(self.code)
+            self._paused = (left, self.expires_at)
+        left, _ = self._paused
+        self.expires_at = max(self.expires_at, until + left)
+        if not self.timeout.expired():
+            self.timeout.reschedule(self.expires_at)
+
+    def resume(self) -> float:
+        """Restart the clock with the time that was left; returns how far the deadline moved."""
+        if self.timeout is None or self._paused is None:
+            return 0.0
+        left, original = self._paused
+        self._paused = None
+        self.expires_at = asyncio.get_running_loop().time() + left
+        if not self.timeout.expired():  # an overrun wait is reported by the scope
+            self.timeout.reschedule(self.expires_at)
+        shift = self.expires_at - original
+        for listener in self.listeners:
+            listener(shift)
+        return shift
 
 
 _budget: ContextVar[Budget | None] = ContextVar("deadline_budget", default=None)
@@ -71,29 +105,13 @@ async def deadline_scope(expires_at: float, code: str) -> AsyncIterator[None]:
 
 @asynccontextmanager
 async def paused_deadline(until: float) -> AsyncIterator[None]:
-    """Stop the run deadline's clock while waiting (for a human decision), until `until`.
-
-    The time left when the pause starts is kept and resumes when it ends; the wait itself is
-    bounded by `until` instead. Listeners learn how far the deadline moved.
-    """
+    """Pause the current run deadline for the duration of a wait bounded by `until`."""
     budget = _budget.get()
-    if budget is None or budget.timeout is None:
+    if budget is None:
         yield
         return
-    loop = asyncio.get_running_loop()
-    started = loop.time()
-    remaining = budget.expires_at - started
-    if remaining <= 0:
-        raise DeadlineExceeded(budget.code)
-    original = budget.expires_at
-    budget.expires_at = max(original, until + remaining)
-    budget.timeout.reschedule(budget.expires_at)
+    budget.pause(until)
     try:
         yield
     finally:
-        budget.expires_at = loop.time() + remaining
-        if not budget.timeout.expired():  # an overrun wait is reported by the scope
-            budget.timeout.reschedule(budget.expires_at)
-        shift = budget.expires_at - original
-        for listener in budget.listeners:
-            listener(shift)
+        budget.resume()

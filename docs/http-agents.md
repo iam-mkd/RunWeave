@@ -106,7 +106,7 @@ Registration errors: `AGENT_URL_NOT_ALLOWED` (422), `AGENT_UNREACHABLE`,
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /runweave/v1/agents` | Manifest: `{"contract": "runweave.agent/v1", "agents": [{name, version, description, input_schema, output_schema, max_steps}]}` (1–16 agents) |
-| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms, proxy}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}`. `proxy` (`{token, openai_base_url, anthropic_base_url}`) is the run's [LLM proxy](llm-proxy.md) binding |
+| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms, proxy, approvals_url}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}`. `proxy` (`{token, openai_base_url, anthropic_base_url}`) is the run's [LLM proxy](llm-proxy.md) binding; `approvals_url` (durable mode only) is where the agent [requests approvals](agent-approvals.md) |
 | `POST /runweave/v1/agents/{name}/runs/{run_id}/cancel` | Best-effort cancellation; answer 202, or 404 for unknown runs |
 
 Schemas are JSON Schema 2020-12 with local references only (`#/$defs/...`, as Pydantic
@@ -115,8 +115,10 @@ validates input before admission (422 `INVALID_INPUT`, with locations and fixed 
 never your submitted values) and validates output against `output_schema`.
 
 Errors are `{"error": {"code": "..."}}`. In a 500 response, the codes `RUN_FAILED`,
-`AGENT_STEP_LIMIT`, `AGENT_OUTPUT_INVALID` and `AGENT_DEADLINE_EXCEEDED` (the run times
-out) are reported to the run; anything else becomes `AGENT_SERVER_ERROR`. Answer 503 with
+`AGENT_STEP_LIMIT`, `AGENT_OUTPUT_INVALID`, `AGENT_DEADLINE_EXCEEDED` and
+`APPROVAL_EXPIRED` (both time the run out), `APPROVAL_CANCELLED`,
+`APPROVAL_CAPACITY_EXCEEDED` and `DURABLE_APPROVAL_REQUIRED` are reported to the run;
+anything else becomes `AGENT_SERVER_ERROR`. Answer 503 with
 `Retry-After` when you are busy.
 
 ### What RunWeave does on the wire
@@ -142,6 +144,9 @@ out) are reported to the run; anything else becomes `AGENT_SERVER_ERROR`. Answer
   request and sends the cancel call with a one-second limit.
 - **Steps:** returned steps are added to the run timeline, redacted like in-process
   steps. More steps than the manifest's `max_steps` fail the run with `AGENT_STEP_LIMIT`.
+- **Approvals:** with `approvals_url`, the run request may stay open while the agent waits
+  for a person; RunWeave pauses the run deadline meanwhile, so the request has no separate
+  read timeout. See [the approval callback](agent-approvals.md#http-agents-and-the-typescript-sdk).
 
 ### What the Python wrapper does for you
 
