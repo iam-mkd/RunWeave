@@ -10,5 +10,5 @@ export const sections = [
 
 // Only sections that exist in the shipped workspace; the prototype shows all.
 export const productionSections = sections
-  .filter((section) => ['agents', 'runs', 'load-tests', 'evals', 'shadow', 'settings'].includes(section.id))
+  .filter((section) => ['agents', 'runs', 'load-tests', 'evals', 'shadow', 'approvals', 'settings'].includes(section.id))
   .map((section) => ({ ...section, href: `#/${section.id}` }));

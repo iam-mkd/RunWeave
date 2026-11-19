@@ -6,6 +6,7 @@ import { useThemePreference } from './design/useThemePreference.js';
 import { productionSections } from './navigation.js';
 import { href, parseRoute } from './router.js';
 import { AgentsScreen } from './screens/AgentsScreen.jsx';
+import { ApprovalsScreen } from './screens/ApprovalsScreen.jsx';
 import { NewRunScreen } from './screens/NewRunScreen.jsx';
 import { RunDetailScreen } from './screens/RunDetailScreen.jsx';
 import { RunsScreen } from './screens/RunsScreen.jsx';
@@ -57,6 +58,7 @@ function useConnection() {
 function Screen({ route, config, navigate }) {
   if (route.screen === 'setup') return <SetupScreen />;
   if (route.screen === 'settings') return <SettingsScreen />;
+  if (route.screen === 'approvals') return <ApprovalsScreen run={route.params.run} />;
   if (route.screen === 'load-tests') return <LoadTestsScreen report={route.params.report} navigate={navigate} />;
   if (route.screen === 'evals') return <EvalsScreen report={route.params.report} navigate={navigate} />;
   if (route.screen === 'shadow') return <ShadowScreen report={route.params.report} navigate={navigate} />;
@@ -88,7 +90,7 @@ function App() {
 
   const navigate = (target) => { if (location.hash !== target) location.hash = target; };
   const active = route.screen === 'agents' || route.screen === 'setup' ? 'agents'
-    : ['settings', 'load-tests', 'evals', 'shadow'].includes(route.screen) ? route.screen : 'runs';
+    : ['settings', 'load-tests', 'evals', 'shadow', 'approvals'].includes(route.screen) ? route.screen : 'runs';
   const connection = config
     ? { state: 'connected', label: providerNames[config.provider] ?? config.provider }
     : { state: configError ? 'error' : 'connecting', label: configError ? 'API unavailable' : 'Connecting' };

@@ -72,7 +72,8 @@ export function RunDetailScreen({ id }) {
         <Panel title="Timeline" id="timeline"><RunTimeline steps={snapshot.steps} /></Panel>
         <div className="stack">
           {snapshot.error && <ErrorState>{snapshot.error.message} <code>{snapshot.error.code}</code></ErrorState>}
-          {snapshot.status === 'WAITING_APPROVAL' && <Panel title="Approval requested" id="approval">
+          {snapshot.status === 'WAITING_APPROVAL' && approval.agent && <AgentApprovalNotice runId={id} />}
+          {snapshot.status === 'WAITING_APPROVAL' && !approval.agent && <Panel title="Approval requested" id="approval">
             {approval.error && <ErrorState>{approval.error}</ErrorState>}
             {approval.approval && <div className="stack">
               <pre>{approval.approval.call.arguments}</pre>
@@ -103,4 +104,14 @@ export function RunDetailScreen({ id }) {
       </div>
     </>}
   </>;
+}
+
+/** A run waiting on `ctx.request_approval`: decide it in the Approvals inbox. */
+export function AgentApprovalNotice({ runId }) {
+  return <Panel title="Waiting for approval" id="agent-approval">
+    <div className="stack">
+      <p>The agent asked a person to approve an action and is waiting. The run's deadline is paused meanwhile.</p>
+      <p><a href={href({ screen: 'approvals', params: { run: runId } })}>Open Approvals</a></p>
+    </div>
+  </Panel>;
 }

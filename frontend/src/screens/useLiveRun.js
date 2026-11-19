@@ -82,7 +82,11 @@ export function useApproval(id, status, revision) {
     const controller = new AbortController();
     api(`/v1/runs/${id}/approval`, { signal: controller.signal })
       .then((approval) => setState({ approval }))
-      .catch((error) => { if (!controller.signal.aborted) setState({ error: error.message }); });
+      .catch((error) => {
+        if (controller.signal.aborted) return;
+        // No ticket approval: the agent itself asked (ctx.request_approval).
+        setState(error.status === 404 ? { agent: true } : { error: error.message });
+      });
     return () => controller.abort();
   }, [id, status, revision]);
   return state;

@@ -102,6 +102,39 @@ export function isReportId(value) {
   return typeof value === 'string' && reportIdPattern.test(value);
 }
 
+const approvalIdPattern = /^[a-f0-9]{8}-(?:[a-f0-9]{4}-){3}[a-f0-9]{12}$/i;
+const approvalStatuses = new Set(['pending', 'all']);
+const decisions = new Set(['approve', 'reject']);
+
+export function isApprovalId(value) {
+  return typeof value === 'string' && approvalIdPattern.test(value);
+}
+
+// Agent approvals (ctx.request_approval): the inbox and decisions bound to the exact request.
+export function listApprovals(status = 'pending', options) {
+  const which = approvalStatuses.has(status) ? status : 'pending';
+  return api(`/v1/approvals?status=${which}`, options);
+}
+
+export async function getApproval(id, options) {
+  if (!isApprovalId(id)) throw new Error('Invalid approval ID');
+  return api(`/v1/approvals/${id}`, options);
+}
+
+export async function decideApproval(approval, decision, options) {
+  if (!isApprovalId(approval?.id)) throw new Error('Invalid approval ID');
+  if (!decisions.has(decision)) throw new Error('Unknown decision');
+  return api(`/v1/approvals/${approval.id}`, {
+    ...options,
+    data: {
+      decision,
+      argument_digest: approval.argument_digest,
+      policy_version: approval.policy_version,
+      expires_at: approval.expires_at,
+    },
+  });
+}
+
 // Testing jobs: the workspace starts the same `runweave eval|bench|shadow` as the CLI.
 export function getProject(options) {
   return api('/v1/jobs/project', options);

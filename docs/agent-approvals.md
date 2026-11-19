@@ -18,8 +18,8 @@ async def refunder(input: Refund, ctx: RunContext) -> Outcome:
     return Outcome(refunded=True, receipt=receipt)
 ```
 
-The run shows `WAITING_APPROVAL` until someone decides in the workspace's Approvals screen,
-with `runweave approvals` (coming with the screen), or through the API below. The agent's
+The run shows `WAITING_APPROVAL` until someone decides in the workspace's **Approvals**
+screen, with `runweave approvals`, or through the API below. The agent's
 call then returns and the agent continues where it was. Agents served over HTTP have the
 same call (`ctx.request_approval` with `runweave.sdk_http`, `ctx.requestApproval` in the
 TypeScript SDK); see [below](#http-agents-and-the-typescript-sdk).
@@ -96,6 +96,35 @@ SDK keeps trying; RunWeave ends the run's request, aborting the agent, if it giv
 Errors use the contract shape (`401 APPROVAL_TOKEN_INVALID`, `409` with
 `APPROVAL_CAPACITY_EXCEEDED` and similar, `422 APPROVAL_REQUEST_INVALID`). Agents in other
 languages can implement the same loop.
+
+## Deciding
+
+**In the workspace:** the Approvals screen lists pending requests (tick *Show decided* for
+the rest) with the agent, run and time left. Selecting one shows the exact arguments, the
+argument digest, the policy version and the expiry; Approve and Reject each ask for
+confirmation and apply only to that request. A run page waiting on an agent's request
+links to it.
+
+**In a terminal:**
+
+```bash
+runweave approvals list                      # pending requests (--all for decided ones)
+runweave approvals show <id>                 # the exact arguments (--json for scripts)
+runweave approvals approve <id>              # shows the request, asks, then approves
+runweave approvals reject <id> --yes         # no prompt, for scripts
+```
+
+Commands talk to `--server` (default `http://127.0.0.1:8000`); set `RUNWEAVE_API_TOKEN` for
+a server with authentication. A decision is sent with the binding just read, so it applies
+only to the request that was shown. Exit codes: `0` done, `1` the server refused the
+decision (for example, the opposite decision was already made), `2` a usage, not-found or
+connection problem.
+
+Try it with the sample agent (`examples/sample-agent`), which asks before issuing a refund:
+
+```bash
+RUNWEAVE_DATABASE_URL=postgresql+asyncpg://... runweave serve --agent sample_agent:refund_request
+```
 
 ## API
 

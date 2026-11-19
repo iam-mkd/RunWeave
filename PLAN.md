@@ -44,7 +44,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 20. HTTP agent adapter and TypeScript SDK
 - [x] 21. LLM proxy and fault injection
 - [x] 22. Testing CLI, reports, screens, and public alpha
-- [ ] 23. Approvals through the agent SDKs
+- [x] 23. Approvals through the agent SDKs
 - [ ] 24. UI polish and accessibility audit
 - [ ] 25. Packaging and desktop app
 - [ ] 26. Developer documentation and framework examples
@@ -1510,6 +1510,34 @@ Implementation notes, pull request B (2026-11-19):
   skips need sandbox images); the approval and contract suites on 3.11 with PostgreSQL
   (57); the TypeScript SDK's 32 tests; Ruff, formatting and strict mypy (168 files). The
   restart, deadline and cancellation scenarios passed three repeated runs.
+
+Implementation notes, pull request C (2026-11-19):
+- Test first: `frontend/test/approvals.test.jsx` (API client binding and id checks, route
+  and navigation, the inbox, detail with exact arguments and confirmation, expiry text,
+  escaping, the run page notice), `tests/test_approvals_cli.py` (list, show, approve and
+  reject with prompts and exit codes on PostgreSQL; memory mode, missing requests and an
+  unreachable server), and a durable phase in `frontend/browser-smoke.mjs`.
+- The Approvals screen follows the approved prototype: an inbox polled every three seconds
+  (pending, or all), the selected request read on its own so it stays visible after a
+  decision, exact arguments as escaped JSON, digest, policy and expiry, Approve and Reject
+  each confirmed, and clear messages for expired, conflicting or changed requests. Memory
+  mode explains that approvals need PostgreSQL. Run detail links a run waiting on an agent
+  request to the inbox (`#/approvals?run=`).
+- `runweave approvals list|show|approve|reject` reads the request, prints the exact
+  arguments, asks (or `--yes`) and decides with the binding it read.
+- Browser checks: the smoke test creates a throwaway database, migrates it, serves the
+  sample `refund_request` agent durably (from an empty folder, so a local `.env` cannot
+  change it), approves one request and rejects another from the screen and checks both
+  runs' results, in light and dark. CI's workspace job gained a PostgreSQL service.
+- Completed 2026-11-19: the owner reviewed and merged pull requests #16 (f28bf7c) and #17
+  (0a6806e); this pull request (C) completes the milestone's "Done when": both SDKs pass
+  approve, reject, expiry, cancellation, duplicate and concurrent decision, and
+  restart-deduplication tests on disposable PostgreSQL, and browser checks cover approving
+  and rejecting from the UI. Commits from pull request B on are SSH-signed and verified.
+- Validation: 702 tests passed on Python 3.13 with PostgreSQL 18 and fixtures required (14
+  skips need sandbox images); the CLI and approval suites on 3.11 (18); Vitest 84; the
+  browser smoke test with PostgreSQL in both themes; Ruff, formatting and strict mypy
+  (170 files).
 
 ### 24. UI polish and accessibility audit
 

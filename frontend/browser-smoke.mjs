@@ -50,6 +50,120 @@ const httpAgentUrl = new Promise((resolveUrl, rejectUrl) => {
 const hostile = '<img src=x onerror="window.__injected=true">';
 let browser;
 
+function freePort() {
+  return new Promise((resolvePort) => {
+    const probe = createServer();
+    probe.listen(0, '127.0.0.1', () => {
+      const { port: free } = probe.address();
+      probe.close(() => resolvePort(free));
+    });
+  });
+}
+
+async function until(check, what, ms = 30000) {
+  const deadline = Date.now() + ms;
+  for (;;) {
+    const value = await check();
+    if (value) return value;
+    if (Date.now() > deadline) throw new Error(`Timed out waiting for ${what}`);
+    await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+  }
+}
+
+// Agent approvals need durable mode: a throwaway database, migrated, and a durable RunWeave
+// serving the sample refund agent. Approve one request and reject another from the screen.
+async function approvalChecks(adminDsn) {
+  const made = spawnSync(python, [join(root, 'scripts', 'smoke-database.py'), 'create', adminDsn], { env, encoding: 'utf8' });
+  if (made.status !== 0) throw new Error(`Could not create the smoke database: ${made.stderr}`);
+  const dsn = made.stdout.trim();
+  const durableEnv = { ...env, RUNWEAVE_DATABASE_URL: dsn };
+  // An empty folder, so a developer's .env (read by Settings) cannot change the setup.
+  const isolated = mkdtempSync(join(tmpdir(), 'runweave-durable-'));
+  let durable;
+  try {
+    const migrated = spawnSync(python, ['-m', 'alembic', '-c', join(root, 'alembic.ini'), 'upgrade', 'head'],
+      { cwd: isolated, env: durableEnv, encoding: 'utf8' });
+    if (migrated.status !== 0) throw new Error(`Migrations failed: ${migrated.stderr}`);
+    const durablePort = await freePort();
+    const durableBase = `http://127.0.0.1:${durablePort}`;
+    let log = '';
+    durable = spawn(python, ['-m', 'runweave.cli', 'serve', '--port', String(durablePort), '--agent', 'sample_agent:refund_request',
+      '--assets', join(frontend, 'dist')], { cwd: isolated, env: durableEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+    durable.stdout.on('data', (chunk) => { log = (log + chunk).slice(-8192); });
+    durable.stderr.on('data', (chunk) => { log = (log + chunk).slice(-8192); });
+    await until(async () => {
+      if (durable.exitCode !== null) throw new Error(`Durable server exited: ${log}`);
+      try { return (await fetch(`${durableBase}/health/ready`)).ok; } catch { return false; }
+    }, 'the durable server');
+    const submit = async (input) => {
+      const response = await fetch(`${durableBase}/v1/runs`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agent: 'refund-request', input }),
+      });
+      const text = await response.text();
+      assert.equal(response.status, 202, text);
+      return JSON.parse(text).status_url;
+    };
+    const runStatus = async (url) => (await (await fetch(`${durableBase}${url}`)).json());
+    const first = await submit({ order: 'A-17', amount: 40, note: hostile });
+    await until(async () => (await runStatus(first)).status === 'WAITING_APPROVAL', 'the first request');
+    const second = await submit({ order: 'B-2', amount: 5, note: 'second request' });
+    await until(async () => (await runStatus(second)).status === 'WAITING_APPROVAL', 'the second request');
+
+    const context = await browser.newContext({ viewport: { width: 1360, height: 980 }, colorScheme: 'light' });
+    const { page, errors } = await newPage(context);
+    // A waiting run points to the inbox.
+    await page.goto(`${durableBase}/#/runs/${first.split('/').at(-1)}`);
+    await page.getByRole('link', { name: 'Open Approvals' }).click();
+    await page.getByRole('heading', { name: 'Approvals', level: 1 }).waitFor();
+    const inboxRows = page.locator('section[aria-labelledby="inbox-title"] tbody tr');
+    await until(async () => (await inboxRows.count()) === 2, 'two pending requests');
+    await page.locator('#approval-arguments').filter({ hasText: '"order": "A-17"' }).waitFor();
+    assert.equal(await page.evaluate(() => window.__injected), undefined);
+    await page.screenshot({ path: join(artifacts, 'approvals-light.png'), fullPage: true });
+    await noOverflow(page, 'approvals');
+    await page.getByRole('button', { name: 'Approve', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm approve' }).click();
+    await page.locator('#approval-detail-title').locator('..').getByText('Approved', { exact: true }).waitFor();
+    const approved = await until(async () => {
+      const run = await runStatus(first);
+      return run.status === 'SUCCEEDED' && run;
+    }, 'the approved run');
+    assert.equal(approved.result.approved, true);
+
+    await until(async () => (await inboxRows.count()) === 1, 'one pending request');
+    await inboxRows.first().click();
+    await page.locator('#approval-arguments').filter({ hasText: '"order": "B-2"' }).waitFor();
+    await page.getByRole('button', { name: 'Reject', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm reject' }).click();
+    const rejected = await until(async () => {
+      const run = await runStatus(second);
+      return run.status === 'SUCCEEDED' && run;
+    }, 'the rejected run');
+    assert.equal(rejected.result.approved, false);
+    await page.getByText('No pending requests', { exact: false }).first().waitFor();
+    assert.deepEqual(await page.evaluate(() => window.__cspViolations), []);
+    assert.deepEqual(errors, []);
+    await context.close();
+
+    const dark = await browser.newContext({ viewport: { width: 1360, height: 980 }, colorScheme: 'dark' });
+    const darkPage = await newPage(dark);
+    await darkPage.page.goto(`${durableBase}/#/approvals`);
+    await darkPage.page.getByRole('checkbox', { name: 'Show decided' }).check();
+    await darkPage.page.locator('section[aria-labelledby="inbox-title"] tbody tr').nth(1).waitFor();
+    await darkPage.page.screenshot({ path: join(artifacts, 'approvals-dark.png'), fullPage: true });
+    assert.deepEqual(darkPage.errors, []);
+    await dark.close();
+  } finally {
+    if (durable && durable.exitCode === null) {
+      const closed = once(durable, 'exit');
+      durable.kill();
+      await closed;
+    }
+    spawnSync(python, [join(root, 'scripts', 'smoke-database.py'), 'drop', dsn], { env, encoding: 'utf8' });
+  }
+}
+
 async function waitForServer() {
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
@@ -343,7 +457,12 @@ try {
   assert.deepEqual(darkPage.errors, []);
   await dark.close();
 
-  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, eval/load-test/shadow jobs and reports, mobile overflow, safe text, both themes.');
+  const adminDsn = process.env.RUNWEAVE_SMOKE_POSTGRES_URL;
+  if (adminDsn) await approvalChecks(adminDsn);
+  else if (process.env.CI) throw new Error('Set RUNWEAVE_SMOKE_POSTGRES_URL: CI runs the approvals checks on PostgreSQL');
+  else console.log('Skipped the approvals checks: set RUNWEAVE_SMOKE_POSTGRES_URL to a PostgreSQL server to run them.');
+
+  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, eval/load-test/shadow jobs and reports, approving and rejecting agent approvals (with PostgreSQL), mobile overflow, safe text, both themes.');
   console.log(`Screenshots: ${artifacts}`);
 } finally {
   if (browser) await browser.close();

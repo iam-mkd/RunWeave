@@ -1,9 +1,9 @@
 """`runweave` command line.
 
 `init` creates a project, `eval` tests its agent against a dataset, `bench` load-tests it,
-`shadow` compares a candidate version with it, `serve` starts the local workspace with your
-agents, and `serve-agent` exposes Python agents over the HTTP agent contract so another
-RunWeave can call them.
+`shadow` compares a candidate version with it, `approvals` decides agents' approval
+requests, `serve` starts the local workspace with your agents, and `serve-agent` exposes
+Python agents over the HTTP agent contract so another RunWeave can call them.
 
 Exit codes: 0 success, 1 failed gates or a failed command, 2 a project or usage problem.
 """
@@ -402,6 +402,9 @@ def parser() -> argparse.ArgumentParser:
         help="module:function of a Python @agent, or an HTTP agent URL ([shadow] candidate)",
     )
     compare.set_defaults(handler=shadow_command)
+    from runweave.approvals_cli import add_parser as add_approvals
+
+    add_approvals(commands)
     expose = commands.add_parser(
         "serve-agent", help="Serve Python agents over the RunWeave HTTP agent contract"
     )

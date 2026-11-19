@@ -8,6 +8,11 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Approvals screen and `runweave approvals` (milestone 23, part 3): a pending inbox with the
+  exact arguments, digest, policy and expiry, confirmed Approve and Reject, and a link from
+  waiting runs; `runweave approvals list|show|approve|reject` with confirmation and exit
+  codes. The sample agent gains `refund_request`. The workspace CI job now runs the browser
+  approval checks on PostgreSQL.
 - Agent approvals for HTTP agents (milestone 23, part 2): `ctx.requestApproval` in the
   TypeScript SDK and `ctx.request_approval` for agents served with `runweave.sdk_http`.
   Durable run requests carry an `approvals_url`; agents call `POST /agent/v1/approvals`
