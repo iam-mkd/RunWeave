@@ -24,7 +24,7 @@ class EchoOutput(BaseModel):
     attempt: int
 
 
-events: dict[str, Any] = {"cancelled": [], "requests": {}}
+events: dict[str, Any] = {"cancelled": [], "requests": {}, "approvals": []}
 
 
 @agent(name="contract-echo", version="1.0.0", input=EchoInput, output=EchoOutput, max_steps=5)
@@ -41,6 +41,34 @@ async def echo(input: EchoInput, ctx: RunContext) -> EchoOutput:
 @agent(name="contract-crash", version="1.0.0", input=EchoInput, output=EchoOutput)
 async def crash(input: EchoInput, ctx: RunContext) -> EchoOutput:
     raise RuntimeError("fixture crash with /internal/path")
+
+
+class ApproveInput(BaseModel):
+    order: str = Field(min_length=1, max_length=40)
+    expires_in: float = Field(default=30, gt=0, le=3600)
+
+
+class ApproveOutput(BaseModel):
+    approved: bool
+    status: str
+    decided_by: str | None
+    attempt: int
+    remaining_ms: float
+
+
+@agent(name="contract-approver", version="1.0.0", input=ApproveInput, output=ApproveOutput)
+async def approver(input: ApproveInput, ctx: RunContext) -> ApproveOutput:
+    events["approvals"].append({"order": input.order, "attempt": ctx.attempt})
+    decision = await ctx.request_approval(
+        "issue_refund", {"order": input.order}, expires_in=input.expires_in
+    )
+    return ApproveOutput(
+        approved=decision.approved,
+        status=decision.status,
+        decided_by=decision.decided_by,
+        attempt=ctx.attempt,
+        remaining_ms=ctx.remaining_seconds() * 1000,
+    )
 
 
 def _misbehaving(name: str) -> Any:
@@ -94,7 +122,7 @@ async def _respond(send: Send, status: int, headers: dict[str, str], body: bytes
     await send({"type": "http.response.body", "body": body})
 
 
-app = Fixture(create_agent_app(echo, crash, *(_misbehaving(name) for name in RAW)))
+app = Fixture(create_agent_app(echo, crash, approver, *(_misbehaving(name) for name in RAW)))
 
 if __name__ == "__main__":
     asyncio.run(serve_agents(app, port=0))

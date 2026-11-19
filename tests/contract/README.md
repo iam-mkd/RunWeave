@@ -12,6 +12,7 @@ A fixture starts on a free loopback port, prints one line
 | --- | --- |
 | `contract-echo` | Input `{text: 1–100 chars, delay_ms: 0–60000 = 0}`, output `{reply, attempt}`. Records one step titled `Echo`. Sleeps `delay_ms` first; if cancelled while sleeping, appends `text` to `cancelled`. |
 | `contract-crash` | Raises an unexpected error (the SDK answers 500 `RUN_FAILED`). |
+| `contract-approver` | Input `{order: 1–40 chars, expires_in: seconds = 30}`, output `{approved, status, decided_by, attempt, remaining_ms}`. Appends `{order, attempt}` to `approvals`, then asks for approval of action `issue_refund` with arguments `{order}` and returns the decision. |
 | `contract-malformed` | Run responses are 200 with truncated JSON. |
 | `contract-oversized` | Run responses are 200 with about 2 MB of JSON. |
 | `contract-redirect` | Run responses are 307 to a link-local address. |
@@ -21,5 +22,5 @@ A fixture starts on a free loopback port, prints one line
 The last five share `contract-echo`'s schemas and are answered by the fixture itself,
 because a correct SDK never produces those responses.
 
-`GET /fixture/events` returns `{"cancelled": [text, ...], "requests": {agent: count}}`,
-where `requests` counts run requests per agent.
+`GET /fixture/events` returns `{"cancelled": [text, ...], "requests": {agent: count},
+"approvals": [{order, attempt}, ...]}`, where `requests` counts run requests per agent.
