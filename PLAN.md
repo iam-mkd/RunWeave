@@ -42,7 +42,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 18. Developer UI design system and mockups
 - [x] 19. Generic run core, Python agent adapter, and core screens
 - [x] 20. HTTP agent adapter and TypeScript SDK
-- [ ] 21. LLM proxy and fault injection
+- [x] 21. LLM proxy and fault injection
 - [ ] 22. Testing CLI, reports, screens, and public alpha
 - [ ] 23. Approvals through the agent SDKs
 - [ ] 24. UI polish and accessibility audit
@@ -1289,6 +1289,12 @@ Implementation notes, pull request C (2026-11-19):
   a key saved and absent from every response and the page, both themes, no CSP
   violations or page errors) passed. This completes milestone 21's "Done when"; check
   it off after the owner merges this pull request.
+- Completed 2026-11-19: the owner reviewed and merged pull requests #8 (8fc0dcc), #9
+  (89f087e) and #10 (merge commit 316e932). Hosted CI passed on each: the Python
+  3.11–3.13 Linux/Windows jobs (contract suite and Node SDK compatibility required), the
+  TypeScript SDK job, the dependency audit, the offline evaluation workflow with its
+  PostgreSQL suite, and the React workspace checks including the Settings and key
+  secrecy browser flow.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 
