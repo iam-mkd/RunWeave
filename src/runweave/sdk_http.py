@@ -7,6 +7,7 @@
 The same `RunContext` is available as for in-process agents: run ID, attempt, the
 remaining deadline sent by RunWeave, timeline steps (returned with the output) and
 redacted logging. Usage is None until the LLM proxy (milestone 21) meters model calls.
+`ctx.request_approval` calls back to the RunWeave that sent the run (durable mode only).
 """
 
 import asyncio
@@ -14,11 +15,13 @@ import logging
 import socket
 from collections import OrderedDict
 from collections.abc import Callable, Sequence
+from contextlib import nullcontext
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+import httpx
 import uvicorn
 from pydantic import BaseModel, ValidationError
 from starlette.applications import Starlette
@@ -26,7 +29,14 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
-from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope
+from runweave.action_approvals import (
+    Approval,
+    ApprovalExpired,
+    ApprovalRefused,
+    ApprovalUnavailable,
+    approval_scope,
+)
+from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope, paused_deadline
 from runweave.http_contract import (
     CONTRACT_VERSION,
     MANIFEST_PATH,
@@ -47,6 +57,7 @@ from runweave.security import ContentPolicy
 from runweave.steps import STEP_EVENT_CAP, StepEvent, step_scope
 
 READY_PREFIX = "RUNWEAVE_AGENT_READY"
+APPROVAL_WAIT_SECONDS = 20
 _logger = logging.getLogger("runweave.agent")
 
 
@@ -87,6 +98,66 @@ class _CollectedSteps:
             ).model_dump(mode="json")
             for event in self._events
         ]
+
+
+class _CallbackApprovals:
+    """`ctx.request_approval` for an agent served over HTTP: ask the RunWeave that sent the
+    run, repeating the (idempotent) call until there is a decision. The agent's own deadline
+    is paused while it waits, as RunWeave pauses the run's."""
+
+    def __init__(self, url: str, token: str) -> None:
+        self._url = url
+        self._headers = {"Authorization": f"Bearer {token}"}
+
+    async def request(self, action: str, arguments: Any, expires_in: float | None) -> Approval:
+        body = {
+            "action": action,
+            "arguments": arguments,
+            "expires_in": expires_in,
+            "wait_seconds": APPROVAL_WAIT_SECONDS,
+        }
+        failures = 0
+        loop = asyncio.get_running_loop()
+        async with (
+            paused_deadline(loop.time() + 86400),  # RunWeave bounds the wait itself
+            httpx.AsyncClient(trust_env=False, timeout=APPROVAL_WAIT_SECONDS + 15) as client,
+        ):
+            while True:
+                try:
+                    response = await client.post(self._url, json=body, headers=self._headers)
+                except httpx.TransportError:
+                    # RunWeave is unreachable (restarting, say): keep trying. The run cannot
+                    # progress without it, and RunWeave cancels this run if it gives up.
+                    failures += 1
+                    await asyncio.sleep(min(2.0, 0.2 * 2 ** min(failures, 4)))
+                    continue
+                failures = 0
+                if response.status_code != 200:
+                    raise _refused(response)
+                approval = response.json()["approval"]
+                if approval["status"] != "pending":
+                    break
+        if approval["status"] in ("approved", "rejected"):
+            decided = approval.get("decided_at")
+            return Approval(
+                id=UUID(approval["id"]),
+                status=approval["status"],
+                decided_by=approval.get("decided_by"),
+                decided_at=datetime.fromisoformat(decided) if decided else None,
+            )
+        if approval["status"] == "expired":
+            raise ApprovalExpired()
+        raise ApprovalRefused("APPROVAL_CANCELLED")
+
+
+def _refused(response: httpx.Response) -> AgentError:
+    try:
+        code = response.json()["error"]["code"]
+    except (ValueError, KeyError, TypeError):
+        code = None
+    if code == ApprovalUnavailable.code:
+        return ApprovalUnavailable()
+    return ApprovalRefused(code if isinstance(code, str) else "APPROVAL_CALLBACK_FAILED")
 
 
 @dataclass
@@ -280,8 +351,13 @@ class AgentServer:
             ),
         )
         expires = asyncio.get_running_loop().time() + envelope.deadline_ms / 1000
+        approvals = (
+            approval_scope(_CallbackApprovals(envelope.approvals_url, envelope.proxy.token))
+            if envelope.approvals_url and envelope.proxy is not None
+            else nullcontext()
+        )
         try:
-            with step_scope(steps):
+            with step_scope(steps), approvals:
                 async with deadline_scope(expires, RUN_DEADLINE):
                     result = await function(parsed, context)
             output = (

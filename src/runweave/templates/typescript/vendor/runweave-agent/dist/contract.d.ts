@@ -6,6 +6,7 @@ export declare const MAX_DEADLINE_MS = 86400000;
 export declare const TITLE_LIMIT = 120;
 export declare const DETAIL_LIMIT = 1000;
 export declare const STEP_EVENT_CAP = 200;
+export declare const ACTION_PATTERN: RegExp;
 export type JsonObject = {
     [key: string]: unknown;
 };
@@ -33,6 +34,8 @@ export interface RunRequest {
     input: JsonObject;
     deadline_ms: number;
     proxy: ProxyBinding | null;
+    /** Where to request approvals (durable RunWeave only). */
+    approvals_url: string | null;
 }
 export interface StepRecord {
     title: string;

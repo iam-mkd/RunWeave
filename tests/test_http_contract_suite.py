@@ -217,3 +217,15 @@ async def test_only_transient_failures_are_retried(agent_url: str) -> None:
     assert sent("contract-unavailable") == 3
     assert sent("contract-server-error") == 1
     assert sent("contract-redirect") == 1
+
+
+@pytest.mark.asyncio
+async def test_approvals_need_durable_mode(agent_url: str) -> None:
+    async with runweave(agent_url) as client:
+        response = await client.post(
+            "/v1/runs", json={"agent": "contract-approver", "input": {"order": "memory"}}
+        )
+        assert response.status_code == 202, response.text
+        run = await wait(client, response.json()["status_url"])
+    assert run["status"] == "FAILED"
+    assert run["error"]["code"] == "DURABLE_APPROVAL_REQUIRED"

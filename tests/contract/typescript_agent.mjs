@@ -16,7 +16,7 @@ const outputSchema = {
   properties: { reply: { type: 'string' }, attempt: { type: 'integer' } },
   required: ['reply', 'attempt'],
 };
-const events = { cancelled: [], requests: {} };
+const events = { cancelled: [], requests: {}, approvals: [] };
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -45,6 +45,35 @@ const crash = defineAgent({
   async run() { throw new Error('fixture crash with /internal/path'); },
 });
 
+const approver = defineAgent({
+  name: 'contract-approver', version: '1.0.0',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      order: { type: 'string', minLength: 1, maxLength: 40 },
+      expires_in: { type: 'number', exclusiveMinimum: 0, maximum: 3600, default: 30 },
+    },
+    required: ['order'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: {
+      approved: { type: 'boolean' }, status: { type: 'string' }, decided_by: { type: ['string', 'null'] },
+      attempt: { type: 'integer' }, remaining_ms: { type: 'number' },
+    },
+    required: ['approved', 'status', 'decided_by', 'attempt', 'remaining_ms'],
+  },
+  async run(input, ctx) {
+    events.approvals.push({ order: input.order, attempt: ctx.attempt });
+    const decision = await ctx.requestApproval('issue_refund', { order: input.order }, { expiresIn: input.expires_in ?? 30 });
+    return {
+      approved: decision.approved, status: decision.status, decided_by: decision.decidedBy,
+      attempt: ctx.attempt, remaining_ms: ctx.remainingMs(),
+    };
+  },
+});
+
 const raw = {
   'contract-malformed': [200, { 'Content-Type': 'application/json' }, '{"output": '],
   'contract-oversized': [200, { 'Content-Type': 'application/json' },
@@ -58,7 +87,7 @@ const misbehaving = Object.keys(raw).map((name) => defineAgent({
   async run() { throw new Error('the fixture answers this agent itself'); },
 }));
 
-const handler = createAgentHandler([echo, crash, ...misbehaving]);
+const handler = createAgentHandler([echo, crash, approver, ...misbehaving]);
 
 function fixture(request, response) {
   const path = new URL(request.url, 'http://fixture').pathname;

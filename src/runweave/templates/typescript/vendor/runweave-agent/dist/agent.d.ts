@@ -7,6 +7,22 @@ export declare class AgentError extends Error {
 export declare class StepLimitError extends AgentError {
     constructor();
 }
+/** No decision before the approval expired. Uncaught, the run ends TIMED_OUT. */
+export declare class ApprovalExpired extends AgentError {
+    constructor();
+}
+/** Approvals need a durable (PostgreSQL) RunWeave; this one sent no approvals URL. */
+export declare class ApprovalUnavailable extends AgentError {
+    constructor();
+}
+/** A person's decision on one exact request. A rejection is returned, not thrown. */
+export interface Approval {
+    readonly id: string;
+    readonly status: 'approved' | 'rejected';
+    readonly approved: boolean;
+    readonly decidedBy: string | null;
+    readonly decidedAt: string | null;
+}
 /** Throw from `parseInput` to reject input with 422. Never include submitted values. */
 export declare class InputError extends Error {
     readonly errors: ErrorLocation[];
@@ -45,6 +61,16 @@ export interface RunContext {
     readonly proxy: ModelProxy | null;
     /** Model usage is metered by RunWeave and shown on the run; not readable here yet. */
     usage(): null;
+    /**
+     * Ask a person to approve `action` with exactly these `args` (JSON) and wait. Returns the
+     * decision; throws ApprovalExpired when nobody decides within `expiresIn` seconds (capped
+     * by RunWeave). The run deadline is paused while waiting. Repeating the same request after
+     * a restart returns the existing request or decision; making the approved effect itself
+     * idempotent is up to you. Needs a durable (PostgreSQL) RunWeave.
+     */
+    requestApproval(action: string, args: unknown, options?: {
+        expiresIn?: number;
+    }): Promise<Approval>;
 }
 export interface AgentOptions<I extends JsonObject, O extends JsonObject> {
     name: string;
@@ -77,16 +103,23 @@ export declare class Redactor {
     constructor(values: readonly string[]);
     redact(text: string): string;
 }
+/** The run's deadline as the agent sees it; paused while waiting on a person. */
+export interface DeadlineClock {
+    remainingMs(): number;
+    pause(): void;
+    resume(): void;
+}
 export interface ContextParts {
     runId: string;
     agent: string;
     attempt: number;
     maxSteps: number;
-    expiresAt: number;
+    clock: DeadlineClock;
     signal: AbortSignal;
     redactor: Redactor;
     logger: (line: string) => void;
     proxy: ProxyBinding | null;
+    approvalsUrl: string | null;
 }
 export declare function createContext(parts: ContextParts): {
     context: RunContext;

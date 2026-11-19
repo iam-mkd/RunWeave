@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from runweave.agents.catalog import RegisteredAgent, load_python_agents
 from runweave.agents.contracts import AgentExecutor
 from runweave.api.action_approvals import router as action_approvals_router
+from runweave.api.agent_callbacks import router as agent_callbacks_router
 from runweave.api.agents import router as agents_router
 from runweave.api.approvals import router as approvals_router
 from runweave.api.body_limit import RequestBodyLimit
@@ -114,6 +115,7 @@ def create_app(
     app.include_router(testing_router)
     app.include_router(approvals_router)
     app.include_router(action_approvals_router)
+    app.include_router(agent_callbacks_router)
     app.include_router(memory_router)
     app.include_router(metrics_router)
     app.include_router(isolated_router)

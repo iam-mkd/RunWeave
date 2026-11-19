@@ -3,13 +3,15 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 TOOL_INPUT_LIMIT = 16384
 AGENT_REGISTRATION_LIMIT = 8192
+APPROVAL_CALLBACK_LIMIT = 70_000  # 64 KiB of arguments plus the envelope
+APPROVAL_DECISION_LIMIT = 4096
 
 
 class RequestBodyLimit:
     """Bound request bodies before JSON/Pydantic allocation, including chunked requests.
 
-    Covers isolated-tool calls, agent registration, and run submissions, whose agent input
-    is arbitrary JSON.
+    Covers isolated-tool calls, agent registration, run submissions (whose agent input is
+    arbitrary JSON), approval decisions, and HTTP agents' approval callbacks.
     """
 
     def __init__(
@@ -25,6 +27,10 @@ class RequestBodyLimit:
             return TOOL_INPUT_LIMIT, {"code": "TOOL_INPUT_LIMIT"}
         if scope.get("method") == "POST" and path.startswith("/llm/"):
             return self._proxy_max_bytes, {"code": "INPUT_TOO_LARGE"}
+        if scope.get("method") == "POST" and path.startswith("/agent/v1/"):
+            return APPROVAL_CALLBACK_LIMIT, {"code": "INPUT_TOO_LARGE"}
+        if scope.get("method") == "POST" and path.startswith("/v1/approvals"):
+            return APPROVAL_DECISION_LIMIT, {"code": "INPUT_TOO_LARGE"}
         if scope.get("method") == "POST" and path.startswith("/v1/agents"):
             return AGENT_REGISTRATION_LIMIT, {"code": "INPUT_TOO_LARGE"}
         if scope.get("method") == "POST" and path.rstrip("/") == "/v1/runs":

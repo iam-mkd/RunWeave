@@ -203,12 +203,11 @@ class AgentServer {
         return execution;
     }
     async #execute(agent, envelope, input, controller) {
-        const expiresAt = performance.now() + envelope.deadline_ms;
-        const deadline = setTimeout(() => controller.abort(new RunAborted('deadline')), envelope.deadline_ms);
+        const clock = deadlineClock(envelope.deadline_ms, () => controller.abort(new RunAborted('deadline')));
         const { context, steps } = createContext({
             runId: envelope.run_id, agent: agent.name, attempt: envelope.attempt, maxSteps: agent.maxSteps,
-            expiresAt, signal: controller.signal, redactor: this.#redactor, logger: this.#logger,
-            proxy: envelope.proxy,
+            clock, signal: controller.signal, redactor: this.#redactor, logger: this.#logger,
+            proxy: envelope.proxy, approvalsUrl: envelope.approvals_url,
         });
         // The run settles when the agent returns or the signal aborts, whichever is first. An agent
         // that ignores ctx.signal keeps running in the background, but its result is discarded.
@@ -246,7 +245,7 @@ class AgentServer {
             return failure(500, 'RUN_FAILED');
         }
         finally {
-            clearTimeout(deadline);
+            clock.stop();
         }
     }
     async #wait(response, execution) {
@@ -301,5 +300,30 @@ export async function serveAgents(agents, options = {}) {
             server.closeAllConnections();
             server.close(() => resolve());
         }),
+    };
+}
+/** The run deadline RunWeave sent; it stops while the agent waits on an approval. */
+function deadlineClock(deadlineMs, expire) {
+    let left = deadlineMs;
+    let started = performance.now();
+    let timer = setTimeout(expire, left);
+    let paused = 0;
+    return {
+        remainingMs: () => (paused ? left : Math.max(0, left - (performance.now() - started))),
+        pause() {
+            paused += 1;
+            if (paused > 1)
+                return;
+            left = Math.max(0, left - (performance.now() - started));
+            clearTimeout(timer);
+            timer = undefined;
+        },
+        resume() {
+            if (paused === 0 || --paused > 0)
+                return;
+            started = performance.now();
+            timer = setTimeout(expire, left);
+        },
+        stop() { clearTimeout(timer); timer = undefined; },
     };
 }

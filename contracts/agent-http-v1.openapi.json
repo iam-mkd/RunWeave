@@ -144,6 +144,20 @@
       },
       "RunRequest": {
         "properties": {
+          "approvals_url": {
+            "anyOf": [
+              {
+                "maxLength": 2048,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Where the agent requests approvals (POST, with the proxy token as a bearer token); present only in durable mode",
+            "title": "Approvals Url"
+          },
           "attempt": {
             "description": "2+ when RunWeave re-runs after lease loss",
             "maximum": 1000,
@@ -386,7 +400,7 @@
                 }
               }
             },
-            "description": "The agent failed; codes in AGENT_DEADLINE_EXCEEDED, AGENT_OUTPUT_INVALID, AGENT_STEP_LIMIT, RUN_FAILED are reported to the run"
+            "description": "The agent failed; codes in AGENT_DEADLINE_EXCEEDED, AGENT_OUTPUT_INVALID, AGENT_STEP_LIMIT, APPROVAL_CANCELLED, APPROVAL_CAPACITY_EXCEEDED, APPROVAL_EXPIRED, DURABLE_APPROVAL_REQUIRED, RUN_FAILED are reported to the run"
           },
           "503": {
             "content": {

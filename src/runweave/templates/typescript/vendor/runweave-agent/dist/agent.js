@@ -1,4 +1,4 @@
-import { DETAIL_LIMIT, NAME_PATTERN, STEP_EVENT_CAP, TITLE_LIMIT, VERSION_PATTERN, clip, isObject, } from './contract.js';
+import { ACTION_PATTERN, DETAIL_LIMIT, NAME_PATTERN, STEP_EVENT_CAP, TITLE_LIMIT, VERSION_PATTERN, clip, isObject, } from './contract.js';
 /** A classified failure whose code RunWeave may show in run snapshots. */
 export class AgentError extends Error {
     code;
@@ -10,6 +10,14 @@ export class AgentError extends Error {
 }
 export class StepLimitError extends AgentError {
     constructor() { super('AGENT_STEP_LIMIT'); }
+}
+/** No decision before the approval expired. Uncaught, the run ends TIMED_OUT. */
+export class ApprovalExpired extends AgentError {
+    constructor() { super('APPROVAL_EXPIRED'); }
+}
+/** Approvals need a durable (PostgreSQL) RunWeave; this one sent no approvals URL. */
+export class ApprovalUnavailable extends AgentError {
+    constructor() { super('DURABLE_APPROVAL_REQUIRED'); }
 }
 /** Throw from `parseInput` to reject input with 422. Never include submitted values. */
 export class InputError extends Error {
@@ -66,6 +74,71 @@ export class Redactor {
         return result;
     }
 }
+const APPROVAL_WAIT_SECONDS = 20;
+function pause(ms, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal.aborted)
+            return reject(signal.reason);
+        const timer = setTimeout(resolve, ms);
+        signal.addEventListener('abort', () => { clearTimeout(timer); reject(signal.reason); }, { once: true });
+    });
+}
+// While RunWeave is unreachable (restarting, say) keep trying: the run cannot progress
+// without it, and RunWeave ends the run's request (aborting `signal`) if it gives up.
+async function approvalCall(url, token, body, signal) {
+    for (let failures = 0;; failures += 1) {
+        try {
+            const response = await fetch(url, {
+                method: 'POST', body, signal,
+                headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            });
+            const answer = await response.json().catch(() => ({}));
+            return { ...answer, status: response.status };
+        }
+        catch {
+            if (signal.aborted)
+                throw signal.reason;
+            await pause(Math.min(2000, 200 * 2 ** Math.min(failures, 4)), signal);
+        }
+    }
+}
+async function requestApproval(parts, action, args, expiresIn) {
+    if (typeof action !== 'string' || !ACTION_PATTERN.test(action)) {
+        throw new TypeError('Action must match ^[a-z][a-z0-9_.:-]{0,99}$, for example issue_refund');
+    }
+    if (expiresIn !== undefined && !(typeof expiresIn === 'number' && expiresIn > 0)) {
+        throw new TypeError('expiresIn must be a positive number of seconds');
+    }
+    const body = JSON.stringify({ action, arguments: args ?? null, expires_in: expiresIn ?? null, wait_seconds: APPROVAL_WAIT_SECONDS });
+    if (body.length > 70_000)
+        throw new TypeError('Approval arguments are limited to 64 KiB');
+    if (!parts.approvalsUrl || !parts.proxy)
+        throw new ApprovalUnavailable();
+    parts.clock.pause();
+    try {
+        for (;;) {
+            const answer = await approvalCall(parts.approvalsUrl, parts.proxy.token, body, parts.signal);
+            if (answer.status !== 200 || !answer.approval) {
+                const code = answer.error?.code;
+                throw code === 'DURABLE_APPROVAL_REQUIRED' ? new ApprovalUnavailable()
+                    : new AgentError(typeof code === 'string' ? code : 'APPROVAL_CALLBACK_FAILED');
+            }
+            const { approval } = answer;
+            if (approval.status === 'pending')
+                continue;
+            if (approval.status === 'approved' || approval.status === 'rejected') {
+                return Object.freeze({
+                    id: approval.id, status: approval.status, approved: approval.status === 'approved',
+                    decidedBy: approval.decided_by ?? null, decidedAt: approval.decided_at ?? null,
+                });
+            }
+            throw approval.status === 'expired' ? new ApprovalExpired() : new AgentError('APPROVAL_CANCELLED');
+        }
+    }
+    finally {
+        parts.clock.resume();
+    }
+}
 function modelProxy(binding) {
     if (!binding)
         return null;
@@ -84,7 +157,7 @@ function modelProxy(binding) {
 export function createContext(parts) {
     const steps = [];
     let started = 0;
-    const remainingMs = () => Math.max(0, parts.expiresAt - performance.now());
+    const remainingMs = () => parts.clock.remainingMs();
     const context = {
         runId: parts.runId,
         agent: parts.agent,
@@ -122,6 +195,7 @@ export function createContext(parts) {
             }));
         },
         usage: () => null,
+        requestApproval: (action, args, options = {}) => requestApproval(parts, action, args, options.expiresIn),
     };
     return { context, steps };
 }

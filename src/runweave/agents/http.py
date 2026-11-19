@@ -23,6 +23,7 @@ from jsonschema import Draft202012Validator
 from jsonschema.exceptions import SchemaError
 from pydantic import BaseModel, RootModel, ValidationError
 
+from runweave.action_approvals import ApprovalExpired
 from runweave.agents.catalog import TRIAGE_AGENT, AgentInfo, SchemaViolation
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, check_budget, remaining_budget
 from runweave.http_contract import (
@@ -266,6 +267,7 @@ class HttpAgent:
             attempt=context.attempt,
             input=input.model_dump(mode="json"),
             deadline_ms=max(1, min(MAX_DEADLINE_MS, deadline_ms)),
+            approvals_url=context.approvals_url,
             proxy=None
             if context.proxy is None
             else ProxyBinding(
@@ -309,6 +311,8 @@ class HttpAgent:
             code = _reported_code(headers, body)
             if code == "AGENT_DEADLINE_EXCEEDED":
                 raise DeadlineExceeded(RUN_DEADLINE)
+            if code == ApprovalExpired.code:
+                raise ApprovalExpired()
             if code == StepLimitExceeded.code:
                 raise StepLimitExceeded()
             if code == AgentOutputInvalid.code:
@@ -430,8 +434,13 @@ class HttpAgentConnector:
         for attempt in range(self._retry.attempts):
             check_budget()
             remaining = remaining_budget()
-            # The run deadline cancels the request; the read timeout only backs it up.
-            read = None if remaining == float("inf") else remaining + 1
+            # The run deadline cancels the request; the read timeout only backs it up. While
+            # the agent waits on an approval the deadline is paused, so only it applies.
+            read = (
+                None
+                if remaining == float("inf") or request.approvals_url is not None
+                else remaining + 1
+            )
             try:
                 status, response_headers, data = await self._receive(
                     "POST",

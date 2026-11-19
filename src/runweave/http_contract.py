@@ -63,6 +63,12 @@ class RunRequest(_Message):
     proxy: ProxyBinding | None = Field(
         default=None, description="Present when RunWeave's LLM proxy is available to the run"
     )
+    approvals_url: str | None = Field(
+        default=None,
+        max_length=2048,
+        description="Where the agent requests approvals (POST, with the proxy token as a "
+        "bearer token); present only in durable mode",
+    )
 
 
 class StepRecord(_Message):
@@ -88,7 +94,16 @@ class ErrorResponse(_Message):
 
 # Codes an agent-side SDK may report in a 500 response that RunWeave passes through.
 REPORTED_FAILURES = frozenset(
-    {"RUN_FAILED", "AGENT_STEP_LIMIT", "AGENT_OUTPUT_INVALID", "AGENT_DEADLINE_EXCEEDED"}
+    {
+        "RUN_FAILED",
+        "AGENT_STEP_LIMIT",
+        "AGENT_OUTPUT_INVALID",
+        "AGENT_DEADLINE_EXCEEDED",
+        "APPROVAL_EXPIRED",
+        "APPROVAL_CANCELLED",
+        "APPROVAL_CAPACITY_EXCEEDED",
+        "DURABLE_APPROVAL_REQUIRED",
+    }
 )
 
 

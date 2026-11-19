@@ -10,13 +10,18 @@ from collections.abc import Iterator
 from contextlib import AbstractContextManager, contextmanager, nullcontext
 from dataclasses import dataclass, field
 from itertools import count
+from typing import TYPE_CHECKING
 from uuid import UUID
 
 from runweave.budgets import BudgetLedger
 from runweave.sdk import ModelProxy
 from runweave.steps import StepLog
 
+if TYPE_CHECKING:
+    from runweave.storage.action_approvals import PostgresActionGate
+
 TOKEN_PREFIX = "rwp_"
+APPROVALS_PATH = "/agent/v1/approvals"
 
 
 @dataclass
@@ -27,6 +32,8 @@ class Binding:
     ledger: BudgetLedger
     steps: StepLog | None
     expires_at: float
+    # The attempt's approval gate (durable mode), reached by HTTP agents' callbacks.
+    approvals: "PostgresActionGate | None" = None
     sequence: Iterator[int] = field(default_factory=count)
     # Position of each proxied call in this attempt; seeded faults are drawn from it.
     calls: Iterator[int] = field(default_factory=count)
@@ -48,6 +55,10 @@ class ProxyBindings:
         self._public_url = public_url.rstrip("/")
         self._bindings: dict[str, Binding] = {}
 
+    @property
+    def approvals_url(self) -> str:
+        return self._public_url + APPROVALS_PATH
+
     @contextmanager
     def bound(
         self,
@@ -58,10 +69,13 @@ class ProxyBindings:
         ledger: BudgetLedger,
         steps: StepLog | None,
         expires_at: float,
+        approvals: "PostgresActionGate | None" = None,
     ) -> Iterator[ModelProxy]:
         token = TOKEN_PREFIX + secrets.token_urlsafe(32)
         key = _key(token)
-        self._bindings[key] = Binding(run_id, attempt, agent, ledger, steps, expires_at)
+        self._bindings[key] = Binding(
+            run_id, attempt, agent, ledger, steps, expires_at, approvals=approvals
+        )
         try:
             yield ModelProxy(
                 token=token,
@@ -98,6 +112,7 @@ def bind_run(
     ledger: BudgetLedger,
     steps: StepLog | None,
     expires_at: float,
+    approvals: "PostgresActionGate | None" = None,
 ) -> AbstractContextManager[ModelProxy | None]:
     """The run's proxy binding for the length of one attempt, or None without a proxy."""
     if bindings is None:
@@ -109,4 +124,5 @@ def bind_run(
         ledger=ledger,
         steps=steps,
         expires_at=expires_at,
+        approvals=approvals,
     )
