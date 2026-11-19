@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { cancelJob, getJob, getProject, getReport, listJobs, listReports, startJob } from '../api.js';
 import {
-  DataTable, EmptyState, ErrorState, KeyValueList, LineChart, LoadingState, PageHeader, Panel, StatTile, StatusBadge,
+  DataTable, EmptyState, ErrorState, KeyValueList, LineChart, LoadingState, PageHeader, Pager, Panel, StatTile, StatusBadge,
+  usePages,
 } from '../components/index.js';
 import { compactNumber, duration, percent, usd } from '../format.js';
 import { href } from '../router.js';
@@ -223,6 +224,7 @@ export function BenchResults({ report }) {
     id: `${row.fault_profile}-${row.concurrency}-${category}`, category, count, profile: row.fault_profile, concurrency: row.concurrency,
   })));
   const soak = report.soak;
+  const failurePages = usePages(failures, { resetKey: report.id });
   return <div className="stack">
     <Gates gates={report.gates} />
     <p className="muted">{report.agent.name} {report.agent.version} on {report.dataset.name} · {env.mode}
@@ -246,12 +248,13 @@ export function BenchResults({ report }) {
     </Panel>
     <Panel title="Failure categories" id="bench-failures">
       <div className="panel-body flush">
-        <DataTable caption="Failure categories" captionHidden rowKey={(row) => row.id} rows={failures} empty="No failures." columns={[
+        <DataTable caption="Failure categories" captionHidden rowKey={(row) => row.id} rows={failurePages.visible} empty="No failures." columns={[
           { key: 'category', label: 'Category', render: (row) => <span className="mono">{row.category}</span> },
           { key: 'profile', label: 'Faults', render: (row) => profileLabel(row.profile) },
           { key: 'concurrency', label: 'Concurrency', numeric: true },
           { key: 'count', label: 'Count', numeric: true },
         ]} />
+        <Pager label="Failure categories" window={failurePages.window} onPage={failurePages.setPage} />
       </div>
     </Panel>
     {soak && <Panel title="Soak" id="bench-soak">
@@ -360,8 +363,18 @@ function AssertionList({ assertions }) {
   </li>)}</ul>;
 }
 
+export function visibleCases(cases, { failedOnly, search }) {
+  const needle = search.trim().toLowerCase();
+  return cases.filter((row) => (!failedOnly || !row.passed) && (!needle || row.id.toLowerCase().includes(needle)));
+}
+
 export function EvalResults({ report, selected, onSelect }) {
   const s = report.summary;
+  const anyFailed = report.cases.some((row) => !row.passed);
+  const [failedOnly, setFailedOnly] = useState(anyFailed);
+  const [search, setSearch] = useState('');
+  const shown = visibleCases(report.cases, { failedOnly, search });
+  const pages = usePages(shown, { resetKey: `${report.id}|${failedOnly}|${search}` });
   const current = report.cases.find((row) => row.id === selected) ?? report.cases.find((row) => !row.passed) ?? report.cases[0];
   const regressions = report.baseline?.regressions ?? [];
   return <div className="stack">
@@ -375,8 +388,16 @@ export function EvalResults({ report, selected, onSelect }) {
     {regressions.length > 0 && <ErrorState><strong>Regressed against the baseline:</strong> {regressions.join(', ')}</ErrorState>}
     <div className="grid two">
       <Panel title="Cases" id="eval-cases">
+        <div className="table-tools row">
+          <label className="row"><input type="checkbox" checked={failedOnly} onChange={(event) => setFailedOnly(event.target.checked)} />Failed only</label>
+          <label className="visually-hidden" htmlFor="eval-case-search">Find a case</label>
+          <input id="eval-case-search" type="search" className="mono" placeholder="Find a case" value={search}
+            onChange={(event) => setSearch(event.target.value)} />
+          <span className="muted">{compactNumber(shown.length)} of {compactNumber(report.cases.length)} cases</span>
+        </div>
         <div className="panel-body flush">
-          <DataTable caption="Evaluation cases" captionHidden rowKey={(row) => row.id} rows={report.cases} selectedKey={current?.id}
+          <DataTable caption="Evaluation cases" captionHidden rowKey={(row) => row.id} rows={pages.visible} selectedKey={current?.id}
+            empty={failedOnly ? 'No failed cases match.' : 'No cases match.'}
             onRowClick={(row) => onSelect(row.id)} columns={[
               { key: 'id', label: 'Case', render: (row) => <button type="button" className="text-button mono" onClick={() => onSelect(row.id)}>{row.id}</button> },
               { key: 'passed', label: 'Result', render: (row) => <StatusBadge tone={row.passed ? 'good' : 'critical'} label={row.passed ? 'Pass' : 'Fail'} /> },
@@ -384,6 +405,7 @@ export function EvalResults({ report, selected, onSelect }) {
               { key: 'assertions', label: 'Assertions', numeric: true, render: (row) => `${row.assertions.filter((a) => a.passed).length} / ${row.assertions.length}` },
               { key: 'latency_ms', label: 'Latency', numeric: true, render: (row) => ms(row.latency_ms) },
             ]} />
+          <Pager label="Cases" window={pages.window} onPage={pages.setPage} />
         </div>
       </Panel>
       {current && <Panel title={current.id} id="eval-case" actions={<StatusBadge tone={current.passed ? 'good' : 'critical'} label={current.passed ? 'Pass' : 'Fail'} />}>
@@ -465,6 +487,10 @@ const signedMs = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.a
 
 export function ShadowResults({ report }) {
   const { primary, candidate } = report;
+  const changed = report.pairs.filter((pair) => pair.differences.regressed || pair.differences.fixed);
+  const [changedOnly, setChangedOnly] = useState(changed.length > 0);
+  const shownPairs = changedOnly ? changed : report.pairs;
+  const pairPages = usePages(shownPairs, { resetKey: `${report.id}|${changedOnly}` });
   const failed = Object.entries(report.gates).filter(([, ok]) => !ok).map(([name]) => gateLabels[name] ?? name);
   return <div className="stack">
     <div className="grid two">
@@ -500,8 +526,14 @@ export function ShadowResults({ report }) {
       </Panel>
     </div>
     <Panel title="Paired cases" id="shadow-pairs">
+      <div className="table-tools row">
+        <label className="row"><input type="checkbox" checked={changedOnly} onChange={(event) => setChangedOnly(event.target.checked)} />Changed only</label>
+        <span className="muted">{changedOnly ? `${compactNumber(changed.length)} changed of ${compactNumber(report.pairs.length)} pairs`
+          : `${compactNumber(report.pairs.length)} pairs`}</span>
+      </div>
       <div className="panel-body flush">
-        <DataTable caption="Paired case differences" captionHidden rowKey={(row) => row.id} rows={report.pairs} columns={[
+        <DataTable caption="Paired case differences" captionHidden rowKey={(row) => row.id} rows={pairPages.visible}
+          empty={changedOnly ? 'No case changed its verdict.' : 'No pairs.'} columns={[
           { key: 'id', label: 'Case', render: (row) => <span className="mono">{row.id}</span> },
           { key: 'change', label: 'Change', render: (row) => <StatusBadge tone={row.differences.regressed ? 'critical' : row.differences.fixed ? 'good' : 'neutral'}
             label={row.differences.regressed ? 'Regressed' : row.differences.fixed ? 'Fixed' : 'Same verdict'} /> },
@@ -511,6 +543,7 @@ export function ShadowResults({ report }) {
           { key: 'cost', label: 'Δ cost', numeric: true, render: (row) => row.differences.cost_usd },
           { key: 'failing', label: 'Newly failing', render: (row) => row.differences.newly_failing.join(', ') || '—' },
         ]} />
+        <Pager label="Paired cases" window={pairPages.window} onPage={pairPages.setPage} />
       </div>
     </Panel>
     <p className="muted">{report.limitations}</p>

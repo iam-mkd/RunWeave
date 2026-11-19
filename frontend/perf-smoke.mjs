@@ -11,6 +11,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { audit, report as auditReport } from './a11y.mjs';
 
 const frontend = dirname(fileURLToPath(import.meta.url));
 const root = resolve(frontend, '..');
@@ -117,9 +118,10 @@ async function until(check, what, ms = 120000) {
 
 async function post(path, body) {
   const response = await fetch(`${base}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  if (response.status === 503) return null;
-  assert.equal(response.status, 202, await response.text());
-  return response.json();
+  const text = await response.text();
+  if (response.status === 503 || response.status === 429) return null;  // queue or quota full: retry later
+  assert.equal(response.status, 202, text);
+  return JSON.parse(text);
 }
 
 const results = {};
@@ -162,6 +164,19 @@ try {
   const longest = async () => Math.max(0, ...(await page.evaluate(() => window.__longTasks.splice(0))));
   const rows = (selector) => page.locator(`${selector} tbody tr`).count();
 
+  // The long-task observer must actually see a blocked main thread, or "0 ms" means nothing.
+  await page.goto(`${base}/#/agents`);
+  // Queued as a page task: code run through page.evaluate is a DevTools task, which Chromium
+  // does not report as the page's long task.
+  await page.evaluate(() => new Promise((done) => setTimeout(() => {
+    const end = performance.now() + 120;
+    while (performance.now() < end) { /* block */ }
+    setTimeout(done, 50);
+  }, 0)));
+  const probe = await longest();
+  assert.ok(probe >= 100, `the long-task observer did not report a 120 ms block (saw ${probe} ms)`);
+  results.instrumentation = { probeLongTaskMs: Math.round(probe) };
+
   // Runs: first page, then older pages; the table keeps one page in the DOM.
   results.runs = {};
   results.runs.firstRenderMs = await timed(() => page.goto(`${base}/#/runs`), () => page.locator('section[aria-labelledby="runs-table-title"] tbody tr').first().waitFor());
@@ -174,6 +189,7 @@ try {
   results.runs.loadOlderMs = Math.max(...loadTimes);
   results.runs.domRows = await rows('section[aria-labelledby="runs-table-title"]');
   results.runs.longTaskMs = await longest();
+  await audit(page, 'runs with many pages');
 
   // A 200-step timeline.
   results.timeline = {};
@@ -189,6 +205,7 @@ try {
   results.evals.nextPageMs = await timed(() => page.getByRole('button', { name: 'Next' }).first().click(), () => page.getByText(/Rows 101–200 of 5,000/).waitFor());
   results.evals.searchMs = await timed(() => page.getByLabel('Find a case').fill('case-0420'), () => page.getByText(/Rows 1–10 of 10|case-04209/).first().waitFor());
   results.evals.longTaskMs = await longest();
+  await audit(page, 'eval report with pages and search');
 
   // A 5,000-pair shadow report.
   results.shadow = {};
@@ -197,6 +214,7 @@ try {
   results.shadow.nextPageMs = await timed(() => page.getByRole('button', { name: 'Next' }).first().click(), () => page.getByText(/Rows 101–200 of 5,000/).waitFor());
   results.shadow.domRows = await rows('section[aria-labelledby="shadow-pairs-title"]');
   results.shadow.longTaskMs = await longest();
+  await audit(page, 'shadow report with pages');
 
   // A live load test with 2,000 ticks (the job API is intercepted).
   const jobId = 'job-0123456789ab';
@@ -214,6 +232,7 @@ try {
   results.liveChart.renderMs = await timed(() => page.goto(`${base}/#/load-tests`), () => page.locator('#live-throughput-title').waitFor());
   results.liveChart.pathPoints = await page.locator('section[aria-labelledby="live-throughput-title"] path.series-line').evaluate((path) => path.getAttribute('d').split(/[ML]/).filter(Boolean).length);
   results.liveChart.longTaskMs = await longest();
+  await audit(page, 'live load test chart');
   assert.deepEqual(errors, []);
   await context.close();
 
@@ -230,7 +249,8 @@ try {
   if (results.liveChart.pathPoints > 400) fail.push(`live chart draws ${results.liveChart.pathPoints} points > 400`);
   console.log(JSON.stringify(results, null, 2));
   assert.deepEqual(fail, [], `Large-data budgets missed:\n${fail.join('\n')}`);
-  console.log('Large-data checks passed.');
+  const audits = auditReport(join(artifacts, 'a11y-perf-report.json'));
+  console.log(`Large-data checks passed (${audits} accessibility audits, no violations).`);
 } finally {
   if (browser) await browser.close();
   if (server.exitCode === null) {

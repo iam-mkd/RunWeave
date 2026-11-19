@@ -8,6 +8,10 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Large data (milestone 24, part 2): tables show 100 rows at a time with an accessible
+  pager; eval reports start on failed cases and can be searched, shadow reports start on
+  changed pairs; long live charts are downsampled. `npm run test:perf` checks budgets with
+  thousands of runs and 5,000-case reports, in CI.
 - Accessibility audit (milestone 24, part 1): the browser smoke test audits every screen
   it reaches with axe-core (WCAG 2.1 AA) in both themes at desktop and 390 px, and checks
   keyboard paths, focus management and reduced motion. Fixes:

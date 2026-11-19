@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { decideApproval, getApproval, listApprovals } from '../api.js';
 import {
-  DataTable, EmptyState, ErrorState, KeyValueList, LoadingState, PageHeader, Panel, StatusBadge,
+  DataTable, EmptyState, ErrorState, KeyValueList, LoadingState, PageHeader, Pager, Panel, StatusBadge, usePages,
 } from '../components/index.js';
 import { href } from '../router.js';
 import { JsonBlock } from './parts.jsx';
@@ -33,9 +33,10 @@ export function NotDurable() {
 
 export function ApprovalInbox({ approvals, selected, onSelect, now = Date.now() }) {
   const pending = approvals.filter((item) => item.status === 'pending').length;
+  const pages = usePages(approvals, { size: 50 });
   return <Panel title={`Inbox · ${pending} pending`} id="inbox">
     <div className="panel-body flush">
-      <DataTable caption="Approval requests" captionHidden rowKey={(row) => row.id} rows={approvals} selectedKey={selected}
+      <DataTable caption="Approval requests" captionHidden rowKey={(row) => row.id} rows={pages.visible} selectedKey={selected}
         onRowClick={(row) => onSelect(row.id)} empty="No pending requests. Agents' requests appear here while they wait."
         columns={[
           { key: 'action', label: 'Action', render: (row) => <button type="button" className="text-button mono" onClick={() => onSelect(row.id)}>{row.action}</button> },
@@ -44,6 +45,7 @@ export function ApprovalInbox({ approvals, selected, onSelect, now = Date.now() 
           { key: 'expires_at', label: 'Expires', render: (row) => (row.status === 'pending' ? expiresText(row.expires_at, now) : '—') },
           { key: 'status', label: 'State', render: (row) => <StateBadge status={row.status} /> },
         ]} />
+      <Pager label="Approval requests" window={pages.window} onPage={pages.setPage} />
     </div>
   </Panel>;
 }

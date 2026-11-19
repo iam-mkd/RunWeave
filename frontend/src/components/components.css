@@ -181,3 +181,5 @@ main { flex: 1; width: 100%; max-width: 1280px; padding: var(--space-6); outline
   h1 { font-size: var(--text-xl); }
   .data-table th, .data-table td { padding-inline: var(--space-3); }
 }
+.pager { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) var(--space-4); border-top: 1px solid var(--hairline); }
+.pager-status { margin: 0; color: var(--text-secondary); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }

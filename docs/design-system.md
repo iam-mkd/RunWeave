@@ -152,8 +152,24 @@ the live run state, form errors, the approval confirmation, and chart summaries.
   milestone 18–22 needs (latency, throughput, queue depth, error rate over time)
   without a dependency. Milestone 22 re-evaluates a canvas library (uPlot,
   MIT) only if live load-test streams measurably slow the page.
-- Tables: our own semantic `DataTable`. Milestone 24 adds windowed rendering if
-  large-data checks need it.
+- Tables: our own semantic `DataTable`. Milestone 24 chose **pagination** over windowed
+  rendering, because every row on a page stays in the DOM for screen readers and
+  find-in-page.
+  - `usePages` and `Pager` show 100 rows at a time. The pager is a labelled `nav` that
+    announces "Rows 101–200 of 5,000" politely.
+  - Eval reports start on failed cases and can be searched by case id; shadow reports
+    start on changed pairs. Bench failure categories, the Approvals inbox and the loaded
+    runs page the same way.
+- Long chart series are downsampled to about 400 points. Each bucket keeps its lowest and
+  highest point, so spikes stay visible. The chart's data table says when it shows fewer
+  points than were recorded.
+- `frontend/perf-smoke.mjs` (`npm run test:perf`, in CI) holds the budget. It renders
+  3,000 runs, a 200-step timeline, 5,000-case eval and shadow reports and a 2,000-tick live
+  chart, and requires:
+  - a first render under 1.5 s;
+  - paging and search under 250 ms;
+  - no main-thread task of 200 ms or more;
+  - at most 100 table rows in the DOM.
 
 ## Clickable prototype
 
