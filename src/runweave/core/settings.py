@@ -121,6 +121,7 @@ class Settings(BaseSettings):
     key_store: Literal["keyring", "memory", "none"] = "keyring"
     proxy_upstream_max_bytes: int = Field(default=8388608, ge=65536, le=67108864)
     # Seeded fault injection: a built-in or file profile name, or "custom" for the inline list.
+    project_file: Path | None = None  # runweave.toml for the Load tests, Evals and Shadow screens
     proxy_fault_profile: str = Field(default="", max_length=40)
     proxy_fault_seed: int = Field(default=0, ge=0, le=2**63 - 1)
     proxy_fault_profiles_file: Path | None = None

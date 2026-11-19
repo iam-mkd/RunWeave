@@ -23,6 +23,7 @@ class EvalOptions:
     baseline: Path | None = None
     save_baseline: bool = False
     junit: Path | None = None
+    progress: reports.Progress = reports.silent
 
 
 def case_record(case: Case, result: CaseResult) -> dict[str, Any]:
@@ -45,13 +46,30 @@ def case_record(case: Case, result: CaseResult) -> dict[str, Any]:
     }
 
 
-async def _evaluate(target: Target, cases: list[Case], concurrency: int) -> list[dict[str, Any]]:
+async def _evaluate(
+    target: Target, cases: list[Case], concurrency: int, progress: reports.Progress
+) -> list[dict[str, Any]]:
     slots = asyncio.Semaphore(concurrency)
+    done = 0
 
     async def one(case: Case) -> dict[str, Any]:
+        nonlocal done
         async with slots:
             result = await run_case(target, case.input)
-        return case_record(case, result)
+        record = case_record(case, result)
+        done += 1
+        progress(
+            {
+                "event": "case",
+                "id": case.id,
+                "passed": record["passed"],
+                "status": record["status"],
+                "latency_ms": record["latency_ms"],
+                "done": done,
+                "total": len(cases),
+            }
+        )
+        return record
 
     return list(await asyncio.gather(*(one(case) for case in cases)))
 
@@ -79,7 +97,8 @@ async def run_eval(project: Project, options: EvalOptions) -> tuple[dict[str, An
     )
     started = time.perf_counter()
     async with open_target(project, options.server) as target:
-        results = await _evaluate(target, cases, project.limits.concurrency)
+        options.progress({"event": "started", "kind": "eval", "total": len(cases)})
+        results = await _evaluate(target, cases, project.limits.concurrency, options.progress)
         agent = target.agent
         mode = target.mode
     report: dict[str, Any] = {

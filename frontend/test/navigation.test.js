@@ -9,6 +9,7 @@ test('every planned section has a unique id, label and milestone', () => {
 });
 
 test('production navigation lists only sections that exist', () => {
-  assert.deepEqual(productionSections.map((section) => section.id), ['agents', 'runs', 'settings']);
-  assert.deepEqual(productionSections.map((section) => section.href), ['#/agents', '#/runs', '#/settings']);
+  assert.deepEqual(productionSections.map((section) => section.id), ['agents', 'runs', 'load-tests', 'evals', 'shadow', 'settings']);
+  assert.deepEqual(productionSections.map((section) => section.href),
+    ['#/agents', '#/runs', '#/load-tests', '#/evals', '#/shadow', '#/settings']);
 });

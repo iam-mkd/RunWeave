@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
+import { mkdtempSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { createServer } from 'node:net';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -23,8 +25,12 @@ env.RUNWEAVE_MOCK_RUNBOOK_DELAY_SECONDS = '1.2';
 // Keys saved in the smoke test stay in memory; never touch the developer's credential store.
 env.RUNWEAVE_KEY_STORE = 'memory';
 const smokeKey = 'sk-smoke-test-only-7c1e9a2b4d';
-const server = spawn(python, ['-m', 'runweave.cli', 'serve', '--demo', '--port', String(port), '--agent', 'sample_agent:text_report'],
-  { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
+// A fresh `runweave init` project for the Load tests, Evals and Shadow screens.
+const projectDir = join(mkdtempSync(join(tmpdir(), 'runweave-smoke-')), 'project');
+const created = spawnSync(python, ['-m', 'runweave.cli', 'init', projectDir], { env, encoding: 'utf8' });
+if (created.status !== 0) throw new Error(`runweave init failed: ${created.stderr}`);
+const server = spawn(python, ['-m', 'runweave.cli', 'serve', '--demo', '--port', String(port), '--agent', 'sample_agent:text_report',
+  '--project', join(projectDir, 'runweave.toml')], { cwd: root, env, stdio: ['ignore', 'pipe', 'pipe'] });
 let output = '';
 server.stdout.on('data', (chunk) => { output = (output + chunk).slice(-16384); });
 server.stderr.on('data', (chunk) => { output = (output + chunk).slice(-16384); });
@@ -289,6 +295,30 @@ try {
   assert.equal(decision, 'reject');
   await page.goto(`${base}/#/runs/new?agent=incident-triage`);
   await page.getByText('Recall saved evidence', { exact: true }).waitFor();
+
+  // Testing screens start the same CLI jobs and read back the saved reports.
+  await page.goto(`${base}/#/evals`);
+  await page.getByRole('heading', { name: 'Evals', level: 1 }).waitFor();
+  await page.getByRole('button', { name: 'Run eval' }).click();
+  await page.getByText('Gates passed', { exact: true }).first().waitFor({ timeout: 60000 });
+  assert.match(page.url(), /#\/evals\?report=eval-/);
+  await page.locator('.stat-value').filter({ hasText: /^4 \/ 4$/ }).waitFor();
+  await noOverflow(page, 'evals');
+  await page.goto(`${base}/#/load-tests`);
+  await page.getByLabel('Concurrency levels').fill('1 2');
+  await page.getByLabel('Runs per level').fill('6');
+  await page.getByRole('button', { name: 'Start load test' }).click();
+  await page.getByRole('heading', { name: 'Results by level' }).waitFor({ timeout: 60000 });
+  assert.match(page.url(), /#\/load-tests\?report=bench-/);
+  assert.equal(await page.locator('section[aria-labelledby="bench-levels-title"] tbody tr').count(), 2);
+  await page.screenshot({ path: join(artifacts, 'load-tests-light.png'), fullPage: true });
+  await noOverflow(page, 'load tests');
+  await page.goto(`${base}/#/shadow`);
+  await page.getByLabel('Candidate').fill('agent:run');
+  await page.getByRole('button', { name: 'Compare' }).click();
+  await page.getByText('Eligible for promotion', { exact: true }).waitFor({ timeout: 60000 });
+  await page.screenshot({ path: join(artifacts, 'shadow-light.png'), fullPage: true });
+  await noOverflow(page, 'shadow');
   assert.deepEqual(await page.evaluate(() => window.__cspViolations), []);
   assert.deepEqual(errors, []);
   await context.close();
@@ -305,11 +335,15 @@ try {
   await darkPage.page.goto(`${base}/#/settings`);
   await darkPage.page.getByRole('heading', { name: 'Settings', level: 1 }).waitFor();
   await darkPage.page.screenshot({ path: join(artifacts, 'settings-dark.png'), fullPage: true });
+  await darkPage.page.goto(`${base}/#/load-tests`);
+  await darkPage.page.getByRole('link', { name: /^bench-/ }).first().click();
+  await darkPage.page.getByRole('heading', { name: 'Results by level' }).waitFor();
+  await darkPage.page.screenshot({ path: join(artifacts, 'load-tests-dark.png'), fullPage: true });
   assert.deepEqual(await darkPage.page.evaluate(() => window.__cspViolations), []);
   assert.deepEqual(darkPage.errors, []);
   await dark.close();
 
-  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, mobile overflow, safe text, both themes.');
+  console.log('Browser checks passed: agents, generated forms, server validation, live run updates, findings, SDK agent timeline and re-run, runs list, legacy links, cancellation, queue errors, expired IDs, setup detection, HTTP agent connect/run/remove, settings and key secrecy, approval bindings, eval/load-test/shadow jobs and reports, mobile overflow, safe text, both themes.');
   console.log(`Screenshots: ${artifacts}`);
 } finally {
   if (browser) await browser.close();

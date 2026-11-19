@@ -90,6 +90,52 @@ export async function saveProviderKey(provider, key, options) {
   return api(`/v1/settings/keys/${provider}`, { ...options, data: { key }, method: 'PUT' });
 }
 
+const jobIdPattern = /^job-[0-9a-f]{12}$/;
+const reportIdPattern = /^(?:eval|bench|shadow)-\d{8}T\d{6}Z-[0-9a-f]{6}$/;
+const reportKinds = new Set(['eval', 'bench', 'shadow']);
+
+export function isJobId(value) {
+  return typeof value === 'string' && jobIdPattern.test(value);
+}
+
+export function isReportId(value) {
+  return typeof value === 'string' && reportIdPattern.test(value);
+}
+
+// Testing jobs: the workspace starts the same `runweave eval|bench|shadow` as the CLI.
+export function getProject(options) {
+  return api('/v1/jobs/project', options);
+}
+
+export function startJob(request, options) {
+  return api('/v1/jobs', { ...options, data: request });
+}
+
+export function listJobs(options) {
+  return api('/v1/jobs', options);
+}
+
+export async function getJob(id, after = 0, options) {
+  if (!isJobId(id)) throw new Error('Invalid job ID');
+  const cursor = Math.max(0, Math.floor(Number(after) || 0));
+  return api(`/v1/jobs/${id}?after=${cursor}`, options);
+}
+
+export async function cancelJob(id, options) {
+  if (!isJobId(id)) throw new Error('Invalid job ID');
+  return api(`/v1/jobs/${id}/cancel`, { ...options, data: {} });
+}
+
+export async function listReports(kind, options) {
+  if (!reportKinds.has(kind)) throw new Error('Unknown report kind');
+  return api(`/v1/reports?kind=${kind}`, options);
+}
+
+export async function getReport(id, options) {
+  if (!isReportId(id)) throw new Error('Invalid report ID');
+  return api(`/v1/reports/${id}`, options);
+}
+
 export async function removeProviderKey(provider, options) {
   if (!providers.has(provider)) throw new Error('Unknown provider');
   return api(`/v1/settings/keys/${provider}`, { ...options, method: 'DELETE' });

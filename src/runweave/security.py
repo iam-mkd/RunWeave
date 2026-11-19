@@ -24,6 +24,8 @@ ALL_SCOPES = frozenset(
         "agents:delegate",
         "agents:manage",
         "settings:manage",
+        "tests:run",
+        "tests:read",
         "tools:python_sandbox",
         "tools:browser_read",
         "tools:browser_private",

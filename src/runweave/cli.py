@@ -10,10 +10,13 @@ Exit codes: 0 success, 1 failed gates or a failed command, 2 a project or usage 
 
 import argparse
 import asyncio
+import json
+import os
 import sys
-from collections.abc import Sequence
+import threading
+from collections.abc import Coroutine, Sequence
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from runweave.agents.catalog import TRIAGE_AGENT, AgentLoadError, load_python_agents
 from runweave.core.settings import Settings
@@ -22,6 +25,7 @@ if TYPE_CHECKING:
     from runweave.agents.http import HttpAgent
 
 LOOPBACK = "127.0.0.1"
+T = TypeVar("T")
 
 
 def _settings(demo: bool) -> Settings:
@@ -50,6 +54,10 @@ def serve(args: argparse.Namespace) -> int:
         config = _settings(args.demo)
         if "proxy_public_url" not in config.model_fields_set:
             config.proxy_public_url = f"http://{LOOPBACK}:{args.port}"
+        if args.project is not None:
+            config.project_file = args.project.resolve()
+        elif config.project_file is None and Path("runweave.toml").is_file():
+            config.project_file = Path("runweave.toml").resolve()
         agents = load_python_agents([*config.agents, *args.agent])
         http_agents = [
             *config.http_agents,
@@ -156,14 +164,58 @@ def init(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run(args: argparse.Namespace, work: Coroutine[Any, Any, T]) -> T:
+    """Run a command; with --watch-stdin, stop it cleanly when stdin closes (the workspace's
+    cancel), so agent processes and the in-process RunWeave are shut down, not orphaned."""
+    if not args.watch_stdin:
+        return asyncio.run(work)
+
+    async def main() -> T:
+        task = asyncio.ensure_future(work)
+        loop = asyncio.get_running_loop()
+
+        def watch() -> None:
+            # Raw reads: a buffered stdin read blocked in a daemon thread aborts shutdown.
+            try:
+                while os.read(0, 4096):
+                    pass
+            except OSError:
+                pass
+            try:
+                loop.call_soon_threadsafe(task.cancel)
+            except RuntimeError:  # the command already finished
+                pass
+
+        threading.Thread(target=watch, name="runweave-stdin", daemon=True).start()
+        return await task
+
+    return asyncio.run(main())
+
+
+def _print_event(event: dict[str, Any]) -> None:
+    print(json.dumps(event, separators=(",", ":")), flush=True)
+
+
+def _finish(args: argparse.Namespace, report: dict[str, Any], passed: bool, summary: str) -> int:
+    if args.progress:
+        _print_event(
+            {"event": "report", "kind": report["kind"], "id": report["id"], "passed": passed}
+        )
+    else:
+        print(summary)
+    return 0 if passed else 1
+
+
 def eval_command(args: argparse.Namespace) -> int:
     from runweave.evals.cases import CaseError
     from runweave.evals.command import EvalOptions, run_eval, summary_text
+    from runweave.evals.report import silent
     from runweave.project import ProjectError, load_project
 
     try:
         project = load_project(args.config)
-        report, folder = asyncio.run(
+        report, folder = _run(
+            args,
             run_eval(
                 project,
                 EvalOptions(
@@ -172,19 +224,23 @@ def eval_command(args: argparse.Namespace) -> int:
                     baseline=args.baseline,
                     save_baseline=args.save_baseline,
                     junit=args.junit,
+                    progress=_print_event if args.progress else silent,
                 ),
-            )
+            ),
         )
     except (ProjectError, CaseError) as error:
         print(f"runweave: {error}", file=sys.stderr)
         return 2
-    print(summary_text(report, folder))
-    return 0 if report["gates"]["passed"] else 1
+    except asyncio.CancelledError:
+        print("runweave: cancelled", file=sys.stderr)
+        return 130
+    return _finish(args, report, report["gates"]["passed"], summary_text(report, folder))
 
 
 def bench_command(args: argparse.Namespace) -> int:
     from runweave.bench import BenchOptions, run_bench, summary_text
     from runweave.evals.cases import CaseError
+    from runweave.evals.report import silent
     from runweave.project import ProjectError, load_project
 
     if args.concurrency and any(not 1 <= level <= 256 for level in args.concurrency):
@@ -198,7 +254,8 @@ def bench_command(args: argparse.Namespace) -> int:
         return 2
     try:
         project = load_project(args.config)
-        report, folder = asyncio.run(
+        report, folder = _run(
+            args,
             run_bench(
                 project,
                 BenchOptions(
@@ -208,34 +265,46 @@ def bench_command(args: argparse.Namespace) -> int:
                     runs=args.runs,
                     fault_profiles=tuple(args.fault_profile) if args.fault_profile else None,
                     soak_seconds=args.soak,
+                    progress=_print_event if args.progress else silent,
                 ),
-            )
+            ),
         )
     except (ProjectError, CaseError) as error:
         print(f"runweave: {error}", file=sys.stderr)
         return 2
-    print(summary_text(report, folder))
-    return 0 if report["gates"]["passed"] else 1
+    except asyncio.CancelledError:
+        print("runweave: cancelled", file=sys.stderr)
+        return 130
+    return _finish(args, report, report["gates"]["passed"], summary_text(report, folder))
 
 
 def shadow_command(args: argparse.Namespace) -> int:
     from runweave.evals.cases import CaseError
+    from runweave.evals.report import silent
     from runweave.evals.shadow import ShadowOptions, run_shadow, summary_text
     from runweave.project import ProjectError, load_project
 
     try:
         project = load_project(args.config)
-        report, folder = asyncio.run(
+        report, folder = _run(
+            args,
             run_shadow(
                 project,
-                ShadowOptions(dataset=args.dataset, server=args.server, candidate=args.candidate),
-            )
+                ShadowOptions(
+                    dataset=args.dataset,
+                    server=args.server,
+                    candidate=args.candidate,
+                    progress=_print_event if args.progress else silent,
+                ),
+            ),
         )
     except (ProjectError, CaseError) as error:
         print(f"runweave: {error}", file=sys.stderr)
         return 2
-    print(summary_text(report, folder))
-    return 0 if report["promotion_eligible"] else 1
+    except asyncio.CancelledError:
+        print("runweave: cancelled", file=sys.stderr)
+        return 130
+    return _finish(args, report, report["promotion_eligible"], summary_text(report, folder))
 
 
 def _project_arguments(command: argparse.ArgumentParser) -> None:
@@ -244,6 +313,12 @@ def _project_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument(
         "--server", help="Submit to a running RunWeave, e.g. http://127.0.0.1:8000"
     )
+    command.add_argument(
+        "--progress",
+        action="store_true",
+        help="Print progress as JSON lines instead of a summary (used by the workspace)",
+    )
+    command.add_argument("--watch-stdin", action="store_true", help=argparse.SUPPRESS)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -270,6 +345,12 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--assets", default="frontend/dist", help="Built workspace UI directory")
     start.add_argument("--check", action="store_true", help="Load agents, list them and exit")
     start.add_argument("--api-only", action="store_true", help="Serve the API without the UI")
+    start.add_argument(
+        "--project",
+        type=Path,
+        metavar="RUNWEAVE_TOML",
+        help="Project for the Load tests, Evals and Shadow screens (default: ./runweave.toml)",
+    )
     start.set_defaults(handler=serve)
     create = commands.add_parser("init", help="Create a project with a sample agent and dataset")
     create.add_argument("directory", nargs="?", default=".")

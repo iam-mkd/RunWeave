@@ -1376,6 +1376,30 @@ Implementation notes, pull request B (2026-11-19):
   Eligibility is reported, never acted on. With `--server` the candidate must be an HTTP
   agent with its own name.
 
+Implementation notes, pull request C (2026-11-19):
+- Test first: `tests/test_jobs_api.py` (the `--progress` feed of each command; no-project
+  answers; eval and bench jobs end to end with events and saved reports; one job at a
+  time; cancellation; failed commands and failed gates; request validation; strict report
+  and job ids) and `frontend/test/testing.test.jsx` (API client, routes, navigation, live
+  series, level parsing, result views escaping agent text). The browser smoke test now
+  runs an eval, a load test and a shadow comparison from the screens.
+- Jobs run the CLI itself (`python -m runweave.cli <kind> --progress --watch-stdin`) in a
+  child process in the project folder, without a shell and with validated arguments, so
+  the UI and CLI produce identical reports and a load test never shares the workspace's
+  event loop. Progress lines become numbered, bounded events the screens poll once a
+  second. Cancelling closes the child's stdin; the command then unwinds normally (agents
+  and its in-process RunWeave stop) and is killed only after a grace period.
+- `/v1/reports` lists and reads `report.json` files by strict id, in a thread; responses
+  carry no local paths. Scopes `tests:run` and `tests:read`.
+- Screens follow the approved prototype: Load tests (scenario form, live throughput and p95
+  charts, results by level, failure categories, soak), Evals (cases, assertion details,
+  gates and baseline regressions) and Shadow (both versions, gates with thresholds, paired
+  differences). Outputs are not shown because reports never store them.
+- Validation: 568 offline tests passed on Python 3.13 with fixtures required (104
+  environment-gated skips), and the jobs, bench, shadow, eval, config and settings suites
+  on 3.11 (76). Vitest 76 passed; the browser smoke test passed in both themes. Ruff,
+  formatting and strict mypy (156 files) passed. PostgreSQL was not rerun locally.
+
 ### 23. Approvals through the agent SDKs
 
 - Add `ctx.request_approval(action, arguments, expires_in)` to both SDKs. It

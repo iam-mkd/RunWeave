@@ -60,3 +60,8 @@
 .field.narrow { max-width: 600px; }
 .fault-list { margin: 0; padding-left: var(--space-5); display: grid; gap: var(--space-1); }
 @media (max-width: 720px) { .choice-grid.two { grid-template-columns: minmax(0, 1fr); } }
+
+/* Load tests, Evals and Shadow */
+ul.bare { list-style: none; margin: 0; padding: 0; }
+.stack.tight { gap: var(--space-2); }
+.options legend { margin-bottom: var(--space-1); font-weight: 600; }

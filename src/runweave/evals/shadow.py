@@ -33,6 +33,7 @@ class ShadowOptions:
     dataset: str | None = None
     server: str | None = None
     candidate: str | None = None
+    progress: reports.Progress = reports.silent
 
 
 def differences(
@@ -99,22 +100,37 @@ def _candidate(project: Project, options: ShadowOptions) -> CandidateSection:
 
 
 async def _pairs(
-    primary: Target, candidate: Target, cases: list[Case], concurrency: int
+    primary: Target,
+    candidate: Target,
+    cases: list[Case],
+    concurrency: int,
+    progress: reports.Progress,
 ) -> list[dict[str, Any]]:
     slots = asyncio.Semaphore(concurrency)
+    done = 0
 
     async def one(case: Case) -> dict[str, Any]:
+        nonlocal done
         async with slots:
             before, after = await asyncio.gather(
                 run_case(primary, case.input), run_case(candidate, case.input)
             )
         old, new = case_record(case, before), case_record(case, after)
-        return {
-            "id": case.id,
-            "primary": old,
-            "candidate": new,
-            "differences": differences(old, new, output_equal=before.output == after.output),
-        }
+        diff = differences(old, new, output_equal=before.output == after.output)
+        done += 1
+        progress(
+            {
+                "event": "pair",
+                "id": case.id,
+                "regressed": diff["regressed"],
+                "fixed": diff["fixed"],
+                "status_equal": diff["status_equal"],
+                "output_equal": diff["output_equal"],
+                "done": done,
+                "total": len(cases),
+            }
+        )
+        return {"id": case.id, "primary": old, "candidate": new, "differences": diff}
 
     return list(await asyncio.gather(*(one(case) for case in cases)))
 
@@ -159,7 +175,10 @@ async def run_shadow(project: Project, options: ShadowOptions) -> tuple[dict[str
         candidate = await stack.enter_async_context(
             open_target(project, options.server, agent=candidate_section)
         )
-        pairs = await _pairs(primary, candidate, cases, project.limits.concurrency)
+        options.progress({"event": "started", "kind": "shadow", "total": len(cases)})
+        pairs = await _pairs(
+            primary, candidate, cases, project.limits.concurrency, options.progress
+        )
         mode = primary.mode
         agents = primary.agent, candidate.agent
     verdict = gates(pairs, project.shadow, project.eval.min_pass_rate)
