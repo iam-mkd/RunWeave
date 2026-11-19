@@ -1250,6 +1250,11 @@ Implementation notes, pull request B (2026-11-19):
 - Decisions taken in this pull request: fault profiles are server-wide (the Settings
   screen will manage them; per-run selection fits the milestone 22 testing CLI), and
   passthrough requires a model allowlist so configured prices cannot be bypassed.
+- Validation: the full suite with PostgreSQL 18 passed (568 passed; 14 Docker-only
+  native isolation cases skipped) with the TypeScript fixture and Node SDKs required; the
+  proxy suites passed on Python 3.11 (49). Ruff, formatting and strict mypy (133 files)
+  passed. A real-socket check confirmed an injected disconnect reaches the client as a
+  dropped connection with nothing in uvicorn's error log.
 
 ### 22. Testing CLI, reports, screens, and public alpha
 
