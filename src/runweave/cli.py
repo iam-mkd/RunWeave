@@ -58,6 +58,13 @@ def serve(args: argparse.Namespace) -> int:
             config.project_file = args.project.resolve()
         elif config.project_file is None and Path("runweave.toml").is_file():
             config.project_file = Path("runweave.toml").resolve()
+        # Agents are imported from the working folder (and the project's), as `python -m`
+        # would; the installed `runweave` command does not put it on sys.path itself.
+        for folder in dict.fromkeys(
+            [str(Path.cwd()), *([str(config.project_file.parent)] if config.project_file else [])]
+        ):
+            if folder not in sys.path:
+                sys.path.insert(0, folder)
         agents = load_python_agents([*config.agents, *args.agent])
         http_agents = [
             *config.http_agents,
@@ -85,14 +92,14 @@ def serve(args: argparse.Namespace) -> int:
     import uvicorn
 
     from runweave.app import create_app
-    from runweave.workspace import create_workspace
+    from runweave.workspace import create_workspace, workspace_assets
 
     try:
         app = (
             create_app(config, agents=agents, http_agents=http_agents)
             if args.api_only
             else create_workspace(
-                config, Path(args.assets).resolve(), agents=agents, http_agents=http_agents
+                config, workspace_assets(args.assets), agents=agents, http_agents=http_agents
             )
         )
     except ValueError as error:
@@ -342,7 +349,11 @@ def parser() -> argparse.ArgumentParser:
     start.add_argument("--demo", action="store_true", help="Offline, in-memory, ignore .env")
     start.add_argument("--host", default=LOOPBACK, help=argparse.SUPPRESS)
     start.add_argument("--port", type=int, default=8000)
-    start.add_argument("--assets", default="frontend/dist", help="Built workspace UI directory")
+    start.add_argument(
+        "--assets",
+        type=Path,
+        help="Built workspace UI directory (default: the packaged UI, else frontend/dist)",
+    )
     start.add_argument("--check", action="store_true", help="Load agents, list them and exit")
     start.add_argument("--api-only", action="store_true", help="Serve the API without the UI")
     start.add_argument(

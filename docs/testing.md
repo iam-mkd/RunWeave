@@ -221,3 +221,21 @@ candidate), and the command is started without a shell. Reports are looked up by
 only. The endpoints need the `tests:run` and `tests:read` scopes when authentication is on.
 `--progress` prints one JSON object per line (`started`, `case`, `pair`, `level_started`,
 `tick`, `level`, `soak_window`, then `report`) if you want the same feed in your own tools.
+
+## 9. In CI
+
+[`examples/github-actions/runweave.yml`](../examples/github-actions/runweave.yml) is a
+ready-to-copy GitHub Actions job: it runs `runweave eval` (writing JUnit for the checks
+tab) and a short `runweave bench`, offline with the mock model and no API key, and keeps
+the reports as an artifact. To make it catch regressions:
+
+1. set `baseline = ".runweave/baselines/smoke.json"` under `[eval]` in `runweave.toml`;
+2. run `runweave eval --save-baseline` and commit `.runweave/baselines/` (only
+   `.runweave/reports/` is ignored);
+3. copy the example to `.github/workflows/runweave.yml`.
+
+A pull request that makes a passing case fail now fails the job (exit 1), even when the
+pass rate is still above `min_pass_rate`. RunWeave's own test suite runs the example's
+commands against a seeded regression to keep this true. Until RunWeave is published to
+PyPI, replace `uvx runweave` with
+`uvx --from git+https://github.com/iam-mkd/RunWeave runweave`.

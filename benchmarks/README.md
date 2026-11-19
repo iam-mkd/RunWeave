@@ -3,6 +3,9 @@
 This folder holds RunWeave's own release evidence: the built-in triage workflow under a
 mocked health API. To load-test your own agent, use `runweave bench` (see
 [Test your agent](../docs/testing.md)); both share the metric parsing in `runweave.bench`.
+[ui-overhead-windows.json](ui-overhead-windows.json) is the milestone 22 check that a
+load test started from the workspace, with the screen open, matches one started from a
+terminal (see the [release guide](../docs/release.md#load-tests-with-the-workspace-open)).
 
 ## Milestone 16 verification on November 18, 2026
 

@@ -169,3 +169,47 @@ threshold. Native TCP and container smoke checks close startup/transport gaps,
 but do not establish production load capacity. Hosted CI and live-model quality
 remain unverified. The two CI workflows reproduce ordinary and opt-in native
 checks; no live inference is enabled in either.
+
+## Wheel and clean-machine check (milestone 22)
+
+A wheel carries the built workspace UI, the project templates and the vendored TypeScript
+SDK, so `uvx runweave` works without Node (Node is needed only for TypeScript agents):
+
+```bash
+npm --prefix frontend ci
+npm --prefix frontend run build
+python scripts/bundle-workspace-ui.py      # copies frontend/dist into src/runweave/workspace_ui/
+uv build --wheel
+```
+
+`src/runweave/workspace_ui/` is not committed; a source checkout serves `frontend/dist`
+(or `--assets`). `scripts/check-release.py` does the build and then, outside the
+repository with no RunWeave settings or provider keys, runs
+`uvx --from <wheel> runweave` to create Python and TypeScript projects, run eval, bench and
+shadow, serve the workspace (UI and assets from the wheel) and run an eval and a load test
+through the jobs API the screens use. CI runs it on Linux and Windows (`clean-install`).
+
+Publishing to PyPI (Trusted Publishing, a 0.x pre-release) happens only when the owner asks.
+
+## Load tests with the workspace open
+
+`scripts/measure-ui-overhead.py` alternates the same `runweave bench` from a terminal and
+from the Load tests screen's API while a client polls the workspace as the open screen
+does. On Windows-11-10.0.26300-SP0 (16 logical CPUs,
+Python 3.13.9), with an agent that awaits 50 ms per run, 300 runs per
+level and 5 alternating rounds
+([ui-overhead-windows.json](../benchmarks/ui-overhead-windows.json)):
+
+| Concurrency | Status API p95, CLI / UI (median ms) | Run p95, CLI / UI (ms) | Runs/s, CLI / UI |
+| ---: | --- | --- | --- |
+| 8 | 33.5 / 33.4 | 65.8 / 61.8 | 100.5 / 102.1 |
+| 64 | 716.0 / 804.0 | 89.5 / 90.7 | 88.99 / 92.52 |
+
+No measurable regression: at concurrency 8 the medians match, and at 64 the per-round
+status-API p95 ranges overlap (CLI 689.1–1144.2 ms,
+UI 696.7–1067.7 ms). The job runs in its own process, so the screen's polling
+lands on the workspace, not on the RunWeave being measured. The poller stands in for a
+browser (charts render client-side). The high status-API p95 at 64 is the load test's own
+in-process driver competing for one event loop, and throughput near 90 runs/s is the
+per-run CPU cost of RunWeave and the driver sharing one process on this machine, with or
+without the UI; neither is a claim about provider capacity.

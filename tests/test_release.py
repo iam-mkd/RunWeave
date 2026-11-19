@@ -127,3 +127,22 @@ def test_the_example_ci_job_passes_and_then_fails_on_a_seeded_regression(tmp_pat
     assert "regress" in failed.stdout.lower()
     junit = next(word for word in shlex.split(eval_step) if word.endswith(".xml"))
     assert ET.parse(project / junit).getroot().attrib["failures"] != "0"
+
+
+def test_serve_imports_project_agents_like_the_installed_command(tmp_path: Path) -> None:
+    # The `runweave` console script does not put the working folder on sys.path (unlike
+    # `python -m`); `python -P` reproduces that. The template README says to run this.
+    assert run_step("uvx runweave init proj", tmp_path).returncode == 0
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RUNWEAVE_")}
+    env["PYTHONPATH"] = str(ROOT / "src")
+    checked = subprocess.run(
+        [sys.executable, "-P", "-m", "runweave.cli", "serve", "--check", "--agent", "agent:run"],
+        cwd=tmp_path / "proj",
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    assert checked.returncode == 0, checked.stderr
+    assert "word-count 0.1.0" in checked.stdout

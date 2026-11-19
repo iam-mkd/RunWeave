@@ -48,6 +48,14 @@ All notable changes to RunWeave are recorded here. The format follows
   without prompt text, and fixture-scripted deterministic replies
   (`RUNWEAVE_PROXY_MOCK_FIXTURES`). Verified with the official OpenAI and Anthropic SDKs
   for Python and Node and with PydanticAI. See `docs/llm-proxy.md`.
+- Release readiness (milestone 22): wheels carry the built workspace UI
+  (`scripts/bundle-workspace-ui.py`), so `uvx runweave serve` needs no Node;
+  `scripts/check-release.py` checks a clean `uvx` install end to end (CLI and UI, Python
+  and TypeScript projects) and runs in CI on Linux and Windows; a copy-ready GitHub Actions
+  job (`examples/github-actions`) fails pull requests that regress the agent;
+  `scripts/measure-ui-overhead.py` shows load tests are not slowed by an open screen.
+  `runweave serve --agent module:fn` now imports from the working folder when run as the
+  installed command.
 - Load tests, Evals and Shadow screens (milestone 22): the workspace starts
   `runweave bench|eval|shadow --progress` as a child process through a new jobs API
   (`/v1/jobs`, `/v1/reports`), charts load tests live, and lists saved reports from the

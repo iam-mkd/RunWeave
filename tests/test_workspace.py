@@ -86,7 +86,7 @@ async def test_workspace_rejects_cross_origin_browser_requests(
 
 
 def test_workspace_rejects_missing_build_or_nonlocal_auth(assets: Path, tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="Build the workspace"):
+    with pytest.raises(ValueError, match="No built workspace UI"):
         create_workspace(Settings(), tmp_path / "missing")
     with pytest.raises(ValueError, match="requires RUNWEAVE_AUTH_MODE=local"):
         create_workspace(
