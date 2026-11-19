@@ -69,7 +69,8 @@ in `sdk/typescript`. See [HTTP agents](docs/http-agents.md).
 
 Before an action that matters, an agent can wait for a person:
 `await ctx.request_approval("issue_refund", {"order": "A-17"})` returns the decision for
-those exact arguments (durable mode). See [Approvals for your agents](docs/agent-approvals.md).
+those exact arguments (durable mode). Decide in the workspace's Approvals screen or with
+`runweave approvals`. See [Approvals for your agents](docs/agent-approvals.md).
 
 Point your model SDK at RunWeave's LLM proxy (`ctx.proxy`) and every call is metered,
 budgeted and shown on the run timeline. It speaks OpenAI Chat Completions, OpenAI

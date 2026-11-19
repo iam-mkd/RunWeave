@@ -11,6 +11,7 @@ function cleanParams(query) {
   if (statuses.has(raw.get('status'))) params.status = raw.get('status');
   if (isRunId(raw.get('from'))) params.from = raw.get('from');
   if (isReportId(raw.get('report'))) params.report = raw.get('report');
+  if (isRunId(raw.get('run'))) params.run = raw.get('run');
   return params;
 }
 
@@ -24,6 +25,9 @@ export function parseRoute(hash, search) {
   }
   if (parts[0] === 'setup') return { screen: 'setup', params: {} };
   if (parts[0] === 'settings') return { screen: 'settings', params: {} };
+  if (parts[0] === 'approvals' && parts.length === 1) {
+    return { screen: 'approvals', params: params.run ? { run: params.run } : {} };
+  }
   if (testingScreens.has(parts[0]) && parts.length === 1) {
     return { screen: parts[0], params: params.report ? { report: params.report } : {} };
   }
@@ -50,6 +54,7 @@ export function href({ screen, id, params }) {
   if (screen === 'runs') return `#/runs${query(params)}`;
   if (screen === 'setup') return '#/setup';
   if (screen === 'settings') return '#/settings';
+  if (screen === 'approvals') return `#/approvals${query(params?.run ? { run: params.run } : {})}`;
   if (testingScreens.has(screen)) {
     return `#/${screen}${query(params?.report ? { report: params.report } : {})}`;
   }

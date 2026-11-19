@@ -77,15 +77,18 @@ async function approvalChecks(adminDsn) {
   if (made.status !== 0) throw new Error(`Could not create the smoke database: ${made.stderr}`);
   const dsn = made.stdout.trim();
   const durableEnv = { ...env, RUNWEAVE_DATABASE_URL: dsn };
+  // An empty folder, so a developer's .env (read by Settings) cannot change the setup.
+  const isolated = mkdtempSync(join(tmpdir(), 'runweave-durable-'));
   let durable;
   try {
-    const migrated = spawnSync(python, ['-m', 'alembic', 'upgrade', 'head'], { cwd: root, env: durableEnv, encoding: 'utf8' });
+    const migrated = spawnSync(python, ['-m', 'alembic', '-c', join(root, 'alembic.ini'), 'upgrade', 'head'],
+      { cwd: isolated, env: durableEnv, encoding: 'utf8' });
     if (migrated.status !== 0) throw new Error(`Migrations failed: ${migrated.stderr}`);
     const durablePort = await freePort();
     const durableBase = `http://127.0.0.1:${durablePort}`;
     let log = '';
-    durable = spawn(python, ['-m', 'runweave.cli', 'serve', '--port', String(durablePort), '--agent', 'sample_agent:refund_request'],
-      { cwd: root, env: durableEnv, stdio: ['ignore', 'pipe', 'pipe'] });
+    durable = spawn(python, ['-m', 'runweave.cli', 'serve', '--port', String(durablePort), '--agent', 'sample_agent:refund_request',
+      '--assets', join(frontend, 'dist')], { cwd: isolated, env: durableEnv, stdio: ['ignore', 'pipe', 'pipe'] });
     durable.stdout.on('data', (chunk) => { log = (log + chunk).slice(-8192); });
     durable.stderr.on('data', (chunk) => { log = (log + chunk).slice(-8192); });
     await until(async () => {
@@ -97,8 +100,9 @@ async function approvalChecks(adminDsn) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ agent: 'refund-request', input }),
       });
-      assert.equal(response.status, 202, await response.text());
-      return (await response.json()).status_url;
+      const text = await response.text();
+      assert.equal(response.status, 202, text);
+      return JSON.parse(text).status_url;
     };
     const runStatus = async (url) => (await (await fetch(`${durableBase}${url}`)).json());
     const first = await submit({ order: 'A-17', amount: 40, note: hostile });
