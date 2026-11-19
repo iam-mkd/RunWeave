@@ -373,7 +373,8 @@ async def test_limiter_spaces_calls_and_respects_the_deadline() -> None:
     for _ in range(3):
         async with limiter.slot():
             pass
-    assert loop.time() - started >= 0.19
+    # Two 0.1 s gaps, less Windows timer granularity (about 15.6 ms per tick).
+    assert loop.time() - started >= 0.2 - 0.03
     slow = ProviderLimiter(concurrency=1, requests_per_minute=1)
     async with slow.slot():
         pass

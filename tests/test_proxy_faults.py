@@ -138,6 +138,10 @@ def test_unknown_active_profiles_fail_at_startup() -> None:
         create_app(Settings(proxy_fault_profile="nope"), agents=[])
 
 
+# Windows timers tick about every 15.6 ms, so a 0.3 s sleep can measure a few ms short.
+CLOCK_SLACK = 0.03
+
+
 def always(kind: str, **params: Any) -> dict[str, Any]:
     return {
         "proxy_fault_profile": "custom",
@@ -180,7 +184,7 @@ async def test_timeout_faults_hold_the_request_then_answer_504() -> None:
         started = loop.time()
         response = await s.client.post("/llm/v1/chat/completions", json=CHAT, headers=s.openai())
         elapsed = loop.time() - started
-    assert response.status_code == 504 and elapsed >= 0.3
+    assert response.status_code == 504 and elapsed >= 0.3 - CLOCK_SLACK
 
 
 @pytest.mark.asyncio
@@ -201,7 +205,8 @@ async def test_slow_first_token_delays_but_completes() -> None:
             "/llm/v1/chat/completions", json={**CHAT, "stream": True}, headers=s.openai()
         )
         elapsed = loop.time() - started
-    assert response.status_code == 200 and "[DONE]" in response.text and elapsed >= 0.3
+    assert response.status_code == 200 and "[DONE]" in response.text
+    assert elapsed >= 0.3 - CLOCK_SLACK
     assert "fault: slow_first_token" in (s.steps.details()[0][1] or "")
 
 
