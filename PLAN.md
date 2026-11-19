@@ -1321,6 +1321,13 @@ Implementation notes, pull request C (2026-11-19):
   the CLI and the UI; the example CI job fails on a seeded regression; and a
   load test with the UI open shows no measurable status-API regression.
 
+Decisions with the owner (2026-11-19): deliver in four pull requests (A: `runweave.toml`,
+`runweave init` and `runweave eval`; B: `runweave bench` and `runweave shadow`; C: a
+shared jobs API with the Load tests, Evals and Shadow screens; D: the example GitHub
+Actions job, the UI bundled in the wheel, and the clean-machine `uvx` check, publishing
+only when the owner asks). CLI commands run RunWeave in-process by default and accept
+`--server URL` to submit to a running instance; both paths drive the same HTTP API.
+
 ### 23. Approvals through the agent SDKs
 
 - Add `ctx.request_approval(action, arguments, expires_in)` to both SDKs. It
