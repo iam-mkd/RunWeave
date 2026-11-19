@@ -1,12 +1,14 @@
 import React from 'react';
 import { Icon } from './icons.jsx';
+import { useScrollRegion } from './scroll.js';
 
 function nextDirection(sort, key) {
   return sort?.key === key && sort.direction === 'ascending' ? 'descending' : 'ascending';
 }
 
 export function DataTable({ caption, captionHidden = false, columns, rows, rowKey, sort, onSort, empty = 'Nothing to show yet.', onRowClick, selectedKey }) {
-  return <div className="table-wrap">
+  const region = useScrollRegion(caption);
+  return <div className="table-wrap" {...region}>
     <table className="data-table">
       <caption className={captionHidden ? 'visually-hidden' : undefined}>{caption}</caption>
       <thead>

@@ -3,7 +3,7 @@ import { api, approvalBody, terminal } from '../api.js';
 import { ErrorState, KeyValueList, LoadingState, PageHeader, Panel, StatTile, StatusBadge } from '../components/index.js';
 import { compactNumber, duration, usd } from '../format.js';
 import { href } from '../router.js';
-import { JsonBlock, RunOutput, RunTimeline, runModelSummary } from './parts.jsx';
+import { JsonBlock, RunOutput, RunTimeline, ScrollPre, runModelSummary } from './parts.jsx';
 import { useApproval, useLiveRun } from './useLiveRun.js';
 
 function dateLabel(value) {
@@ -76,7 +76,7 @@ export function RunDetailScreen({ id }) {
           {snapshot.status === 'WAITING_APPROVAL' && !approval.agent && <Panel title="Approval requested" id="approval">
             {approval.error && <ErrorState>{approval.error}</ErrorState>}
             {approval.approval && <div className="stack">
-              <pre>{approval.approval.call.arguments}</pre>
+              <ScrollPre label="Ticket arguments">{approval.approval.call.arguments}</ScrollPre>
               <p className="muted">Expires {dateLabel(approval.approval.expires_at)}</p>
               {approval.approval.status === 'pending' && <div className="row">
                 <button type="button" className="primary" disabled={busy}

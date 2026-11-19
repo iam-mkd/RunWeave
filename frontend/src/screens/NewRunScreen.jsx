@@ -74,6 +74,13 @@ export function NewRunScreen({ params, config, navigate }) {
     return () => controller.abort();
   }, [agent, form, params.from]);
 
+  // Errors take keyboard and screen-reader users to the first invalid field, whose
+  // description is its error message.
+  useEffect(() => {
+    const first = errors.raw ? 'raw' : form.fields.find((field) => errors[field.name])?.name;
+    if (first) document.getElementById(`run-${first}`)?.focus();
+  }, [errors, form.fields]);
+
   async function submit(event) {
     event.preventDefault();
     if (!agent || submitting) return;

@@ -8,6 +8,14 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Accessibility audit (milestone 24, part 1): the browser smoke test audits every screen
+  it reaches with axe-core (WCAG 2.1 AA) in both themes at desktop and 390 px, and checks
+  keyboard paths, focus management and reduced motion. Fixes:
+  - scrolling tables and code blocks are keyboard-reachable while they overflow;
+  - form errors move focus to the first invalid field;
+  - the approval confirmation takes focus, Escape cancels it, and focus stays on the panel
+    after a decision.
+  Setup reuses the shared command block. New development dependency: axe-core (MPL-2.0).
 - Approvals screen and `runweave approvals` (milestone 23, part 3): a pending inbox with the
   exact arguments, digest, policy and expiry, confirmed Approve and Reject, and a link from
   waiting runs; `runweave approvals list|show|approve|reject` with confirmation and exit

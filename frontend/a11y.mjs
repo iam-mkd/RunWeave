@@ -40,13 +40,20 @@ export async function audit(page, label) {
   }
 }
 
+// Lets resize observers and the re-render they cause run before measuring.
+function settle(page) {
+  return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
 /** Audits a screen at desktop width and at 390 px, and checks it does not scroll sideways. */
 export async function checkScreen(page, label) {
   await audit(page, `${label} (desktop)`);
   await page.setViewportSize({ width: 390, height: 844 });
+  await settle(page);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${label} overflows at 390px`);
   await audit(page, `${label} (390 px)`);
   await page.setViewportSize({ width: 1360, height: 980 });
+  await settle(page);
 }
 
 export function report(path) {
