@@ -208,8 +208,8 @@ function ProjectSummary({ project }) {
     The same command runs from a terminal; reports are saved to the project's report folder.</p>;
 }
 
-function DatasetSelect({ id, project, value, onChange }) {
-  return <div className="field"><label htmlFor={id}>Dataset</label>
+function DatasetSelect({ id, project, value, onChange, compact = false }) {
+  return <div className={compact ? undefined : 'field'}><label htmlFor={id} className={compact ? 'visually-hidden' : undefined}>Dataset</label>
     <select id={id} value={value} onChange={(event) => onChange(event.target.value)}>
       {project.datasets.map((dataset) => <option key={dataset.name} value={dataset.name}>
         {dataset.name}{dataset.cases === null ? ' (invalid)' : ` · ${dataset.cases} cases`}</option>)}
@@ -343,6 +343,9 @@ export function LoadTestsScreen({ report: reportId, navigate }) {
         <ProjectSummary project={project} />
         <JobStatus job={job.job} error={job.error} onCancel={job.cancel} />
         {job.running && <LiveLoad events={job.events} />}
+        {!job.running && report && <div className="grid two">
+          {benchSummary(report).map((tile) => <StatTile key={tile.label} label={tile.label} value={tile.value} />)}
+        </div>}
         {!job.running && !report && !reportError && <p className="muted">Start a load test, or open a saved one below.</p>}
       </div>
     </div>}
@@ -361,6 +364,19 @@ function AssertionList({ assertions }) {
     <StatusBadge tone={item.passed ? 'good' : 'critical'} label={item.passed ? 'Pass' : 'Fail'} />
     <span className="mono">{item.name}</span>{item.message && <span>{item.message}</span>}
   </li>)}</ul>;
+}
+
+/** Stat tiles for a saved load test: best throughput, p95 at the highest level, failures and levels. */
+export function benchSummary(report) {
+  const top = Math.max(...report.cases.map((row) => row.concurrency));
+  const p95 = Math.max(...report.cases.filter((row) => row.concurrency === top).map((row) => row.latency_ms.p95 ?? 0));
+  const failed = report.cases.reduce((sum, row) => sum + Object.values(row.failures).reduce((a, b) => a + b, 0), 0);
+  return [
+    { label: 'Best throughput', value: `${Math.max(...report.cases.map((row) => row.throughput_rps))} runs/s` },
+    { label: `p95 at concurrency ${top}`, value: ms(p95) },
+    { label: 'Failed runs', value: compactNumber(failed) },
+    { label: 'Levels', value: String(report.cases.length) },
+  ];
 }
 
 export function visibleCases(cases, { failedOnly, search }) {
@@ -412,7 +428,7 @@ export function EvalResults({ report, selected, onSelect }) {
         <div className="stack">
           <AssertionList assertions={current.assertions} />
           <KeyValueList items={[
-            { label: 'Run status', value: current.status },
+            { label: 'Run status', value: <StatusBadge status={current.status} /> },
             { label: 'Latency', value: ms(current.latency_ms) },
             { label: 'Tokens', value: compactNumber(current.tokens) },
           ]} />
@@ -447,14 +463,15 @@ export function EvalsScreen({ report: reportId, navigate }) {
   const chosen = dataset || project?.datasets[0]?.name || '';
 
   return <>
-    <PageHeader eyebrow="Evals" title="Evals" description="Run a dataset through your agent. Assertions and gates decide pass or fail, exactly as `runweave eval` does in CI." />
+    <PageHeader eyebrow="Evals" title="Evals"
+      description={<>Run a dataset through your agent. Assertions and gates decide pass or fail, the same way <code>runweave eval</code> does in CI.</>}
+      actions={project && <form className="row" onSubmit={(event) => { event.preventDefault(); job.start({ kind: 'eval', dataset: chosen }); }}>
+        <DatasetSelect id="eval-dataset" project={project} value={chosen} onChange={setDataset} compact />
+        <button className="primary" disabled={job.running || !chosen}>{job.running ? 'Running…' : 'Run eval'}</button>
+      </form>} />
     {missing && <NoProject />}
     {error && !missing && <ErrorState>{error}</ErrorState>}
     {project && <div className="stack">
-      <form className="row" onSubmit={(event) => { event.preventDefault(); job.start({ kind: 'eval', dataset: chosen }); }}>
-        <DatasetSelect id="eval-dataset" project={project} value={chosen} onChange={setDataset} />
-        <button className="primary" disabled={job.running || !chosen}>{job.running ? 'Running…' : 'Run eval'}</button>
-      </form>
       <ProjectSummary project={project} />
       <JobStatus job={job.job} error={job.error} onCancel={job.cancel} />
       {job.running && <LiveCases events={job.events} />}
@@ -476,11 +493,28 @@ const gateLabels = {
 };
 
 function gateThreshold(name, settings = {}) {
-  if (name === 'candidate_pass_rate_met') return `at least ${percent(settings.min_pass_rate ?? 1)}`;
-  if (name === 'no_paired_regressions') return 'no case that passes now fails';
-  if (name === 'outcome_parity') return settings.require_output_parity ? 'same status and output' : 'same status';
-  if (name === 'candidate_cost_within_limit') return `at most ${Math.round((settings.max_cost_ratio ?? 1.05) * 100)}% per case`;
-  return `at most ${settings.max_latency_ratio ?? 2}× + ${settings.latency_slack_ms ?? 50} ms`;
+  if (name === 'candidate_pass_rate_met') return `≥ ${percent(settings.min_pass_rate ?? 1)}`;
+  if (name === 'no_paired_regressions') return '0 regressed';
+  if (name === 'outcome_parity') return settings.require_output_parity ? 'Same status and output' : 'Same status';
+  if (name === 'candidate_cost_within_limit') return `≤ ${Math.round((settings.max_cost_ratio ?? 1.05) * 100)}% of current`;
+  return `≤ ${settings.max_latency_ratio ?? 2}× + ${settings.latency_slack_ms ?? 50} ms`;
+}
+
+/** What the candidate measured for a promotion gate, beside its threshold. */
+export function gateMeasured(name, report) {
+  const { primary, candidate, pairs, settings = {} } = report;
+  if (name === 'candidate_pass_rate_met') return percent(candidate.pass_rate);
+  if (name === 'no_paired_regressions') return `${compactNumber(report.regressions.length)} regressed`;
+  if (name === 'outcome_parity') {
+    const output = settings.require_output_parity;
+    const same = pairs.filter((pair) => pair.differences.status_equal && (!output || pair.differences.output_equal)).length;
+    return `${compactNumber(same)} of ${compactNumber(pairs.length)}`;
+  }
+  if (name === 'candidate_cost_within_limit') {
+    const [now, next] = [Number(primary.cost_usd), Number(candidate.cost_usd)];
+    return now > 0 ? `${Math.round((next / now) * 100)}%` : usd(candidate.cost_usd);
+  }
+  return ms(candidate.p95_latency_ms);
 }
 
 const signedMs = (value) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)} ms`;
@@ -506,6 +540,7 @@ export function ShadowResults({ report }) {
           <DataTable caption="Promotion gates" captionHidden rowKey={(row) => row.name} rows={Object.entries(report.gates).map(([name, ok]) => ({ name, ok }))} columns={[
             { key: 'name', label: 'Gate', render: (row) => gateLabels[row.name] ?? row.name },
             { key: 'threshold', label: 'Threshold', render: (row) => gateThreshold(row.name, report.settings) },
+            { key: 'measured', label: 'Candidate', render: (row) => gateMeasured(row.name, report) },
             { key: 'ok', label: 'Result', render: (row) => <StatusBadge tone={row.ok ? 'good' : 'critical'} label={row.ok ? 'Pass' : 'Fail'} /> },
           ]} />
         </div>
@@ -567,16 +602,18 @@ export function ShadowScreen({ report: reportId, navigate }) {
     {missing && <NoProject />}
     {error && !missing && <ErrorState>{error}</ErrorState>}
     {project && <div className="stack">
-      <form className="row" onSubmit={(event) => {
+      <form className="stack tight" onSubmit={(event) => {
         event.preventDefault();
         job.start({ kind: 'shadow', dataset: chosen, ...(target && target !== configured ? { candidate: target } : {}) });
       }}>
-        <DatasetSelect id="shadow-dataset" project={project} value={chosen} onChange={setDataset} />
-        <div className="field"><label htmlFor="shadow-candidate">Candidate</label>
-          <input id="shadow-candidate" className="mono" placeholder="for example agent_v2:run" value={target}
-            onChange={(event) => setCandidate(event.target.value)} aria-describedby="shadow-candidate-hint" />
-          <span className="field-hint" id="shadow-candidate-hint">A Python <code>module:function</code> or an HTTP agent URL{configured ? '; defaults to [shadow] candidate' : ''}.</span></div>
-        <button className="primary" disabled={job.running || !chosen || (!target && !configured)}>{job.running ? 'Running…' : 'Compare'}</button>
+        <div className="row form-row">
+          <DatasetSelect id="shadow-dataset" project={project} value={chosen} onChange={setDataset} />
+          <div className="field grow"><label htmlFor="shadow-candidate">Candidate</label>
+            <input id="shadow-candidate" className="mono" placeholder="for example agent_v2:run" value={target}
+              onChange={(event) => setCandidate(event.target.value)} aria-describedby="shadow-candidate-hint" /></div>
+          <button className="primary" disabled={job.running || !chosen || (!target && !configured)}>{job.running ? 'Running…' : 'Compare'}</button>
+        </div>
+        <span className="field-hint" id="shadow-candidate-hint">A Python <code>module:function</code> or an HTTP agent URL{configured ? '; defaults to [shadow] candidate' : ''}.</span>
       </form>
       <ProjectSummary project={project} />
       <JobStatus job={job.job} error={job.error} onCancel={job.cancel} />

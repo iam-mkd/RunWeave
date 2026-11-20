@@ -8,6 +8,13 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- UI polish and screenshots (milestone 24, part 3; completes milestone 24): screens
+  matched to the approved mockups. Runs: "Recent runs", a run count, 24-hour times and
+  sortable columns. Evals: the run form in the page header and run states as badges.
+  Shadow: each gate shows the candidate's measured value, and the form is aligned. Load
+  tests: summary tiles for an open report. Connect: current LLM proxy copy. The demo
+  triage summary no longer doubles a full stop. `npm run screenshots` captures every
+  screen in both themes to `docs/images`, shown in README and `docs/workspace.md`.
 - Large data (milestone 24, part 2): tables show 100 rows at a time with an accessible
   pager; eval reports start on failed cases and can be searched, shadow reports start on
   changed pairs; long live charts are downsampled. `npm run test:perf` checks budgets with

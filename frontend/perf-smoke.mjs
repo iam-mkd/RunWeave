@@ -183,8 +183,8 @@ try {
   const older = page.getByRole('button', { name: 'Load older runs' });
   const loadTimes = [];
   for (let i = 0; i < 12; i += 1) {
-    const before = await page.getByText(/Rows \d+–\d+ of [\d,]+|runs loaded/).first().textContent().catch(() => '');
-    loadTimes.push(await timed(() => older.click(), () => until(async () => (await page.getByText(/Rows \d+–\d+ of [\d,]+|runs loaded/).first().textContent().catch(() => '')) !== before, 'older runs', 10000)));
+    const before = await page.locator('.runs-count').textContent().catch(() => '');
+    loadTimes.push(await timed(() => older.click(), () => until(async () => (await page.locator('.runs-count').textContent().catch(() => '')) !== before, 'older runs', 10000)));
   }
   results.runs.loadOlderMs = Math.max(...loadTimes);
   results.runs.domRows = await rows('section[aria-labelledby="runs-table-title"]');

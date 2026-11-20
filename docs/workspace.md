@@ -12,9 +12,42 @@ with every registered agent, including your own Python agents (see the
 | Runs (`#/runs`) | Your runs, newest first, filtered by agent and state; open any run by ID |
 | New run (`#/runs/new`) | A form generated from the agent's input JSON Schema (raw JSON for schemas it cannot represent) |
 | Run detail (`#/runs/<id>`) | Live status, step timeline, output, input, usage, cancel and re-run; approvals for durable triage runs |
+| Load tests (`#/load-tests`) | Runs `runweave bench` for the project: concurrency levels, fault profiles and a soak, with live charts and saved reports |
+| Evals (`#/evals`) | Runs `runweave eval` on a dataset: cases, assertions, gates and saved reports |
+| Shadow (`#/shadow`) | Runs `runweave shadow`: a candidate beside the current agent, the promotion gates and paired cases |
+| Approvals (`#/approvals`) | Requests from agents waiting for a person (durable mode): exact arguments, confirmed approve and reject |
 
 Run detail follows the run over server-sent events and falls back to polling once a
 second when streams are busy or unavailable. Old `/?run=<id>` links still open the run.
+
+## Screens
+
+Every screen in both themes, from a seeded project (a real eval with one failing case, a
+load test with two fault profiles and a short soak, a shadow comparison against a changed
+version, and approval requests from the sample refund agent). The tables and charts are
+real output from this machine, not fixtures.
+
+| Screen | Dark | Light |
+| --- | --- | --- |
+| Agents | ![Agents, dark theme](images/agents-dark.png) | ![Agents, light theme](images/agents-light.png) |
+| Runs | ![Runs, dark theme](images/runs-dark.png) | ![Runs, light theme](images/runs-light.png) |
+| New run | ![New run, dark theme](images/new-run-dark.png) | ![New run, light theme](images/new-run-light.png) |
+| Run detail | ![Run detail, dark theme](images/run-detail-dark.png) | ![Run detail, light theme](images/run-detail-light.png) |
+| Load tests | ![Load tests, dark theme](images/load-tests-dark.png) | ![Load tests, light theme](images/load-tests-light.png) |
+| Evals | ![Evals, dark theme](images/evals-dark.png) | ![Evals, light theme](images/evals-light.png) |
+| Shadow | ![Shadow, dark theme](images/shadow-dark.png) | ![Shadow, light theme](images/shadow-light.png) |
+| Approvals | ![Approvals, dark theme](images/approvals-dark.png) | ![Approvals, light theme](images/approvals-light.png) |
+| Settings | ![Settings, dark theme](images/settings-dark.png) | ![Settings, light theme](images/settings-light.png) |
+| Connect | ![Connect an agent, dark theme](images/setup-dark.png) | ![Connect an agent, light theme](images/setup-light.png) |
+
+To regenerate them after a UI change, build the workspace and run the script. With
+`RUNWEAVE_SMOKE_POSTGRES_URL` set to a PostgreSQL server it also captures Approvals; it
+creates and drops its own database.
+
+```powershell
+npm.cmd --prefix frontend run build
+npm.cmd --prefix frontend run screenshots
+```
 
 ## Start from a checkout
 

@@ -10,7 +10,7 @@ const pollMs = 2000;
 const kinds = [
   { id: 'python', title: 'Python callable', text: 'An async function in your project, decorated with @runweave.sdk.agent.', available: true },
   { id: 'http', title: 'HTTP endpoint', text: 'A service in any language that speaks the runweave.agent/v1 contract, on this machine.', available: true },
-  { id: 'proxy', title: 'LLM proxy only', text: 'Point your SDK’s base URL at RunWeave. Arrives in milestone 21.', available: false },
+  { id: 'proxy', title: 'LLM proxy only', text: 'Not a separate connection: connect your agent with one of the other options, and its model calls go through RunWeave’s LLM proxy with the per-run base URL and token it receives.', available: false },
 ];
 
 function HttpSetup({ onBack }) {

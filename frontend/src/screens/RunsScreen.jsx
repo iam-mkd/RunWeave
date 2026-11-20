@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { isRunId, listAgents, listRuns, terminal } from '../api.js';
 import { DataTable, ErrorState, LoadingState, PageHeader, Pager, Panel, StatusBadge, usePages } from '../components/index.js';
-import { compactNumber, duration, statusLabel, usd } from '../format.js';
+import { compactNumber, duration, sortRows, statusLabel, usd } from '../format.js';
 import { href } from '../router.js';
 
 const statuses = ['QUEUED', 'RUNNING', 'WAITING_APPROVAL', 'SUCCEEDED', 'FAILED', 'TIMED_OUT', 'CANCELLED'];
@@ -12,18 +12,33 @@ function runDuration(run) {
   return Math.max(0, (run.finished_at ? Date.parse(run.finished_at) : Date.now()) - Date.parse(run.started_at));
 }
 
-function timeLabel(value) {
-  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+export function timeLabel(value) {
+  return new Date(value).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+}
+
+const sortValues = {
+  duration: (run) => runDuration(run) ?? -1,
+  tokens: (run) => (run.usage ? run.usage.input_tokens + run.usage.output_tokens : -1),
+  cost: (run) => (run.usage ? Number(run.usage.estimated_cost_usd) : -1),
+};
+
+/** Sorts the loaded runs by a column; derived columns sort by their number, missing values first. */
+export function sortRuns(rows, sort) {
+  if (!sort?.key) return rows;
+  const value = sortValues[sort.key];
+  if (!value) return sortRows(rows, sort.key, sort.direction);
+  const keyed = rows.map((run) => ({ run, [sort.key]: value(run) }));
+  return sortRows(keyed, sort.key, sort.direction).map((entry) => entry.run);
 }
 
 const columns = [
   { key: 'id', label: 'Run', render: (run) => <a className="mono" href={href({ screen: 'run', id: run.id })} aria-label={`Open run ${run.id}`}>{run.id.slice(0, 8)}</a> },
-  { key: 'agent', label: 'Agent' },
-  { key: 'status', label: 'State', render: (run) => <StatusBadge status={run.status} /> },
-  { key: 'submitted_at', label: 'Submitted', render: (run) => <span className="mono">{timeLabel(run.submitted_at)}</span> },
-  { key: 'duration', label: 'Duration', numeric: true, render: (run) => duration(runDuration(run)) },
-  { key: 'tokens', label: 'Tokens', numeric: true, render: (run) => run.usage ? compactNumber(run.usage.input_tokens + run.usage.output_tokens) : '—' },
-  { key: 'cost', label: 'Est. cost', numeric: true, render: (run) => run.usage ? usd(run.usage.estimated_cost_usd) : '—' },
+  { key: 'agent', label: 'Agent', sortable: true },
+  { key: 'status', label: 'State', sortable: true, render: (run) => <StatusBadge status={run.status} /> },
+  { key: 'submitted_at', label: 'Submitted', sortable: true, render: (run) => <span className="mono">{timeLabel(run.submitted_at)}</span> },
+  { key: 'duration', label: 'Duration', numeric: true, sortable: true, render: (run) => duration(runDuration(run)) },
+  { key: 'tokens', label: 'Tokens', numeric: true, sortable: true, render: (run) => run.usage ? compactNumber(run.usage.input_tokens + run.usage.output_tokens) : '—' },
+  { key: 'cost', label: 'Est. cost', numeric: true, sortable: true, render: (run) => run.usage ? usd(run.usage.estimated_cost_usd) : '—' },
 ];
 
 export function RunsScreen({ params, navigate }) {
@@ -32,6 +47,7 @@ export function RunsScreen({ params, navigate }) {
   const [more, setMore] = useState([]);
   const [error, setError] = useState('');
   const [lookup, setLookup] = useState('');
+  const [sort, setSort] = useState({ key: 'submitted_at', direction: 'descending' });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -76,7 +92,8 @@ export function RunsScreen({ params, navigate }) {
 
   const filter = (change) => navigate(href({ screen: 'runs', params: { ...params, ...change } }));
   const rows = [...(runs ?? []), ...more];
-  const pages = usePages(rows, { resetKey: `${params.agent}|${params.status}` });
+  const sorted = sortRuns(rows, sort);
+  const pages = usePages(sorted, { resetKey: `${params.agent}|${params.status}|${sort.key}|${sort.direction}` });
 
   return <>
     <PageHeader eyebrow="Runs" title="Runs" description="Your runs across every agent, newest first."
@@ -98,18 +115,19 @@ export function RunsScreen({ params, navigate }) {
           onChange={(event) => setLookup(event.target.value.trim())} />
         <button type="submit" disabled={!isRunId(lookup)}>Open</button>
       </form>
+      {runs !== null && <span className="muted runs-count">{rows.length === 1 ? '1 run' : `${rows.length} runs`}</span>}
     </div>
     {error && <ErrorState>{error}</ErrorState>}
     {runs === null && !error && <LoadingState>Loading runs…</LoadingState>}
-    {runs !== null && <Panel title="Runs" id="runs-table" className="runs-panel">
+    {runs !== null && <Panel title="Recent runs" id="runs-table" className="runs-panel">
       <div className="panel-body flush">
         <DataTable caption="Runs" captionHidden columns={columns} rows={pages.visible} rowKey={(run) => run.id}
+          sort={sort} onSort={setSort}
           empty={params.agent || params.status ? 'No runs match these filters.' : 'No runs yet. Start one with New run.'} />
         <Pager label="Runs" window={pages.window} onPage={pages.setPage} />
       </div>
       {rows.length >= 50 && <div className="table-footer row">
         <button type="button" onClick={loadMore}>Load older runs</button>
-        <span className="muted">{rows.length} runs loaded</span>
       </div>}
     </Panel>}
   </>;
