@@ -285,6 +285,22 @@ def test_npm_publishing_says_how_the_first_publish_authenticates() -> None:
     assert "runweave-agent-" in text
 
 
+def test_npm_publishes_the_tarball_as_a_file_not_a_github_shorthand() -> None:
+    # v0.1.0: `npm publish dist/runweave-agent-0.1.0.tgz` read the path as the GitHub
+    # repository "dist/runweave-agent-0.1.0.tgz" and tried to clone it. A path that starts
+    # with ./ is always a file to npm.
+    job = _load(".github/workflows/release.yml")["jobs"]["publish-npm"]
+    publish = [
+        line.split()
+        for line in _run_text(job).splitlines()
+        if line.strip().startswith("npm publish")
+    ]
+    assert publish, "publish-npm runs npm publish"
+    for words in publish:
+        tarballs = [word for word in words if word.endswith(".tgz")]
+        assert tarballs and all(word.startswith("./") for word in tarballs), words
+
+
 # Versions
 
 

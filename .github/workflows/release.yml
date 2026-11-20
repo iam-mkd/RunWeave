@@ -193,7 +193,9 @@ jobs:
           # Set only for the first publish (docs/release.md): npm's trusted publishing is
           # configured on an existing package. Later, with no NPM_TOKEN, npm uses OIDC.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish dist/runweave-agent-*.tgz --provenance --access public
+        # The ./ makes npm read the path as a file: `dist/x.tgz` alone parses as a GitHub
+        # repository shorthand, which is how the v0.1.0 npm publish failed.
+        run: npm publish ./dist/runweave-agent-*.tgz --provenance --access public
 
   publish-image:
     needs: [build, install-check]

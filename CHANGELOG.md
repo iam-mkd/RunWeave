@@ -6,11 +6,19 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+
+- Release: `publish-npm` now runs `npm publish ./dist/runweave-agent-*.tgz`. Without the
+  `./`, npm read `dist/runweave-agent-0.1.0.tgz` as a GitHub repository shorthand and tried
+  to clone it over SSH, so `runweave-agent` 0.1.0 was not published. The SDK's first npm
+  release comes with the next version.
+
 ## [0.1.0] - 2026-11-20
 
 The first public release. Install it with `uv tool install runweave`, `pipx install
-runweave` or `pip install runweave`; the TypeScript SDK is `runweave-agent` on npm. It
-covers milestones 1–27. Milestones 1–16 and the first workspace brought bounded async
+runweave` or `pip install runweave`. The TypeScript SDK, `runweave-agent`, was meant for
+npm but its publish failed (see Unreleased); until it is published, `runweave init
+--language typescript` projects carry a copy. It covers milestones 1–27. Milestones 1–16 and the first workspace brought bounded async
 scheduling, deadlines, retries, cancellation and graceful shutdown; incident-triage
 workflows (baseline, PydanticAI, coordinated); observability and load benchmarks;
 PostgreSQL durable recovery, checkpoints, approvals, scoped memory and budgets;

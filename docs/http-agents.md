@@ -54,7 +54,7 @@ const server = await serveAgents([agent], { port: 9200 }); // loopback only
 
 The context has `runId`, `attempt`, `signal` (aborted on cancellation or deadline; pass it
 to your I/O), `remainingMs()`, `step(title, fn, { detail })`, `log()` and `usage()`. Install
-it with `npm install runweave-agent` once v0.1.0 is on npm (projects from
+it with `npm install runweave-agent` once it is on npm (projects from
 `runweave init --language typescript` carry a copy in `vendor/`). To run the example from
 the repository:
 
