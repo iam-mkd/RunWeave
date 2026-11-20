@@ -370,14 +370,26 @@ The benchmark commands, fault matrix, and measured results are in the
 
 ## Docker
 
+The service image carries the workspace UI, durable mode (PostgreSQL driver and
+migrations) and the workflow extra. With Compose, RunWeave runs with PostgreSQL at
+http://127.0.0.1:8000:
+
+```powershell
+Copy-Item compose.env.example compose.env   # then set POSTGRES_PASSWORD
+docker compose --env-file compose.env up --build
+```
+
+Or the image alone, in memory:
+
 ```powershell
 docker build -t runweave:local .
 docker run --rm -p 127.0.0.1:8000:8000 runweave:local
 ```
 
-The container runs one Uvicorn process and defaults to the fake model. Check readiness
-at `http://127.0.0.1:8000/health/ready` and metrics at
-`http://127.0.0.1:8000/metrics`.
+The container runs one Uvicorn process and defaults to the fake model. Publish it on
+`127.0.0.1` only: the workspace accepts the `127.0.0.1` host and its own origin only.
+Readiness is at `http://127.0.0.1:8000/health/ready` and metrics at
+`http://127.0.0.1:8000/metrics`. See [release and Compose](docs/release.md#service-image-and-compose).
 
 ## Verification
 

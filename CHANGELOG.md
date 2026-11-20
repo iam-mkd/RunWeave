@@ -8,6 +8,18 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Service image, Compose and releases (milestone 25, part 1):
+  - **Image:** the service image now serves the workspace UI and supports durable mode
+    (the new `durable` extra, migrations and the workflow extra) through
+    `runweave serve --container`.
+  - **Compose:** `compose.yaml` runs PostgreSQL 18, a one-shot migration and RunWeave on
+    `127.0.0.1` only. The password goes in `compose.env`.
+  - **Release workflow:** `.github/workflows/release.yml` builds and checks on every pull
+    request: the wheel and sdist, the SDK tarball, CycloneDX SBOMs, `SHA256SUMS`, and the
+    image through Compose. It publishes to npm (with provenance) and GHCR, and creates a
+    draft GitHub Release, only for a version tag the owner pushes or a manual run, behind
+    the `release` environment.
+  - **CI:** CI runs actionlint.
 - UI polish and screenshots (milestone 24, part 3; completes milestone 24): screens
   matched to the approved mockups. Runs: "Recent runs", a run count, 24-hour times and
   sortable columns. Evals: the run form in the page header and run states as badges.

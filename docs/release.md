@@ -37,9 +37,11 @@ uv run --no-sync python scripts/check-container.py --image runweave-release:m16 
 The process-only PowerShell execution policy permits the checked-out scripts;
 it does not change the machine policy. Helpers stop/remove their disposable
 database or containers in `finally` blocks and restore test environment variables.
-The base service image includes the default in-memory/fake API. Durable tests run
-in the host environment with `requirements-durable.txt` and the workflow extra;
-the base image does not include the database driver or migration CLI.
+The service image serves the workspace and the API with the fake model by default, and
+includes durable mode (the `durable` and `workflow` extras and the migrations); see
+[Service image and Compose](#service-image-and-compose). Durable tests run in the host
+environment with `requirements-durable.txt` (the same pins as the `durable` extra) and the
+workflow extra.
 
 The release demo is `tests/test_postgres_release.py`. It creates scoped historical
 evidence, submits a coordinated run, terminates a worker process with exit 17
@@ -190,6 +192,72 @@ shadow, serve the workspace (UI and assets from the wheel) and run an eval and a
 through the jobs API the screens use. CI runs it on Linux and Windows (`clean-install`).
 
 Publishing to PyPI (Trusted Publishing, a 0.x pre-release) happens only when the owner asks.
+
+## Service image and Compose
+
+`docker build .` builds the UI in a Node stage, bundles it into the package, and installs
+RunWeave with the `durable` and `workflow` extras, the migrations and `alembic.ini`. The
+image runs as `10001:10001` with `runweave serve --container`: the only difference from
+`runweave serve` is that it listens on the container's interfaces. Publish it on the
+host's loopback only; the workspace still accepts only the `127.0.0.1` host and its own
+origin, and provider keys come from the environment (`RUNWEAVE_KEY_STORE=none`).
+
+`compose.yaml` runs PostgreSQL 18 (not published to the host, data in a named volume), a
+one-shot migration, then RunWeave on `127.0.0.1:${RUNWEAVE_PORT:-8000}`, with a read-only
+root filesystem, no capabilities and `no-new-privileges`. The database password lives in
+`compose.env` (copy `compose.env.example`; it is git-ignored and separate from RunWeave's
+`.env`, which rejects unknown keys):
+
+```powershell
+Copy-Item compose.env.example compose.env   # then set POSTGRES_PASSWORD
+docker compose --env-file compose.env up --build
+docker compose --env-file compose.env down     # add -v to delete the database volume
+```
+
+To run your own Python agents in it, build an image `FROM` this one with your package
+installed and set `RUNWEAVE_AGENTS`.
+
+`python scripts/check-container.py --compose --image <image> --output <file>` brings the
+stack up under a unique project name and a free port, then checks:
+- only RunWeave is published, on `127.0.0.1`;
+- the UI is served;
+- a spoofed Host gets 400 and a cross-origin request 403;
+- a durable triage run waits for approval, is approved and succeeds;
+- the run is still there after RunWeave restarts.
+
+It then removes the stack and its volume. The release workflow runs it on every pull
+request.
+
+## Releases (owner only)
+
+`.github/workflows/release.yml` builds on every pull request:
+- the wheel and sdist, with the UI bundled;
+- the TypeScript SDK tarball;
+- CycloneDX SBOMs for the Python package, the workspace UI and the SDK;
+- `SHA256SUMS`;
+- the service image, checked through Compose.
+
+These are kept as workflow artifacts. Nothing is published from a pull request.
+
+Publishing runs only when the owner pushes a tag (`vX.Y.Z` or `vX.Y.Z-rc.N`, matching
+`pyproject.toml` and the SDK's `package.json`) or starts the workflow by hand for an
+existing tag. All three publishing jobs run in the `release` environment:
+- `publish-npm`: `@runweave/agent` with provenance, through npm trusted publishing (no
+  token stored);
+- `publish-image`: pushes the exact image that was checked to
+  `ghcr.io/<owner>/runweave:<version>`;
+- `draft-release`: verifies the checksums and creates a **draft** GitHub Release with every
+  file.
+
+One-time setup by the owner, before the first release:
+- create the `release` environment with yourself as required reviewer, limited to `v*`
+  tags;
+- add this repository and workflow as a trusted publisher of `@runweave/agent` on
+  npmjs.com.
+
+Actions are pinned by commit SHA, the workflow has no default permissions, and each job
+gets only what it needs. CI also runs actionlint (with shellcheck) on every workflow. PyPI
+publishing is not part of this workflow.
 
 ## Load tests with the workspace open
 
