@@ -3,6 +3,14 @@
 !README.md
 !pyproject.toml
 !uv.lock
+!LICENSE
+!NOTICE
+!alembic.ini
+!migrations/
+!migrations/**
+!scripts/bundle-workspace-ui.py
+!frontend/
+!frontend/**
 !src/
 !src/**
 !sandbox/
@@ -14,3 +22,8 @@
 **/*.egg-info/
 **/.env
 **/.env.*
+frontend/node_modules/
+frontend/dist/
+frontend/dist-prototype/
+frontend/test-results/
+src/runweave/workspace_ui/

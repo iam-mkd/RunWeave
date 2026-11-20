@@ -41,6 +41,16 @@ def _settings(demo: bool) -> Settings:
     )
 
 
+def bind_host(args: argparse.Namespace) -> str:
+    """Loopback, except inside a container image, where the engine publishes the port.
+
+    The container's own network namespace is not reachable from other machines; the
+    Compose file publishes it on the host's loopback only, and the workspace keeps its
+    Host and origin checks.
+    """
+    return "0.0.0.0" if args.container else LOOPBACK
+
+
 def serve(args: argparse.Namespace) -> int:
     if args.host != LOOPBACK:
         print(f"runweave serve binds only to loopback ({LOOPBACK}).", file=sys.stderr)
@@ -106,7 +116,7 @@ def serve(args: argparse.Namespace) -> int:
         print(f"runweave: {error}", file=sys.stderr)
         return 1
     uvicorn.run(
-        app, host=LOOPBACK, port=args.port, proxy_headers=False, timeout_graceful_shutdown=10
+        app, host=bind_host(args), port=args.port, proxy_headers=False, timeout_graceful_shutdown=10
     )
     return 0
 
@@ -356,6 +366,11 @@ def parser() -> argparse.ArgumentParser:
     )
     start.add_argument("--check", action="store_true", help="Load agents, list them and exit")
     start.add_argument("--api-only", action="store_true", help="Serve the API without the UI")
+    start.add_argument(
+        "--container",
+        action="store_true",
+        help="Inside the service image only: listen on the container's interfaces",
+    )
     start.add_argument(
         "--project",
         type=Path,

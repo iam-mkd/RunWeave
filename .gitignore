@@ -31,3 +31,4 @@ frontend/dist-prototype/
 src/runweave/workspace_ui/
 # The TypeScript SDK copy that runweave init gives new projects (see scripts/vendor-typescript-sdk.py).
 !src/runweave/templates/typescript/vendor/runweave-agent/dist/
+compose.env
