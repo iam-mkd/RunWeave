@@ -1663,6 +1663,56 @@ Implementation notes, pull request C (2026-11-20):
   complete an approval, and uninstall with no processes left running; the
   Compose path is verified separately.
 
+Decisions with the owner (2026-11-20): the desktop sidecar is frozen with PyInstaller;
+portable PostgreSQL comes from zonky `embedded-postgres-binaries` (pinned, checksummed) for
+all three operating systems; Rust is installed locally for Tauri builds and CI builds all
+three operating systems; publishing is owner-triggered only (every pull request builds and
+verifies; npm, GHCR and GitHub Releases jobs run only on a version tag the owner pushes or a
+manual dispatch, behind a `release` environment, and releases start as drafts). Four pull
+requests: A (service image, Compose and the release workflow), B (desktop sidecar: portable
+PostgreSQL and the agent bridge), C (Tauri shell), D (desktop release builds, clean-runner
+verification, docs and check-off).
+
+Implementation notes, pull request A (2026-11-20):
+- **Tests first:**
+  - `tests/test_packaging.py`:
+    - the `durable` extra and `requirements-durable.txt` pin the same versions;
+    - the image is digest-pinned, non-root, and carries the UI and durable mode;
+    - Compose publishes on loopback only and requires a password;
+    - the release workflow publishes only for the owner (tag or dispatch, `release`
+      environment), with SHA-pinned actions, least privilege, provenance, a draft release,
+      checksums and SBOMs.
+  - `tests/test_cli.py`: `serve --container`.
+- **Service image:**
+  - a Node stage builds the UI, which is bundled into the package;
+  - the `durable` and `workflow` extras, the migrations, `RUNWEAVE_KEY_STORE=none` and user
+    `10001`;
+  - `runweave serve --container` listens on the container's interfaces. `--host` still
+    accepts only loopback, and the workspace's Host and origin checks are unchanged.
+- **Compose** (PostgreSQL 18.7 pinned by digest):
+  - PostgreSQL isn't published to the host;
+  - a one-shot migration runs before RunWeave starts;
+  - RunWeave is published on `127.0.0.1` with a read-only root, no capabilities and
+    `no-new-privileges`;
+  - the password is in `compose.env`, because RunWeave's `.env` rejects unknown keys.
+- **`scripts/check-container.py --compose`** passed locally (Docker 29.9.2, Windows):
+  - only RunWeave was published, on loopback;
+  - the UI was served;
+  - a spoofed Host got 400, and a cross-origin request 403;
+  - a durable triage run was approved and succeeded;
+  - the run was still there after a restart;
+  - cleanup completed.
+
+  The hardened single-container check also passes on the new image (256 MiB, read-only,
+  64 PIDs). The image is 288 MB.
+- **Release workflow:**
+  - Local dry run of its build steps: the wheel, sdist, SDK tarball, three CycloneDX SBOMs
+    and `SHA256SUMS`, which verify.
+  - actionlint is clean on every workflow, after fixing two existing shellcheck warnings in
+    `native-isolation.yml`.
+  - Publishing was not run; it needs the owner's tag, the `release` environment and npm
+    trusted publishing.
+
 ### 26. Developer documentation and framework examples
 
 - Write a five-minute quickstart with no API key, plus concepts, configuration

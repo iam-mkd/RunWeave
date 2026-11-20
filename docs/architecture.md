@@ -94,11 +94,11 @@ schema; it does not migrate a developer's existing database. Legacy migration,
 checkpoint and approval tests exercise compatibility and crash recovery.
 
 For image verification, `docker build -t runweave-release:m16 .` followed by
-`scripts/check-container.py` uses a loopback-only port and a disposable container.
-The base image is the minimal default API, not a durable/migration or sandbox
-controller image. Build/operate those roles separately with the documented
-dependencies; never solve container access by mounting the host Docker socket
-into a publicly exposed service.
+`scripts/check-container.py` uses a loopback-only port and a disposable container;
+`--compose` checks `compose.yaml` with PostgreSQL. The service image serves the
+workspace and supports durable mode (driver, migrations and the workflow extra); it is
+not a sandbox controller image. Never solve container access by mounting the host
+Docker socket into a publicly exposed service.
 
 ## Operations and rollback
 

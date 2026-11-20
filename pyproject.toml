@@ -52,6 +52,11 @@ workflow = [
 eval = [
     "pydantic-evals==2.68.0",
 ]
+# PostgreSQL durable mode; the same pins as requirements-durable.txt.
+durable = [
+    "alembic==1.18.4",
+    "asyncpg==0.31.0",
+]
 
 [dependency-groups]
 dev = [

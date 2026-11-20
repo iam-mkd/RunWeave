@@ -1,0 +1,50 @@
+# RunWeave with PostgreSQL (durable mode), reachable at http://127.0.0.1:8000 only.
+#   cp compose.env.example compose.env   # then set POSTGRES_PASSWORD
+#   docker compose --env-file compose.env up --build
+# To run your own Python agents, build an image FROM this one with your package installed
+# and set RUNWEAVE_AGENTS. See docs/release.md.
+name: runweave
+
+x-runweave: &runweave
+  image: ${RUNWEAVE_IMAGE:-runweave-service:local}
+  build: .
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  tmpfs: ["/tmp:rw,noexec,nosuid,size=16m"]
+  environment:
+    RUNWEAVE_DATABASE_URL: postgresql+asyncpg://runweave:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in compose.env}@postgres:5432/runweave
+    RUNWEAVE_MODEL_PROVIDER: ${RUNWEAVE_MODEL_PROVIDER:-fake}
+    RUNWEAVE_AUTH_MODE: local
+
+services:
+  postgres:
+    image: postgres:18.7-alpine@sha256:ff64c9e3bdf8e2120107d3559de8db314e8305f7e38c5105903c6295876738ff
+    environment:
+      POSTGRES_USER: runweave
+      POSTGRES_DB: runweave
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in compose.env}
+    volumes: ["runweave-data:/var/lib/postgresql"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U runweave -d runweave"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  migrate:
+    <<: *runweave
+    command: ["alembic", "-c", "/app/alembic.ini", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+
+  runweave:
+    <<: *runweave
+    ports: ["127.0.0.1:${RUNWEAVE_PORT:-8000}:8000"]
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+
+volumes:
+  runweave-data:
