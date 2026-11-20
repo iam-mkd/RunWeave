@@ -60,8 +60,10 @@ class Installed:
     removed: Callable[[], bool]
 
 
-def _run(*argv: str, timeout: float = 600) -> str:
-    done = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, check=False)
+def _run(*argv: str, timeout: float = 600, answer: str | None = None) -> str:
+    done = subprocess.run(
+        argv, capture_output=True, text=True, timeout=timeout, check=False, input=answer
+    )
     if done.returncode != 0:
         raise SystemExit(f"{' '.join(argv)} failed ({done.returncode}): {done.stderr[-2000:]}")
     return done.stdout
@@ -124,7 +126,19 @@ def _install_windows(installer: Path) -> Installed:
 
 def _install_macos(installer: Path, into: Path) -> Installed:
     mount = Path(tempfile.mkdtemp(prefix="runweave-dmg-"))
-    _run("hdiutil", "attach", "-nobrowse", "-readonly", "-mountpoint", str(mount), str(installer))
+    # Without a terminal hdiutil cancels an attach that wants confirmation (a license page or
+    # verification prompt), so answer it and skip the interactive steps; retry a busy disk.
+    attach = ("hdiutil", "attach", "-nobrowse", "-readonly", "-noverify", "-noautoopen",
+              "-mountpoint", str(mount), str(installer))  # fmt: skip
+    for attempt in range(3):
+        try:
+            _run(*attach, answer="Y\n")
+            break
+        except SystemExit:
+            if attempt == 2:
+                print(_run("hdiutil", "imageinfo", str(installer)), file=sys.stderr)
+                raise
+            time.sleep(5)
     try:
         [bundle] = list(mount.glob("*.app"))
         app = into / bundle.name
@@ -383,7 +397,7 @@ def main() -> int:
     installed = install(args.installer, work)
     report["installed"] = str(installed.executable)
     try:
-        python = args.python.resolve()
+        python = args.python.absolute()  # not resolve(): a venv's python is a symlink
         config.mkdir(parents=True, exist_ok=True)
         choices = config / "desktop.json"
         choices.write_text(
