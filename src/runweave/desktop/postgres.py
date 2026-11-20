@@ -105,6 +105,9 @@ class PortablePostgres:
 
     async def _initialize(self) -> None:
         self._folder.mkdir(parents=True, exist_ok=True)
+        # initdb accepts an existing empty folder; creating it here keeps a restricted
+        # (elevated Windows) initdb from walking parent folders it may not inspect.
+        self._data.mkdir(mode=0o700)
         if not self._password_file.is_file():
             descriptor = os.open(self._password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
