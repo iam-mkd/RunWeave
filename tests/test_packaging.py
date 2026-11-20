@@ -129,7 +129,11 @@ def test_desktop_workflow_is_reusable_and_checks_installers_on_clean_runners() -
     assert "third-party-notices.py" in build and "THIRD_PARTY_NOTICES.txt" in build
     check = jobs["install-check"]
     assert check["needs"] == "build"
-    assert set(check["strategy"]["matrix"]["os"]) == {"ubuntu-latest", "windows-latest", "macos-latest"}
+    assert set(check["strategy"]["matrix"]["os"]) == {
+        "ubuntu-latest",
+        "windows-latest",
+        "macos-latest",
+    }
     steps = yaml.safe_dump(check)
     assert "scripts/check-desktop.py" in steps and "xvfb-run" in steps
     for job in jobs.values():
@@ -139,6 +143,8 @@ def test_desktop_workflow_is_reusable_and_checks_installers_on_clean_runners() -
 
 
 def test_installers_bundle_the_third_party_notices() -> None:
-    config = json.loads((ROOT / "desktop" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8"))
+    config = json.loads(
+        (ROOT / "desktop" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )
     resources = config["bundle"]["resources"]
     assert resources["../../target/notices/THIRD_PARTY_NOTICES.txt"] == "THIRD_PARTY_NOTICES.txt"
