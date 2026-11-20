@@ -8,6 +8,7 @@ import typing
 from pathlib import Path
 from types import ModuleType
 
+import yaml
 from pydantic import BaseModel
 
 from runweave.cli import parser
@@ -229,3 +230,11 @@ def test_the_quickstart_runs_end_to_end_without_a_key() -> None:
     shell_only = re.compile(r"&&|\|\||\$\w|%\w+%|^export |^set |\\$")
     assert [c for c in commands if shell_only.search(c)] == []
     assert not any(re.search(r"(?i)api[_-]?key", command) for command in commands)
+
+
+def test_ci_runs_the_quickstart_on_three_fresh_runners_without_secrets() -> None:
+    workflow = yaml.safe_load((ROOT / ".github" / "workflows" / "docs.yml").read_text("utf-8"))
+    job = workflow["jobs"]["quickstart"]
+    assert job["strategy"]["matrix"]["os"] == ["ubuntu-latest", "windows-latest", "macos-latest"]
+    assert any("check-docs.py --quickstart" in step.get("run", "") for step in job["steps"])
+    assert "secrets." not in (ROOT / ".github" / "workflows" / "docs.yml").read_text("utf-8")

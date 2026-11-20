@@ -15,12 +15,14 @@ import argparse
 import os
 import re
 import shlex
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/iam-mkd/RunWeave"
@@ -154,6 +156,28 @@ def _try_a_run(base: str, transcript: Transcript) -> None:
     assert state["status"] == "SUCCEEDED", state
 
 
+def _new_group() -> dict[str, Any]:
+    if sys.platform == "win32":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
+def _stop(server: subprocess.Popen[str]) -> None:
+    """Stop the background command and everything it started, as Ctrl+C would."""
+    if server.poll() is None:
+        if sys.platform == "win32":
+            subprocess.run(["taskkill", "/PID", str(server.pid), "/T", "/F"],
+                           capture_output=True, check=False)  # fmt: skip
+        else:
+            os.killpg(server.pid, signal.SIGINT)
+    try:
+        server.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        if sys.platform != "win32":
+            os.killpg(server.pid, signal.SIGKILL)
+        server.wait()
+
+
 def run_quickstart(page: Path, checkout: Path, work: Path, transcript: Transcript) -> None:
     cwd = work
     servers: list[subprocess.Popen[str]] = []
@@ -167,9 +191,12 @@ def run_quickstart(page: Path, checkout: Path, work: Path, transcript: Transcrip
                 continue
             started = time.monotonic()
             if step.background:
+                # Its own process group, so stopping it stops what the shell started too;
+                # output to a file, as an unread pipe would fill and stall the server.
+                log = (work / f"server-{len(servers)}.log").open("w", encoding="utf-8")
                 server = subprocess.Popen(
                     command, shell=True, cwd=cwd, env=environment, text=True,  # noqa: S602
-                    stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                    stdout=log, stderr=subprocess.STDOUT, **_new_group(),
                 )  # fmt: skip
                 servers.append(server)
                 _wait(step.background, 120, server)
@@ -186,12 +213,10 @@ def run_quickstart(page: Path, checkout: Path, work: Path, transcript: Transcrip
             if done.returncode != 0:
                 raise SystemExit(f"{command} failed with exit code {done.returncode}")
     finally:
-        for server in servers:
-            server.terminate()
-            try:
-                server.wait(timeout=30)
-            except subprocess.TimeoutExpired:
-                server.kill()
+        for number, server in enumerate(servers):
+            _stop(server)
+            output = (work / f"server-{number}.log").read_text(encoding="utf-8", errors="replace")
+            transcript.add("Server output (end)", output)
 
 
 def main() -> int:
