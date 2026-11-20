@@ -99,6 +99,21 @@ jobs:
       - run: npm test
         working-directory: sdk/typescript
 
+  workflow-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: actionlint (with shellcheck) on every workflow
+        run: >-
+          docker run --rm -v "$PWD:/repo" -w /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -no-color
+
   dependency-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
