@@ -8,6 +8,8 @@ import typing
 from pathlib import Path
 from types import ModuleType
 
+from pydantic import BaseModel
+
 from runweave.cli import parser
 from runweave.core.settings import Settings
 from runweave.project import (
@@ -88,7 +90,7 @@ def test_every_setting_belongs_to_a_documented_group() -> None:
 
 def test_every_project_file_key_is_in_the_configuration_reference() -> None:
     text = _read("configuration.md")
-    sections = {
+    sections: dict[str, type[BaseModel]] = {
         "agent": AgentSection,
         "limits": LimitsSection,
         "proxy": ProxySection,
