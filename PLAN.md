@@ -1926,6 +1926,11 @@ alpha (see "Release v1.0" above).
   0.1.0 section; versions match the tag check.
 - **Not in scope:** signing the desktop installers; a docs site; publishing anything
   before the owner says "go" after merging.
+- **Release notes (2026-11-20):** `v0.1.0` (tag pushed by the owner from a Codespace; this
+  session may push only its branch) published `runweave` 0.1.0 to PyPI and the image to
+  GHCR. `publish-npm` failed: `npm publish dist/x.tgz` parses as a GitHub shorthand, so
+  the path now starts with `./` (regression test in `tests/test_packaging.py`). The owner
+  chose to publish `runweave-agent` with the next release rather than cut v0.1.1 now.
 - **Done when** the pull request is merged with CI green, the owner has pushed (or asked
   for) the `v0.1.0` tag, approved the `release` environment, and `uv tool install
   runweave` from PyPI gives a working `runweave`. Checked off after the owner confirms the

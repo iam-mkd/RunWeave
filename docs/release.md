@@ -342,7 +342,12 @@ site** in the browser menu. The names must be typed exactly: they are case-sensi
    within 2 days or it expires, so add it when you prepare the next release, right before
    tagging. After that publish succeeds, set **Publishing access → Require two-factor
    authentication and disallow tokens**. Whatever you decide about the next release,
-   delete the `NPM_TOKEN` secret on GitHub and the token on npmjs.com once v0.1.0 is out.
+   delete the `NPM_TOKEN` secret on GitHub and the token on npmjs.com once
+   `runweave-agent` is out.
+
+   v0.1.0 reached PyPI and GHCR, but its npm publish failed (fixed since), so
+   `runweave-agent`'s first publish comes with the next release. If the 7-day token has
+   expired by then, generate a new one as in step 2 and replace the `NPM_TOKEN` secret.
 
 To release again: raise the version in `pyproject.toml`, `sdk/typescript/package.json` (and
 its vendored copy, `scripts/vendor-typescript-sdk.py`) and `CHANGELOG.md` in a pull
