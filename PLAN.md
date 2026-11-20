@@ -1751,6 +1751,45 @@ Implementation notes, pull request B (2026-11-20):
 - **Limitation:** a hard-killed service leaves PostgreSQL running until the next start
   stops it. Pull request D's uninstall check covers the normal quit path.
 
+Implementation notes, pull request C (2026-11-20):
+- **Toolchain:**
+  - Rust installed locally with rustup (minimal profile); the installer's SHA-256 was
+    checked against static.rust-lang.org.
+  - The project pins Rust 1.99.0 (`rust-toolchain.toml`), Tauri 2.12.5, tauri-build
+    2.7.4, the dialog plugin 2.8.4 and `@tauri-apps/cli` 2.12.4. All of these were
+    released at least two weeks earlier; Rust 1.100 was 11 days old.
+- **`desktop/src-tauri`:**
+  - `config.rs`: the saved choices, written atomically, with damaged files ignored and
+    the project file and interpreter validated.
+  - `sidecar.rs`:
+    - starts the service without a console window and accepts only an
+      `http://127.0.0.1:<port>` ready line;
+    - reports the service's `RUNWEAVE_DESKTOP_ERROR` line, or its log tail;
+    - stops by closing stdin and kills after a grace period;
+    - drop stops it too.
+  - `lib.rs`:
+    - four app commands, granted only to the bundled setup page through an explicit app
+      manifest and `capabilities/default.json`;
+    - navigation limited to the setup page and the service's origin;
+    - the service stopped on exit.
+- **Tests:** written with the modules (Rust unit tests sit in the same files), 12 in all.
+  The sidecar tests use the test binary itself as a fake service: ready, failing, silent
+  and stubborn.
+- **CI:** `.github/workflows/desktop.yml` now also runs rustfmt, clippy (`-D warnings`)
+  and the Rust tests, and builds unsigned installers on all three systems. Linux installs
+  WebKitGTK 4.1.
+- **Local results (Windows 11):**
+  - `npx tauri build` produced an MSI (64.8 MiB) and an NSIS installer (60.7 MiB), with the
+    frozen service and the PostgreSQL archive as resources.
+  - The release app, launched with saved choices for a `runweave init` project:
+    - it started the service, and the workspace served a durable run of the project's
+      agent through the bridge;
+    - closed like a user would (WM_CLOSE), it exited 0 and left no child process;
+    - PostgreSQL's log ends with "database system is shut down", and no `postmaster.pid`
+      remained.
+  - The test's app-data folders were removed afterwards.
+  - Installing from the installers, macOS and Linux are for pull request D and CI.
+
 ### 26. Developer documentation and framework examples
 
 - Write a five-minute quickstart with no API key, plus concepts, configuration

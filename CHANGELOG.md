@@ -8,6 +8,15 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Desktop window (milestone 25, part 3): a Tauri 2 app (`desktop/`).
+  - **First launch:** a setup page to choose the project folder and Python interpreter
+    (saved for later launches). It starts the desktop service and shows its workspace,
+    or explains why the service could not start.
+  - **Quitting** stops the service gracefully.
+  - **Access:** only the bundled setup page can call the app's four commands, and the
+    window navigates only to it and the service's loopback origin.
+  - **CI** builds unsigned installers on Windows, macOS and Linux, after the Rust tests,
+    rustfmt and clippy.
 - Desktop service (milestone 25, part 2): `runweave-desktop-service`, the program the
   desktop app runs. It:
   - unpacks pinned, checksum-verified PostgreSQL 18.7 into app-data;
