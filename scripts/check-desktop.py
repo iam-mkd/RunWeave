@@ -274,14 +274,62 @@ def _quit(app: subprocess.Popen[bytes]) -> None:
     _gone(_app_processes, 90)
 
 
+def _sidecar(executable: Path) -> Path | None:
+    """The bundled service: in Contents/Resources on macOS, beside the window elsewhere."""
+    roots = [executable.parent, executable.parent.parent / "Resources",
+             Path("/usr/lib") / executable.name, Path("/usr/lib") / "RunWeave"]  # fmt: skip
+    for root in roots:
+        for found in root.glob(f"sidecar/{SERVICE}*") if root.is_dir() else []:
+            if found.is_file():
+                return found
+    return None
+
+
+def diagnose(app: subprocess.Popen[bytes], executable: Path, data: Path, choices: Path) -> str:
+    """Why the workspace did not come up: the window's processes, then the service run alone."""
+    lines = [f"Window {executable} (pid {app.pid}, exit code {app.poll()})"]
+    for child in _tree(app.pid):
+        try:
+            ports = [c.laddr.port for c in child.net_connections("tcp") if c.status == "LISTEN"]
+            lines.append(f"  {child.pid} {child.name()} ports={ports} {child.cmdline()}")
+        except psutil.Error as error:
+            lines.append(f"  {child.pid}: {error!r}")
+    sidecar = _sidecar(executable)
+    if sidecar is None:
+        return "\n".join([*lines, "The bundled service was not found"])
+    saved = json.loads(choices.read_text(encoding="utf-8"))
+    archive = sidecar.parent.parent / "postgres" / "postgres.txz"
+    argv = [str(sidecar), "--state-dir", str(data), "--postgres-archive", str(archive),
+            "--project", saved["project"], "--python", saved["python"]]  # fmt: skip
+    _quit(app)  # one service at a time: the window's may still hold the data folder
+    lines.append(f"Running the service alone: {argv}")
+    service = subprocess.Popen(
+        argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    try:
+        out, err = service.communicate(timeout=120)
+    except subprocess.TimeoutExpired:
+        service.kill()
+        out, err = service.communicate()
+    lines += [f"exit code {service.returncode}", "stdout:", out[-4000:], "stderr:", err[-8000:]]
+    return "\n".join(lines)
+
+
 def session(
-    executable: Path, data: Path, use: Callable[[httpx.Client], dict[str, Any]]
+    executable: Path,
+    data: Path,
+    choices: Path,
+    use: Callable[[httpx.Client], dict[str, Any]],
 ) -> dict[str, Any]:
     """Launch, wait for the workspace, use it, quit like a user, check what is left."""
     started = time.monotonic()
     app = subprocess.Popen([str(executable)])
     try:
-        base = _until(lambda: _service_url(app), "the window to start the service", 300)
+        try:
+            base = _until(lambda: _service_url(app), "the window to start the service", 300)
+        except SystemExit:
+            print(diagnose(app, executable, data, choices), file=sys.stderr)
+            raise
         ready = round(time.monotonic() - started, 1)
         with httpx.Client(base_url=base, timeout=30, trust_env=False) as client:
             result = use(client)
@@ -403,10 +451,10 @@ def main() -> int:
         choices.write_text(
             json.dumps({"project": str(make_project(python, work / "demo")), "python": str(python)})
         )
-        report["first_launch"] = session(installed.executable, data, first_use)
+        report["first_launch"] = session(installed.executable, data, choices, first_use)
         refund = make_project(python, work / "refunds", refund=True)
         choices.write_text(json.dumps({"project": str(refund), "python": str(python)}))
-        report["second_launch"] = session(installed.executable, data, approval_use)
+        report["second_launch"] = session(installed.executable, data, choices, approval_use)
     finally:
         report["left_before_uninstall"] = _gone(_app_processes, 60)
         installed.uninstall()
