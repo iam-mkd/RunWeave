@@ -1,18 +1,11 @@
 # RunWeave
 
-An async orchestration runtime for AI agents, built with FastAPI and asyncio.
-The foundation provides typed contracts, replaceable model/tool interfaces, and
-an offline incident-triage demo. Milestone 2 adds bounded workers, a run queue,
-submission/status/cancellation APIs, and bounded in-memory history. Milestone 3
-adds execution deadlines, retries for the read-only health tool, and graceful draining.
-Milestone 4 adds a model-driven tool loop and an optional Groq adapter.
-Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
-
-## Local workspace
-
-RunWeave includes a React workspace for running your agents, following runs live,
-load tests, evals, shadow comparisons and approvals, in dark and light themes. No
-database is required for the default offline demo.
+Run and test your AI agents on your own computer. RunWeave runs many agent runs at once,
+with limits, and tells you how your agent behaved: whether it gave the right answers
+(`runweave eval`), how it holds up under load and a failing model provider (`runweave
+bench`), and whether a new version is at least as good (`runweave shadow`). It works offline
+with no API key, connects agents written in Python or any language, and is open source
+(Apache-2.0).
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/agents-dark.png">
@@ -24,18 +17,33 @@ database is required for the default offline demo.
   <img alt="RunWeave workspace: a finished run with its timeline, findings and input" src="docs/images/run-detail-light.png">
 </picture>
 
-Every screen in both themes: [workspace screens](docs/workspace.md#screens).
+## Get started
 
-```powershell
-uv sync --locked
-npm.cmd --prefix frontend ci
-npm.cmd --prefix frontend run build
-uv run --locked runweave-workspace --demo
+With Git, [uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js 22.12+:
+
+```bash
+git clone https://github.com/iam-mkd/RunWeave.git
+cd RunWeave
+uv sync
+npm --prefix frontend ci
+npm --prefix frontend run build
+uv run runweave init my-agent
+cd my-agent
+uv run runweave eval
 ```
 
-Open **http://127.0.0.1:8000** and select **Load example**. Use `npm` instead of
-`npm.cmd` on macOS/Linux. See the [workspace guide](docs/workspace.md) for local
-development, verification, provider configuration boundaries and storage behavior.
+The [quickstart](docs/quickstart.md) walks through it in five minutes, then load-tests the
+agent and runs it in the workspace.
+
+## Documentation
+
+The [documentation](docs/README.md) starts with the [quickstart](docs/quickstart.md) and
+[concepts](docs/concepts.md), covers connecting agents ([Python](docs/agents.md),
+[HTTP](docs/http-agents.md), the [LLM proxy](docs/llm-proxy.md)), the
+[workspace](docs/workspace.md), [reports](docs/reports.md), [faults](docs/faults.md),
+[approvals](docs/agent-approvals.md), [budgets and your own key](docs/budgets.md),
+[limits](docs/limits.md) and [troubleshooting](docs/troubleshooting.md), and has
+[CLI](docs/cli.md) and [configuration](docs/configuration.md) references.
 
 ## Test your agent
 
@@ -280,23 +288,8 @@ work out of the box. `.env.example` lists supported options; copy it to `.env` i
 needed. Timeout and connection limits are validated at startup. Unrecognized keys
 in `.env` fail validation to catch typos. `.env` is excluded from version control.
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `RUNWEAVE_WORKER_COUNT` | 128 | Maximum simultaneously executing runs |
-| `RUNWEAVE_QUEUE_CAPACITY` | 1000 | Maximum pending queue entries |
-| `RUNWEAVE_HISTORY_MAX_RECORDS` | 1000 | Maximum retained terminal runs |
-| `RUNWEAVE_HISTORY_TTL_SECONDS` | 3600 | Terminal record lifetime, starting at completion |
-| `RUNWEAVE_HISTORY_CLEANUP_INTERVAL_SECONDS` | 30 | Background history pruning interval |
-| `RUNWEAVE_RUN_TIMEOUT_SECONDS` | 30 | Total deadline from admission, including queue wait |
-| `RUNWEAVE_STEP_TIMEOUT_SECONDS` | 5 | Wall-clock budget per model or tool step |
-| `RUNWEAVE_SHUTDOWN_GRACE_SECONDS` | 5 | Time to drain accepted runs before cancelling remaining work |
-| `RUNWEAVE_TOOL_RETRY_ATTEMPTS` | 3 | Maximum health lookup attempts, including the first |
-| `RUNWEAVE_TOOL_RETRY_BASE_DELAY_SECONDS` | 0.1 | Initial exponential backoff ceiling |
-| `RUNWEAVE_TOOL_RETRY_MAX_DELAY_SECONDS` | 2 | Maximum delay between health lookup attempts |
-| `RUNWEAVE_AGENT_MAX_STEPS` | 7 | Maximum model and logical tool interactions per run |
-| `RUNWEAVE_AGENT_COMPLETION_TOKENS` | 2048 | Cumulative model completion-token budget per run |
-| `RUNWEAVE_GROQ_CONCURRENCY` | 2 | Groq request slots per process |
-| `RUNWEAVE_GROQ_REQUESTS_PER_MINUTE` | 30 | Groq request starts per minute, evenly spaced |
+Every setting, with its default and allowed range, is in the [configuration
+reference](docs/configuration.md).
 
 The health lookup retries selected transient HTTP and transport failures with
 exponential backoff and jitter. It observes `Retry-After` in seconds or HTTP-date

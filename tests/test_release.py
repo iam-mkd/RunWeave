@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from runweave.workspace import BUNDLED_UI, workspace_assets
+from runweave.workspace import BUNDLED_UI, CHECKOUT_UI, workspace_assets
 
 ROOT = Path(__file__).resolve().parents[1]
 EXAMPLE = ROOT / "examples" / "github-actions" / "runweave.yml"
@@ -35,6 +35,11 @@ def test_serve_prefers_explicit_then_bundled_then_checkout_assets(tmp_path: Path
     assert workspace_assets(None, bundled=bundled, checkout=checkout) == bundled.resolve()
     assert workspace_assets(explicit, bundled=bundled, checkout=checkout) == explicit.resolve()
     assert BUNDLED_UI.parent == ROOT / "src" / "runweave"
+
+
+def test_a_source_checkout_serves_its_own_build_from_any_folder() -> None:
+    # The quickstart serves from a project folder inside the clone, not from its root.
+    assert CHECKOUT_UI == ROOT / "frontend" / "dist"
 
 
 def test_the_bundle_script_copies_the_build_into_the_package(tmp_path: Path) -> None:
