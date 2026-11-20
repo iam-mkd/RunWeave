@@ -163,3 +163,11 @@ async def test_runtime_releases_client_after_tool_failure() -> None:
         with pytest.raises(RuntimeError, match="client has been closed"):
             await runtime.runner.run(IncidentRequest(service="payments", description="Latency"))
     assert runtime.client.is_closed
+
+
+@pytest.mark.asyncio
+async def test_summary_does_not_double_the_description_full_stop() -> None:
+    incident = IncidentRequest(service="payments", description="Latency rose after the deploy.")
+    result = await run_demo(incident, Settings())
+    assert "after the deploy. Mock service health" in result.summary
+    assert ".." not in result.summary
