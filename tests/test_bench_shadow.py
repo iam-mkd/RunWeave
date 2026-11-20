@@ -77,11 +77,15 @@ def runweave(*args: str, cwd: Path) -> subprocess.CompletedProcess[str]:
 
 
 def latest(project: Path, kind: str) -> dict[str, Any]:
-    folders = sorted((project / ".runweave" / "reports").glob(f"{kind}-*"))
-    assert folders, f"no {kind} report written"
-    assert (folders[-1] / "report.md").is_file()
-    data: dict[str, Any] = json.loads((folders[-1] / "report.json").read_text(encoding="utf-8"))
-    return data
+    # By created_at: folder names stamp only the second, then a random suffix.
+    reports = [
+        (folder, json.loads((folder / "report.json").read_text(encoding="utf-8")))
+        for folder in (project / ".runweave" / "reports").glob(f"{kind}-*")
+    ]
+    assert reports, f"no {kind} report written"
+    folder, data = max(reports, key=lambda item: str(item[1]["created_at"]))
+    assert (folder / "report.md").is_file()
+    return dict(data)
 
 
 def new_project(tmp_path: Path) -> Path:
