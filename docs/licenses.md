@@ -11,7 +11,10 @@ Refresh it whenever dependencies change and before every release.
 
 ## Summary
 
-- No GPL, LGPL, or AGPL dependencies were found.
+- No GPL, LGPL, or AGPL Python or npm dependencies were found. The desktop app's
+  bundled PostgreSQL for Windows includes two LGPL-2.1 DLLs (libiconv, libintl), used
+  unmodified and dynamically linked, and the PyInstaller bootloader is GPL-2.0 with an
+  exception for frozen programs; see [Desktop service](#desktop-service-milestone-25).
 - All dependencies are permissive (MIT, BSD, ISC, Apache-2.0, PSF-2.0) except
   two under MPL-2.0: `certifi` (runtime, through HTTPX) and `pathspec`
   (development only, through mypy). MPL-2.0 is file-level copyleft; unmodified
@@ -46,7 +49,7 @@ Refresh it whenever dependencies change and before every release.
 | --- | --- | --- |
 | `workflow` | pydantic-ai-slim, pydantic-graph, genai-prices, logfire-api, griffelib | MIT (griffelib: ISC) |
 | `eval` | pydantic-evals, rich, markdown-it-py, mdurl, pygments, pyyaml | MIT (pygments: BSD-2-Clause) |
-| durable (`requirements-durable.txt`) | asyncpg, alembic | Apache-2.0; MIT |
+| `durable` (also `requirements-durable.txt`) | asyncpg, alembic, mako, markupsafe | Apache-2.0; MIT; MIT; BSD-3-Clause |
 | browser sandbox image | playwright, pyee, greenlet | Apache-2.0; MIT; MIT AND PSF-2.0 |
 
 ## Development tooling (not distributed)
@@ -92,6 +95,15 @@ Test-only; not distributed.
 | `python:3.13-slim` | Service image and Python sandbox | Python is PSF-2.0; Debian packages carry their own licenses |
 | `mcr.microsoft.com/playwright/python` | Browser sandbox | Playwright Apache-2.0 (`sandbox/PLAYWRIGHT-LICENSE`); Chromium BSD-3-Clause plus bundled third-party licenses; Ubuntu packages carry their own licenses |
 | `ghcr.io/astral-sh/uv` | Build stage only | uv is MIT OR Apache-2.0; not present in the final image |
+| `node:24-slim` | Build stage only (the workspace UI) | Node.js is MIT; not present in the final image |
+| `postgres:18-alpine` | `compose.yaml` | PostgreSQL License (permissive); Alpine packages carry their own licenses |
 
-The desktop app in milestone 25 will bundle PostgreSQL (PostgreSQL License,
-permissive) and a frozen Python runtime (PSF-2.0); add them here when it does.
+## Desktop service (milestone 25)
+
+| Component | License | Notes |
+| --- | --- | --- |
+| PostgreSQL 18.7 binaries (zonky `embedded-postgres-binaries`) | PostgreSQL License; packaging Apache-2.0 | Bundled as an archive; the Windows build also carries ICU (Unicode License), OpenSSL (Apache-2.0), libxml2/libxslt (MIT), zlib, zstd, lz4 (BSD/zlib), libiconv/libintl (LGPL-2.1, dynamically linked DLLs, unmodified) and wxWidgets (wxWindows Library Licence) DLLs |
+| PyInstaller 6.22.3 bootloader | GPL-2.0 with the bootloader exception | The exception allows distributing frozen programs under any license |
+| Python runtime (frozen) | PSF-2.0 | |
+
+The desktop installers (pull request D) must include these license texts.

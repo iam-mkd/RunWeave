@@ -1,0 +1,48 @@
+name: Desktop sidecar
+
+# The service the desktop app runs: portable PostgreSQL, the agent bridge and the frozen
+# (PyInstaller) build, tested and smoke-tested on each operating system.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  sidecar:
+    name: Sidecar (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Build the workspace UI
+        run: npm --prefix frontend ci && npm --prefix frontend run build
+      - run: uv sync --locked --extra durable --extra workflow --group desktop
+      - name: Pinned portable PostgreSQL (checksum verified)
+        run: uv run --no-sync python scripts/fetch-postgres.py --out target/postgres --archive target/postgres-archive/postgres.txz
+      - name: Sidecar tests with real PostgreSQL
+        env:
+          RUNWEAVE_TEST_POSTGRES_BINARIES: target/postgres
+        run: uv run --no-sync pytest tests/test_desktop.py -q
+      - name: Freeze with PyInstaller and smoke-test the build
+        run: uv run --no-sync python scripts/build-sidecar.py
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sidecar-${{ matrix.os }}
+          path: |
+            target/sidecar/build.json
+            target/sidecar/smoke.json

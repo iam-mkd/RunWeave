@@ -8,6 +8,17 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Desktop service (milestone 25, part 2): `runweave-desktop-service`, the program the
+  desktop app runs. It:
+  - unpacks pinned, checksum-verified PostgreSQL 18.7 into app-data;
+  - runs PostgreSQL on loopback with a generated password, and applies the migrations;
+  - runs the project's Python agents with the developer's own interpreter, through
+    `serve-agent` (eval, bench and shadow jobs use it too, via the new
+    `RUNWEAVE_JOB_PYTHON`);
+  - serves the workspace, and stops everything when its stdin closes.
+
+  `scripts/build-sidecar.py` freezes it with PyInstaller and smoke-tests the build; a
+  new CI workflow does both on Windows, Linux and macOS. See `docs/desktop.md`.
 - Service image, Compose and releases (milestone 25, part 1):
   - **Image:** the service image now serves the workspace UI and supports durable mode
     (the new `durable` extra, migrations and the workflow extra) through

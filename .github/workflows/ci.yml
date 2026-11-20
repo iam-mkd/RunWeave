@@ -40,7 +40,7 @@ jobs:
       - name: Install the official Node SDKs for the proxy compatibility test
         run: npm ci
         working-directory: tests/proxy_compat
-      - run: uv sync --locked --extra workflow --extra eval
+      - run: uv sync --locked --extra workflow --extra eval --extra durable
       - run: uv run --no-sync pytest -q
         env:
           RUNWEAVE_CONTRACT_REQUIRE_ALL: '1'
