@@ -294,6 +294,20 @@ def diagnose(app: subprocess.Popen[bytes], executable: Path, data: Path, choices
             lines.append(f"  {child.pid} {child.name()} ports={ports} {child.cmdline()}")
         except psutil.Error as error:
             lines.append(f"  {child.pid}: {error!r}")
+    if sys.platform == "darwin":
+        # What the window shows (the CI job uploads it), and what the app logged.
+        screen = Path("target") / "desktop-check-screen.png"  # the job uploads target/
+        screen.parent.mkdir(parents=True, exist_ok=True)
+        shot = subprocess.run(
+            ["screencapture", "-x", str(screen)], capture_output=True, text=True, check=False
+        )
+        lines.append(f"Screenshot {screen}: exit code {shot.returncode} {shot.stderr.strip()}")
+        logged = subprocess.run(
+            ["log", "show", "--last", "6m", "--style", "compact",
+             "--predicate", 'process BEGINSWITH "runweave"'],
+            capture_output=True, text=True, timeout=120, check=False,
+        )  # fmt: skip
+        lines += ["System log of the app:", *logged.stdout.splitlines()[-150:]]
     sidecar = _sidecar(executable)
     if sidecar is None:
         return "\n".join([*lines, "The bundled service was not found"])
