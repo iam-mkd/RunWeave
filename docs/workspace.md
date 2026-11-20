@@ -80,6 +80,15 @@ npm.cmd --prefix frontend run build
 npm.cmd --prefix frontend run screenshots
 ```
 
+The README's 12-second demo (`docs/images/demo.gif`) is recorded the same way, from a live
+`runweave serve` with `examples/plain-python`. The terminal scene replays real `runweave
+eval` and `runweave bench` output; only the captions and pointer are drawn on top:
+
+```bash
+npm --prefix frontend run demo-gif
+uv run --no-project --with pillow python scripts/frames-to-gif.py target/demo-gif/frames docs/images/demo.gif
+```
+
 ## Start from a checkout
 
 Use Python 3.11 or newer, uv, and Node 22.12+ or 24+. From the repository root, in PowerShell:
