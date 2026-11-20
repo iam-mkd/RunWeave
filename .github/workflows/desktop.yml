@@ -2,18 +2,26 @@ name: Desktop app
 
 # On each operating system: the service the desktop app runs (portable PostgreSQL, the
 # agent bridge, the frozen PyInstaller build), then the Tauri window around it and its
-# unsigned installers. Nothing is published here; release.yml attaches installers to a
-# draft release only for the owner's tag.
+# unsigned installers, with the third-party notices they carry. A second job installs
+# each installer on a fresh runner, uses the app, quits and uninstalls it.
+# Nothing is published here: release.yml calls this workflow for the owner's tag and
+# attaches the installers to a draft release.
 on:
   pull_request:
   push:
     branches: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: Git ref to build (the release tag)
+        type: string
+        required: true
 
 permissions:
   contents: read
 
 jobs:
-  sidecar:
+  build:
     name: Desktop (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -25,6 +33,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
         with:
           python-version: '3.13'
@@ -39,7 +48,7 @@ jobs:
       - name: Sidecar tests with real PostgreSQL
         env:
           RUNWEAVE_TEST_POSTGRES_BINARIES: target/postgres
-        run: uv run --no-sync pytest tests/test_desktop.py -q
+        run: uv run --no-sync pytest tests/test_desktop.py tests/test_desktop_release.py -q
       - name: Freeze with PyInstaller and smoke-test the build
         run: uv run --no-sync python scripts/build-sidecar.py
       - name: Linux libraries for Tauri (WebKitGTK)
@@ -50,6 +59,12 @@ jobs:
       - name: Rust toolchain from rust-toolchain.toml
         working-directory: desktop/src-tauri
         run: rustup show active-toolchain || rustup toolchain install
+      - name: Third-party notices and the Rust SBOM (the Tauri build checks bundled resources exist)
+        shell: bash
+        run: |
+          mkdir -p target/notices
+          uv export --locked --no-dev --no-emit-project --extra durable --extra workflow --format requirements-txt > target/notices/requirements.txt
+          uv run --no-sync python scripts/third-party-notices.py --out target/notices
       - name: Rust format, lint and tests
         working-directory: desktop/src-tauri
         run: |
@@ -64,7 +79,57 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: desktop-${{ matrix.os }}
+          if-no-files-found: error
           path: |
             target/sidecar/build.json
             target/sidecar/smoke.json
+            target/notices/THIRD_PARTY_NOTICES.txt
+            target/notices/runweave-desktop-rust.cdx.json
             desktop/src-tauri/target/release/bundle/
+
+  install-check:
+    name: Install check (${{ matrix.os }})
+    needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref || github.ref }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - name: A developer environment with runweave and the sample agent
+        run: |
+          uv sync --locked
+          uv pip install --python .venv ./examples/sample-agent
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: desktop-${{ matrix.os }}
+          path: artifact
+      - name: Install, use, quit and uninstall (Linux, under a virtual display)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb
+          xvfb-run -a uv run --no-sync python scripts/check-desktop.py --python .venv/bin/python --installer "$(ls artifact/desktop/src-tauri/target/release/bundle/deb/*.deb)" --output target/desktop-check.json
+      - name: Install, use, quit and uninstall (macOS)
+        if: runner.os == 'macOS'
+        run: uv run --no-sync python scripts/check-desktop.py --python .venv/bin/python --installer "$(ls artifact/desktop/src-tauri/target/release/bundle/dmg/*.dmg)" --output target/desktop-check.json
+      - name: Install, use, quit and uninstall (Windows, NSIS installer)
+        if: runner.os == 'Windows'
+        shell: bash
+        run: uv run --no-sync python scripts/check-desktop.py --python .venv/Scripts/python.exe --installer "$(ls artifact/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe)" --output target/desktop-check.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: desktop-check-${{ matrix.os }}
+          if-no-files-found: ignore
+          path: |
+            target/desktop-check.json
+            target/desktop-check-screen.png

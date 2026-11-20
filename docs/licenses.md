@@ -105,7 +105,7 @@ Test-only; not distributed.
 | PostgreSQL 18.7 binaries (zonky `embedded-postgres-binaries`) | PostgreSQL License; packaging Apache-2.0 | Bundled as an archive; the Windows build also carries ICU (Unicode License), OpenSSL (Apache-2.0), libxml2/libxslt (MIT), zlib, zstd, lz4 (BSD/zlib), libiconv/libintl (LGPL-2.1, dynamically linked DLLs, unmodified) and wxWidgets (wxWindows Library Licence) DLLs |
 | PyInstaller 6.22.3 bootloader | GPL-2.0 with the bootloader exception | The exception allows distributing frozen programs under any license |
 | Python runtime (frozen) | PSF-2.0 | |
-| Tauri 2.12.5, tauri-plugin-dialog 2.8.4 and their Rust crates (`desktop/src-tauri/Cargo.lock`) | MIT OR Apache-2.0 (Tauri); crates mostly MIT/Apache-2.0 | The full crate list and texts are generated for the installers in pull request D |
+| Tauri 2.12.5, tauri-plugin-dialog 2.8.4 and their Rust crates (`desktop/src-tauri/Cargo.lock`) | MIT OR Apache-2.0 (Tauri); crates mostly MIT/Apache-2.0 | Every crate and its license files are listed in `THIRD_PARTY_NOTICES.txt`, with a CycloneDX SBOM (`runweave-desktop-rust.cdx.json`) |
 | Microsoft Edge WebView2 (Windows) | Microsoft software license | Not bundled: the installer downloads Microsoft's bootstrapper if WebView2 is missing |
 
-The desktop installers (pull request D) must include these license texts.
+Every desktop installer includes `THIRD_PARTY_NOTICES.txt`, which `scripts/third-party-notices.py` generates from what is bundled: the license files of each Python package, npm package and Rust crate, PostgreSQL's COPYRIGHT, and the standard texts (`scripts/licenses/`) of licenses that some packages declare without shipping a file.

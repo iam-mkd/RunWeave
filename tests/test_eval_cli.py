@@ -37,7 +37,12 @@ def report(path: Path) -> dict[str, Any]:
 
 
 def latest(project: Path) -> Path:
-    runs = sorted((project / ".runweave" / "reports").glob("eval-*"))
+    # By created_at: folder names stamp only the second, then a random suffix, so two runs
+    # in the same second would sort by chance.
+    runs = sorted(
+        (project / ".runweave" / "reports").glob("eval-*"),
+        key=lambda run: report(run)["created_at"],
+    )
     assert runs, "no report written"
     return runs[-1]
 

@@ -1,5 +1,6 @@
 """Guarantees of the service image, the Compose file and the release workflow."""
 
+import json
 import re
 import tomllib
 from pathlib import Path
@@ -101,3 +102,49 @@ def test_release_builds_checksums_and_an_sbom() -> None:
     build = yaml.safe_dump(_load(".github/workflows/release.yml")["jobs"]["build"])
     for expected in ("uv build", "npm pack", "sha256sum", "cyclonedx", "docker build"):
         assert expected in build, expected
+
+
+def test_draft_release_carries_the_desktop_installers_built_for_the_tag() -> None:
+    jobs = _load(".github/workflows/release.yml")["jobs"]
+    desktop = jobs["desktop"]
+    assert desktop["uses"] == "./.github/workflows/desktop.yml"
+    assert "refs/tags/v" in desktop["if"] and "workflow_dispatch" in desktop["if"]
+    assert desktop["permissions"] == {"contents": "read"}
+    assert "refs/tags/" in str(desktop["with"]["ref"])
+    draft = jobs["draft-release"]
+    assert set(draft["needs"]) == {"build", "desktop"}
+    text = yaml.safe_dump(draft)
+    for expected in ("desktop-*", ".msi", "-setup.exe", ".dmg", ".deb", ".rpm", ".AppImage",
+                     "THIRD_PARTY_NOTICES.txt", "runweave-desktop-rust.cdx.json"):  # fmt: skip
+        assert expected in text, expected
+
+
+def test_desktop_workflow_is_reusable_and_checks_installers_on_clean_runners() -> None:
+    workflow = _load(".github/workflows/desktop.yml")
+    triggers = _triggers(workflow)
+    assert {"pull_request", "workflow_call"} <= set(triggers)
+    assert "ref" in triggers["workflow_call"]["inputs"]
+    jobs = workflow["jobs"]
+    build = yaml.safe_dump(jobs["build"])
+    assert "third-party-notices.py" in build and "THIRD_PARTY_NOTICES.txt" in build
+    check = jobs["install-check"]
+    assert check["needs"] == "build"
+    assert set(check["strategy"]["matrix"]["os"]) == {
+        "ubuntu-latest",
+        "windows-latest",
+        "macos-latest",
+    }
+    steps = yaml.safe_dump(check)
+    assert "scripts/check-desktop.py" in steps and "xvfb-run" in steps
+    for job in jobs.values():
+        for step in job.get("steps", []):
+            if "uses" in step:
+                assert PINNED_ACTION.match(step["uses"]), step["uses"]
+
+
+def test_installers_bundle_the_third_party_notices() -> None:
+    config = json.loads(
+        (ROOT / "desktop" / "src-tauri" / "tauri.conf.json").read_text(encoding="utf-8")
+    )
+    resources = config["bundle"]["resources"]
+    assert resources["../../target/notices/THIRD_PARTY_NOTICES.txt"] == "THIRD_PARTY_NOTICES.txt"
