@@ -218,3 +218,22 @@ def test_the_vendored_typescript_sdk_matches_the_built_sdk() -> None:
         assert (vendored / "dist" / name).read_bytes().replace(b"\r\n", b"\n") == (
             built / name
         ).read_bytes().replace(b"\r\n", b"\n"), name
+
+
+def test_init_suggests_uv_run_when_started_through_uv(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    # A newcomer copies init's "Next:" line; under `uv run`, runweave is not on their PATH.
+    from runweave.cli import main
+
+    monkeypatch.setenv("UV", "uv")
+    with pytest.raises(SystemExit) as through_uv:
+        main(["init", str(tmp_path / "through-uv")])
+    assert through_uv.value.code == 0
+    assert "\n  uv run runweave eval" in capsys.readouterr().out
+
+    monkeypatch.delenv("UV")
+    with pytest.raises(SystemExit):
+        main(["init", str(tmp_path / "installed")])
+    out = capsys.readouterr().out
+    assert "\n  runweave eval" in out and "uv run" not in out

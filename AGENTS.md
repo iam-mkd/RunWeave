@@ -9,10 +9,9 @@ The next phase is an open-source (Apache-2.0) developer platform: developers
 install RunWeave and test their own agents for reliability under load, injected
 faults, and evaluation quality.
 
-Milestones 1 through 25 and the local React workspace are implemented. Milestone
-26 (developer platform) is planned in PLAN.md and is not yet authorized; implement
-it only when the user authorizes it. Work in small,
-reviewable milestones and follow the accepted scope and completion criteria in
+Milestones 1 through 26 and the local React workspace are implemented; the roadmap in
+PLAN.md is complete. New work needs the user's authorization and a plan entry first. Work
+in small, reviewable milestones and follow the accepted scope and completion criteria in
 PLAN.md.
 
 ## Proposed stack

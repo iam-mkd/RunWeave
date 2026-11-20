@@ -175,7 +175,9 @@ def init(args: argparse.Namespace) -> int:
         print(f"runweave: {error}", file=sys.stderr)
         return 2
     print(f"Created a {args.language} project in {directory} ({len(written)} files).")
-    steps = ["npm install", "runweave eval"] if args.language == "typescript" else ["runweave eval"]
+    # Under `uv run` (which sets UV), runweave is usually not on the PATH by itself.
+    command = "uv run runweave eval" if os.environ.get("UV") else "runweave eval"
+    steps = ["npm install", command] if args.language == "typescript" else [command]
     where = "" if directory == Path(".") else f"cd {directory}\n  "
     print("Next:\n  " + where + "\n  ".join(steps))
     return 0

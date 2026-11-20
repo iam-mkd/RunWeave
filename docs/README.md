@@ -6,7 +6,8 @@ It works offline with no API key.
 
 ## Start here
 
-1. [Quickstart](quickstart.md): create, evaluate, load-test and run an agent in five minutes.
+1. [Quickstart](quickstart.md): create, evaluate, load-test and run an agent in five minutes. A
+   [recorded dry run](dry-run/2026-11-quickstart.md) shows a newcomer following it.
 2. [Concepts](concepts.md): runs, steps, agents, the proxy, datasets, gates and reports.
 3. [Test your agent](testing.md): `runweave init`, `eval`, `bench` and `shadow` in depth.
 
@@ -22,13 +23,20 @@ It works offline with no API key.
 
 ## Examples
 
-Each example is a complete project you can copy, tested offline in CI.
+[Examples](examples.md): five complete projects, each tested offline in CI, answering the
+same question with one tool, so you can compare how each connects to RunWeave.
 
-| Example | What it shows |
+| Example | Framework |
 | --- | --- |
-| [`examples/sample-agent`](../examples/sample-agent) | Plain Python agents with the RunWeave SDK |
-| [`examples/http-agent-typescript`](../examples/http-agent-typescript) | A Node agent over the HTTP contract |
-| [`examples/github-actions`](../examples/github-actions) | A CI job that fails a pull request when the agent regresses |
+| [`examples/plain-python`](../examples/plain-python) | `openai` (Python), with its own tool loop |
+| [`examples/openai-agents`](../examples/openai-agents) | OpenAI Agents SDK |
+| [`examples/claude-agent-sdk`](../examples/claude-agent-sdk) | Claude Agent SDK |
+| [`examples/langgraph`](../examples/langgraph) | LangGraph |
+| [`examples/typescript`](../examples/typescript) | Node, with `@runweave/agent` and `openai` |
+
+Also: [`examples/github-actions`](../examples/github-actions), a CI job that fails a pull
+request when the agent regresses, and [`examples/sample-agent`](../examples/sample-agent),
+small Python agents used by RunWeave's own tests.
 
 ## Use RunWeave
 

@@ -47,7 +47,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 23. Approvals through the agent SDKs
 - [x] 24. UI polish and accessibility audit
 - [x] 25. Packaging and desktop app
-- [ ] 26. Developer documentation and framework examples
+- [x] 26. Developer documentation and framework examples
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -1848,6 +1848,36 @@ Implementation notes, pull request D (2026-11-20), completing milestone 25:
   TypeScript agent. CI runs each in mock mode.
 - **Done when** every example passes offline in CI and a recorded dry run shows
   a new developer completing the quickstart from the docs alone.
+
+Implementation notes (2026-11-20), three pull requests:
+
+- **A, the docs** (#26):
+  - an index, a five-minute quickstart, concepts, reading reports, a fault catalog,
+    limits and troubleshooting;
+  - a workspace tour, and a bring-your-own-key section in budgets;
+  - CLI and configuration references (every `runweave.toml` key and all 103 `RUNWEAVE_*`
+    settings) and the fault tables, generated from the code by
+    `scripts/reference-docs.py`, so CI fails when they drift.
+
+  `scripts/check-docs.py` checks every link and anchor. It also runs the quickstart's
+  marked commands as written, cloning the checkout under test, on fresh Windows, macOS and
+  Linux runners with no key (`docs.yml`).
+- **B, the examples** (#27): `plain-python`, `openai-agents`, `claude-agent-sdk`,
+  `langgraph` and `typescript`. Each is a project with exactly pinned dependencies, a
+  dataset and mock fixtures. `examples.yml` runs `runweave eval` and `bench` for each with
+  no provider key, and with `HTTP(S)_PROXY` pointing at a closed port, so any call leaving
+  the machine fails. The Claude Agent SDK's bundled CLI ran fully offline.
+- **C, the recorded dry run:** a fresh agent with only a copy of `docs/` and an empty folder
+  followed the quickstart against the public repository, then ran `plain-python`. It
+  completed the quickstart from the docs alone in about three minutes (40 s of commands).
+  Every command exited 0, and the run, an eval job and a bench job succeeded through the
+  workspace's API. It could not click the UI. Its recording, with the fixes for its 11
+  stumbles, is `docs/dry-run/2026-11-quickstart.md`.
+  - The main stumbles: the examples page gave a bare `runweave eval` ("command not found"),
+    and `--no-sync` was unexplained. A test now rejects bare commands there.
+  - `runweave init` now prints `uv run runweave eval` when started through uv.
+- **Owner sign-off:** merging pull request C, which checks this milestone off and
+  completes the roadmap.
 
 ### PydanticAI references
 

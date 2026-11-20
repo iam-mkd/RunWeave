@@ -2,7 +2,7 @@ name: Examples
 
 # One job per framework example in examples/ (see docs/examples.md). Each installs RunWeave
 # from this checkout and the example's pinned dependencies, then runs `runweave eval` and
-# `runweave bench` in mock mode and uploads the reports. Those steps run offline: no
+# `runweave bench` in mock mode and uploads the reports. Those two steps run offline: no
 # provider keys are set and every proxy variable points at a closed local port, so any
 # request that tries to leave the machine fails.
 on:
@@ -52,6 +52,9 @@ jobs:
         run: .venv/bin/runweave eval
       - name: runweave bench (offline)
         run: .venv/bin/runweave bench
+      - name: Allow outbound traffic again, for the report upload
+        if: always()
+        run: ../../scripts/block-egress.sh off
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -93,6 +96,9 @@ jobs:
         run: .venv/bin/runweave eval
       - name: runweave bench (offline)
         run: .venv/bin/runweave bench
+      - name: Allow outbound traffic again, for the report upload
+        if: always()
+        run: ../../scripts/block-egress.sh off
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
