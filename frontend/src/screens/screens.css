@@ -71,3 +71,6 @@ ul.bare { list-style: none; margin: 0; padding: 0; }
 code.digest { overflow-wrap: anywhere; word-break: break-all; }
 .table-tools { padding: var(--space-3) var(--space-4); border-bottom: 1px solid var(--hairline); gap: var(--space-3); }
 .table-tools input[type="search"] { width: 14rem; max-width: 100%; }
+.row.form-row { align-items: flex-end; gap: var(--space-3); }
+.row.form-row .field.grow { flex: 1 1 18rem; }
+.runs-count { margin-left: auto; }

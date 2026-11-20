@@ -33,7 +33,7 @@ class FakeAgentModel:
         observation = HealthObservation.model_validate_json(history[0].evidence.content)
         result = IncidentResult(
             summary=(
-                f"Synthetic triage for {incident.service}: {incident.description}. "
+                f"Synthetic triage for {incident.service}: {incident.description.rstrip('.')}. "
                 f"Mock service health is {observation.status}. {history[1].evidence.content}"
             )[:2500],
             severity="medium" if observation.status == "degraded" else "low",

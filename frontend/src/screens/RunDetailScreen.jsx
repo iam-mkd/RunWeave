@@ -64,7 +64,7 @@ export function RunDetailScreen({ id }) {
       <div className="grid four">
         <StatTile label="Duration" value={duration(elapsed(snapshot))} />
         <StatTile label="Steps" value={String(snapshot.steps.length)} />
-        <StatTile label={usage?.uncertain_requests ? 'Tokens (estimate)' : 'Tokens (in / out)'}
+        <StatTile label={usage?.uncertain_requests ? 'Tokens in / out (estimate)' : 'Tokens in / out'}
           value={usage ? `${compactNumber(usage.input_tokens)} / ${compactNumber(usage.output_tokens)}` : '—'} />
         <StatTile label="Estimated cost" value={usage ? usd(usage.estimated_cost_usd) : '—'} />
       </div>
