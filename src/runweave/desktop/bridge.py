@@ -50,11 +50,11 @@ class AgentBridge:
     async def start(self) -> str:
         """Starts the agents and returns their loopback URL."""
         # Its own process group, so console signals meant for the service do not reach it.
-        group: dict[str, Any] = (
-            {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
-            if sys.platform == "win32"
-            else {"start_new_session": True}
-        )
+        group: dict[str, Any]
+        if sys.platform == "win32":
+            group = {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        else:
+            group = {"start_new_session": True}
         try:
             self._process = await asyncio.create_subprocess_exec(
                 *self._argv, cwd=self._cwd, env=self._env,

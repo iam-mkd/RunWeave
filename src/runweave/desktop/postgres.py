@@ -62,7 +62,7 @@ class PostgresError(RuntimeError):
 
 class PortablePostgres:
     def __init__(self, binaries: Path, state: Path) -> None:
-        self._bin = binaries / "bin"
+        self._bin = binaries.resolve() / "bin"
         self._folder = state / "postgres"
         self._data = self._folder / "data"
         self._password_file = self._folder / "password"
@@ -78,8 +78,11 @@ class PortablePostgres:
         # pg_ctl start leaves the server running; piping its output would keep the pipe
         # open for the server's lifetime, so start writes to the log file instead.
         output = asyncio.subprocess.PIPE if capture else asyncio.subprocess.DEVNULL
+        # Run in our own folder: as an administrator, PostgreSQL's tools restart themselves
+        # with a restricted token, which may not reach the caller's working directory.
+        self._folder.mkdir(parents=True, exist_ok=True)
         process = await asyncio.create_subprocess_exec(
-            *argv, env=env, stdin=asyncio.subprocess.DEVNULL, stdout=output,
+            *argv, env=env, cwd=self._folder, stdin=asyncio.subprocess.DEVNULL, stdout=output,
             stderr=asyncio.subprocess.STDOUT if capture else asyncio.subprocess.DEVNULL,
         )  # fmt: skip
         try:
