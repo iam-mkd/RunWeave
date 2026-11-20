@@ -45,7 +45,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 21. LLM proxy and fault injection
 - [x] 22. Testing CLI, reports, screens, and public alpha
 - [x] 23. Approvals through the agent SDKs
-- [ ] 24. UI polish and accessibility audit
+- [x] 24. UI polish and accessibility audit
 - [ ] 25. Packaging and desktop app
 - [ ] 26. Developer documentation and framework examples
 
@@ -1615,6 +1615,32 @@ Implementation notes, pull request B (2026-11-19):
   No main-thread task reached 50 ms on any screen. The check first proves its long-task
   observer sees a deliberate 120 ms block in a page task, since tasks started through
   DevTools are not reported. The paginated states pass four more accessibility audits.
+
+Implementation notes, pull request C (2026-11-20):
+- Each screen was compared with the approved prototype (`frontend/src/prototype`). Tests
+  first in `frontend/test/polish.test.jsx` and `tests/test_agent.py`. Findings and fixes:
+
+  | Screen | Finding | Fix |
+  | --- | --- | --- |
+  | Runs | Panel title, no run count, 12-hour times, columns not sortable | "Recent runs", a run count beside the filters, 24-hour times, sortable columns over the loaded runs (`sortRuns`) |
+  | Run detail | Token tile label differed from the mockup | "Tokens in / out", with "(estimate)" when any request was estimated |
+  | Run detail | The triage summary doubled a full stop when the description ended with one | The fake model strips it |
+  | Evals | Literal backticks in the description; the run form sat in the content | `runweave eval` as code; dataset and Run eval in the page header |
+  | Evals | Case detail showed the raw run state (`SUCCEEDED`) | A status badge |
+  | Shadow | Gates showed thresholds without the candidate's measured value | A Candidate column (pass rate, regressions, cases with the same status, cost ratio, p95), with shorter thresholds |
+  | Shadow | Form labels misaligned by the candidate hint | Fields aligned on one row, the hint below |
+  | Load tests | An open report left the right column empty | Summary tiles: best throughput, p95 at the highest level, failed runs, levels (`benchSummary`) |
+  | Connect | The LLM proxy option still said "Arrives in milestone 21" | Explains that model calls go through the proxy for agents connected either way |
+
+- `frontend/screenshots.mjs` (`npm run screenshots`) seeds a project with real eval,
+  load-test and shadow reports, submits runs, and captures every screen in both themes to
+  `docs/images` (20 images with PostgreSQL, including Approvals). README shows Agents and
+  Run detail; `docs/workspace.md` has the gallery and lists the testing and approval
+  screens. The old `docs/images/workspace.png` was removed.
+- Rechecked: 49 accessibility audits with no violations, all keyboard paths, and the
+  large-data budgets.
+- Milestone 24 is checked off with this pull request; the owner's approval of it is the
+  sign-off, including the screen-reader pass from pull request A.
 
 ### 25. Packaging and desktop app
 

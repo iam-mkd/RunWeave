@@ -10,11 +10,21 @@ Milestone 5 adds metrics, JSON logs, traces, and reproducible load evidence.
 
 ## Local workspace
 
-RunWeave now includes a React UI for starting investigations, following run
-status, reviewing findings/evidence and cancelling work. No database is required
-for the default offline demo.
+RunWeave includes a React workspace for running your agents, following runs live,
+load tests, evals, shadow comparisons and approvals, in dark and light themes. No
+database is required for the default offline demo.
 
-![RunWeave local React workspace](docs/images/workspace.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/agents-dark.png">
+  <img alt="RunWeave workspace: the Agents screen" src="docs/images/agents-light.png">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/run-detail-dark.png">
+  <img alt="RunWeave workspace: a finished run with its timeline, findings and input" src="docs/images/run-detail-light.png">
+</picture>
+
+Every screen in both themes: [workspace screens](docs/workspace.md#screens).
 
 ```powershell
 uv sync --locked
