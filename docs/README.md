@@ -6,7 +6,8 @@ It works offline with no API key.
 
 ## Start here
 
-1. [Quickstart](quickstart.md): create, evaluate, load-test and run an agent in five minutes.
+1. [Quickstart](quickstart.md): create, evaluate, load-test and run an agent in five minutes. A
+   [recorded dry run](dry-run/2026-11-quickstart.md) shows a newcomer following it.
 2. [Concepts](concepts.md): runs, steps, agents, the proxy, datasets, gates and reports.
 3. [Test your agent](testing.md): `runweave init`, `eval`, `bench` and `shadow` in depth.
 

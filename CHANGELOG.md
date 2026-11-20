@@ -8,6 +8,19 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Developer documentation (milestone 26, part 1):
+  - **Index and quickstart:** `docs/README.md` indexes every page. `docs/quickstart.md`
+    takes a new developer from a clone to an evaluated, load-tested agent running in the
+    workspace, in about five minutes and with no API key.
+  - **New pages:** concepts, reading reports, the fault catalog, limits (a mock
+    benchmark is not provider capacity) and troubleshooting. The workspace guide gains a
+    tour, and the budgets guide gains a bring-your-own-key section.
+  - **References:** the CLI and configuration references (every `runweave.toml` key and
+    `RUNWEAVE_*` setting) and the fault tables are generated from the code by
+    `scripts/reference-docs.py`, and CI fails when they drift.
+  - **Docs CI:** `scripts/check-docs.py` checks every link and anchor. It also runs the
+    quickstart's commands as written on fresh Windows, macOS and Linux runners, keeping
+    each transcript (`.github/workflows/docs.yml`).
 - Framework examples (milestone 26, part 2): `examples/plain-python` (the `openai` client
   and a Chat Completions tool loop), `examples/openai-agents` (OpenAI Agents SDK on the
   Responses API, tracing off), `examples/claude-agent-sdk` (the SDK's bundled Claude Code
@@ -191,6 +204,8 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Changed
 
+- `runweave serve` from a source checkout finds the checkout's built UI from any folder,
+  not only from the checkout's root (milestone 26).
 - The incident-triage workspace uses the new navigation shell and components;
   behavior is unchanged.
 - The workspace no longer keeps recent run IDs in browser storage; history comes from
