@@ -1713,6 +1713,44 @@ Implementation notes, pull request A (2026-11-20):
   - Publishing was not run; it needs the owner's tag, the `release` environment and npm
     trusted publishing.
 
+Implementation notes, pull request B (2026-11-20):
+- **Tests first** (`tests/test_desktop.py`, 11 tests):
+  - jobs use the configured interpreter;
+  - the interpreter check: installed, missing interpreter, missing package with the
+    install command, minor-version compatibility;
+  - archive unpacking: once per checksum, and paths outside the folder refused;
+  - the bridge: serves a sample agent with the chosen interpreter, reports an agent that
+    cannot load, and leaves no process;
+  - PostgreSQL:
+    - loopback only, generated password with mode 0600, a wrong password refused, data
+      kept across restarts;
+    - a server left by a crash is stopped first;
+    - stopping closes the port and removes `postmaster.pid`;
+  - the service end to end: a durable run of a `runweave init` project's agent through
+    the bridge, then exit 0 when stdin closes, with no child process left.
+- **`runweave.desktop`:**
+  - `postgres.py` uses `pg_ctl`, which also drops administrator rights on Windows. It
+    configures `listen_addresses = '127.0.0.1'` and no Unix sockets, and connections
+    don't use TLS (`ssl=disable`, loopback only).
+  - `bridge.py` runs `serve-agent` in its own process group.
+  - `interpreter.py` runs a fixed probe.
+  - `service.py` ties them together; the migrations take the URL directly (a small
+    change to `migrations/env.py`).
+- **The password is a 0600 file, not the OS keystore** as the plan said. It sits beside
+  a data folder that PostgreSQL already restricts to the user, so the keystore would add
+  no protection, and Linux runners often have none.
+- **Pins:** `scripts/fetch-postgres.py` pins the zonky 18.7.0 jars for five platforms by
+  SHA-256 (checked against Maven Central's SHA-1 when pinned), and the `desktop`
+  dependency group pins PyInstaller 6.22.3.
+- **Frozen build on Windows:** 57 MiB (one folder). The smoke test passed: the first
+  start (unpack and `initdb`) took 20.7 s, the UI was served, a durable run succeeded,
+  exit code 0, and no processes were left.
+
+  The first frozen build failed with an SSL error: asyncpg tries TLS by default, and the
+  frozen OpenSSL could not set it up. Loopback connections now disable TLS.
+- **Limitation:** a hard-killed service leaves PostgreSQL running until the next start
+  stops it. Pull request D's uninstall check covers the normal quit path.
+
 ### 26. Developer documentation and framework examples
 
 - Write a five-minute quickstart with no API key, plus concepts, configuration
