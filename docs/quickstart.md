@@ -6,49 +6,47 @@ replies.
 
 ## Before you start
 
-- **Git**
 - **uv**, the Python package manager: see [Installing uv](https://docs.astral.sh/uv/getting-started/installation/).
   uv uses a Python 3.11 or newer that it finds on your computer, or downloads one. CI tests
-  3.11, 3.12 and 3.13; `uv sync --python 3.13` picks one explicitly.
-- **Node.js 22.12 or newer (or 24)**, only to build the workspace UI once.
+  3.11, 3.12 and 3.13.
 
-The commands below work the same in bash, zsh, PowerShell and Command Prompt.
+That is all: no Node.js, no clone and no API key. The commands below work the same in bash,
+zsh, PowerShell and Command Prompt.
 
-## 1. Get RunWeave and build the workspace
+## 1. Install RunWeave
 
 <!-- quickstart:run -->
 ```bash
-git clone https://github.com/iam-mkd/RunWeave.git
-cd RunWeave
-uv sync
-npm --prefix frontend ci
-npm --prefix frontend run build
+uv tool install runweave
+runweave --version
 ```
 
-`uv sync` creates `.venv` with RunWeave and its dependencies; the two `npm` commands build
-the workspace UI into `frontend/dist`, which `runweave serve` finds by itself. This step
-takes a minute or two the first time. Recent npm versions may warn that an install script
-for `esbuild` was blocked; the build does not need it, so the warning is harmless.
+`uv tool install` puts the `runweave` command in its own environment, with the workspace
+UI already built in. The second line prints the installed version, such as
+`runweave 0.1.0`. If your terminal says `runweave` is not found, run `uv tool update-shell`,
+then open a new terminal.
+
+Without uv, install it with [pipx](https://pipx.pypa.io/) (`pipx install runweave`), or
+with `pip install runweave` inside a virtual environment of your own. To upgrade later:
+`uv tool upgrade runweave` (or `pipx upgrade runweave`, or `pip install -U runweave`).
 
 ## 2. Create an agent project
 
 <!-- quickstart:run -->
 ```bash
-uv run runweave init my-agent
+runweave init my-agent
 cd my-agent
 ```
 
 `my-agent/` holds `runweave.toml` (the project), `agent.py` (a small word-count agent),
 `datasets/smoke.jsonl` (four test cases), a `README.md` and a `.gitignore` for the reports.
-Because it sits inside the clone, `uv run` uses RunWeave's environment; keep the `uv run`
-prefix, since `runweave` itself is not on your PATH. To create a project elsewhere later,
-see [next steps](#next-steps).
+Create it wherever you keep your code.
 
 ## 3. Evaluate it
 
 <!-- quickstart:run -->
 ```bash
-uv run runweave eval
+runweave eval
 ```
 
 RunWeave starts in the background, runs each case through the agent, checks the
@@ -57,7 +55,7 @@ assertions, and prints a summary like:
 ```text
 word-count on smoke: 4/4 cases passed (100%), p95 6.5 ms, 0 tokens, $0
 Gates passed.
-Report: C:\...\RunWeave\my-agent\.runweave\reports\eval-20261120T150025Z-4b21a6
+Report: C:\...\my-agent\.runweave\reports\eval-20261120T150025Z-4b21a6
 ```
 
 The exit code is `0` when every gate passes and `1` when one fails, so the same command
@@ -68,7 +66,7 @@ each part.
 
 <!-- quickstart:run -->
 ```bash
-uv run runweave bench
+runweave bench
 ```
 
 `bench` sweeps concurrency levels 1, 4 and 16 with 32 runs each, in about ten seconds. The
@@ -82,7 +80,7 @@ capacity](limits.md).
 
 <!-- quickstart:background http://127.0.0.1:8000/ -->
 ```bash
-uv run runweave serve --agent agent:run
+runweave serve --agent agent:run
 ```
 
 Open <http://127.0.0.1:8000> in your browser:
@@ -110,6 +108,30 @@ agents"}}` and `GET /v1/runs/{id}` ([submit and follow runs](agents.md#3-submit-
   when you are ready ([bring your own key](budgets.md#bring-your-own-key)).
 - **Use a framework or another language:** see the [examples](README.md#examples) and
   [HTTP agents](http-agents.md).
-- **A project outside the clone:** install RunWeave into your own environment with
-  `uv pip install -e path/to/RunWeave` (or `pip install -e`), then run `runweave init` there.
+- **Your agent's own dependencies:** `uv tool install` gives RunWeave an environment of its
+  own, so an agent that imports, say, `openai` needs it there too:
+  `uv tool install runweave --with openai`. Or install `runweave` into your project's own
+  virtual environment with `pip install runweave` (or `uv add --dev runweave`) and run it
+  from there.
 - **Something went wrong?** See [troubleshooting](troubleshooting.md).
+
+## From source
+
+To work on RunWeave itself, or to try unreleased changes, run it from a clone. You also need
+Git and Node.js 22.12 or newer (or 24) to build the workspace UI once:
+
+```bash
+git clone https://github.com/iam-mkd/RunWeave.git
+cd RunWeave
+uv sync
+npm --prefix frontend ci
+npm --prefix frontend run build
+uv run runweave init my-agent
+```
+
+`uv sync` creates `.venv` with RunWeave and its dependencies; the two `npm` commands build
+the workspace UI into `frontend/dist`, which `runweave serve` finds by itself. Recent npm
+versions may warn that an install script for `esbuild` was blocked; the build does not need
+it. Inside the clone, `runweave` is not on your PATH: prefix each command above with
+`uv run`, as in `uv run runweave eval`. See [CONTRIBUTING.md](../CONTRIBUTING.md) for the
+checks a pull request runs.

@@ -5,22 +5,42 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "runweave"
 version = "0.1.0"
-description = "Bounded asynchronous execution for I/O-bound AI agents"
-readme = "README.md"
+description = "Test AI agents locally: evaluations, load tests with injected provider faults, and version comparison"
+readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE", "NOTICE"]
+authors = [{ name = "RunWeave contributors" }]
+keywords = [
+    "agents",
+    "ai-agents",
+    "llm",
+    "evaluation",
+    "evals",
+    "load-testing",
+    "fault-injection",
+    "testing",
+    "benchmark",
+    "llm-proxy",
+]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Environment :: Web Environment",
     "Framework :: AsyncIO",
     "Framework :: FastAPI",
     "Intended Audience :: Developers",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
     "Operating System :: OS Independent",
+    "Operating System :: POSIX :: Linux",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Quality Assurance",
     "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
@@ -38,6 +58,13 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.54,<2.1",
     "uvicorn>=0.34,<1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/iam-mkd/RunWeave"
+Documentation = "https://github.com/iam-mkd/RunWeave/blob/main/docs/README.md"
+Repository = "https://github.com/iam-mkd/RunWeave"
+Issues = "https://github.com/iam-mkd/RunWeave/issues"
+Changelog = "https://github.com/iam-mkd/RunWeave/blob/main/CHANGELOG.md"
 
 [project.scripts]
 runweave-demo = "runweave.demo:main"

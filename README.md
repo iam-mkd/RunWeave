@@ -4,7 +4,7 @@
 them, break their model provider on purpose, and compare versions, all on your own machine,
 offline, with no API key.
 
-![RunWeave in 12 seconds: evaluate and load-test an agent from the CLI, start a run in the workspace, see every model and tool call, and compare load-test results with and without injected provider faults](docs/images/demo.gif)
+![RunWeave in 12 seconds: evaluate and load-test an agent from the CLI, start a run in the workspace, see every model and tool call, and compare load-test results with and without injected provider faults](https://raw.githubusercontent.com/iam-mkd/RunWeave/main/docs/images/demo.gif)
 
 ## Why RunWeave
 
@@ -19,7 +19,7 @@ RunWeave gives you the missing test harness:
 | --- | --- |
 | Does it still give the right answers? | `runweave eval`: a dataset of cases with assertions (output, schema, tools called, latency, cost), pass-rate gates and baselines that catch regressions. A failed gate exits 1, so CI fails the pull request |
 | Will it hold up under load? | `runweave bench`: concurrency sweeps with throughput, p50/p95/p99 latency, queue wait, event-loop lag and memory per level |
-| What happens when the provider misbehaves? | Seeded [faults](docs/faults.md): rate limits, 5xx, timeouts, cut-off streams, broken tool calls, so you see whether your retries actually work |
+| What happens when the provider misbehaves? | Seeded [faults](https://github.com/iam-mkd/RunWeave/blob/main/docs/faults.md): rate limits, 5xx, timeouts, cut-off streams, broken tool calls, so you see whether your retries actually work |
 | Is the new version at least as good? | `runweave shadow`: the old and new versions on the same cases, side by side, with promotion gates |
 | What did the agent actually do? | A local workspace with a live timeline of every model call (with tokens and cost) and tool call |
 | Can it do something risky without asking? | `ctx.request_approval(...)`: the run waits until a person approves those exact arguments (durable mode, with PostgreSQL) |
@@ -27,16 +27,16 @@ RunWeave gives you the missing test harness:
 ## Built for developers
 
 - **Bring your agent as it is.** A Python function with a decorator, any HTTP service in any
-  language, or your existing framework: [examples](docs/examples.md) for the OpenAI Agents
+  language, or your existing framework: [examples](https://github.com/iam-mkd/RunWeave/blob/main/docs/examples.md) for the OpenAI Agents
   SDK, Claude Agent SDK, LangGraph, plain `openai` and TypeScript.
 - **Offline and deterministic by default.** Point your OpenAI or Anthropic SDK at RunWeave's
-  [LLM proxy](docs/llm-proxy.md): replies are mocked from a fixtures file, so tests are free,
+  [LLM proxy](https://github.com/iam-mkd/RunWeave/blob/main/docs/llm-proxy.md): replies are mocked from a fixtures file, so tests are free,
   fast and reproducible. Switch to your own key when you want real models, with a spend cap
   per run.
 - **Made for CI.** Exit codes, JUnit, JSON and Markdown reports, and a [GitHub Actions
-  job](examples/github-actions) that fails a pull request when the agent regresses.
+  job](https://github.com/iam-mkd/RunWeave/tree/main/examples/github-actions) that fails a pull request when the agent regresses.
 - **Honest numbers.** Every report records the machine, settings and dataset digest, and says
-  plainly that a mock benchmark is [not provider capacity](docs/limits.md).
+  plainly that a mock benchmark is [not provider capacity](https://github.com/iam-mkd/RunWeave/blob/main/docs/limits.md).
 - **Yours.** Runs on `127.0.0.1`, keeps prompts out of logs, never needs an account, and is
   open source under Apache-2.0.
 
@@ -46,31 +46,30 @@ provider bill** sees tokens and estimated cost per run before anything ships.
 
 ## Get started
 
-With Git, [uv](https://docs.astral.sh/uv/getting-started/installation/) and Node.js 22.12+:
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) (no Node.js, no clone and
+no API key needed):
 
 ```bash
-git clone https://github.com/iam-mkd/RunWeave.git
-cd RunWeave
-uv sync
-npm --prefix frontend ci
-npm --prefix frontend run build
-uv run runweave init my-agent
+uv tool install runweave
+runweave init my-agent
 cd my-agent
-uv run runweave eval
+runweave eval
 ```
 
-The [quickstart](docs/quickstart.md) walks through it in five minutes, then load-tests the
+`pipx install runweave` or `pip install runweave` work too. Python 3.11 or newer, on
+Windows, macOS or Linux.
+The [quickstart](https://github.com/iam-mkd/RunWeave/blob/main/docs/quickstart.md) walks through it in five minutes, then load-tests the
 agent and runs it in the workspace.
 
 ## Documentation
 
-The [documentation](docs/README.md) starts with the [quickstart](docs/quickstart.md) and
-[concepts](docs/concepts.md), covers connecting agents ([Python](docs/agents.md),
-[HTTP](docs/http-agents.md), the [LLM proxy](docs/llm-proxy.md)), the
-[workspace](docs/workspace.md), [reports](docs/reports.md), [faults](docs/faults.md),
-[approvals](docs/agent-approvals.md), [budgets and your own key](docs/budgets.md),
-[limits](docs/limits.md) and [troubleshooting](docs/troubleshooting.md), and has
-[CLI](docs/cli.md) and [configuration](docs/configuration.md) references.
+The [documentation](https://github.com/iam-mkd/RunWeave/blob/main/docs/README.md) starts with the [quickstart](https://github.com/iam-mkd/RunWeave/blob/main/docs/quickstart.md) and
+[concepts](https://github.com/iam-mkd/RunWeave/blob/main/docs/concepts.md), covers connecting agents ([Python](https://github.com/iam-mkd/RunWeave/blob/main/docs/agents.md),
+[HTTP](https://github.com/iam-mkd/RunWeave/blob/main/docs/http-agents.md), the [LLM proxy](https://github.com/iam-mkd/RunWeave/blob/main/docs/llm-proxy.md)), the
+[workspace](https://github.com/iam-mkd/RunWeave/blob/main/docs/workspace.md), [reports](https://github.com/iam-mkd/RunWeave/blob/main/docs/reports.md), [faults](https://github.com/iam-mkd/RunWeave/blob/main/docs/faults.md),
+[approvals](https://github.com/iam-mkd/RunWeave/blob/main/docs/agent-approvals.md), [budgets and your own key](https://github.com/iam-mkd/RunWeave/blob/main/docs/budgets.md),
+[limits](https://github.com/iam-mkd/RunWeave/blob/main/docs/limits.md) and [troubleshooting](https://github.com/iam-mkd/RunWeave/blob/main/docs/troubleshooting.md), and has
+[CLI](https://github.com/iam-mkd/RunWeave/blob/main/docs/cli.md) and [configuration](https://github.com/iam-mkd/RunWeave/blob/main/docs/configuration.md) references.
 
 ## Test your agent
 
@@ -90,8 +89,8 @@ failure categories and tokens per concurrency level and fault profile. `runweave
 pairs two versions case by case and applies the milestone 16 promotion gates. Run
 `runweave serve` in the project folder and the workspace's Load tests, Evals and Shadow
 screens start the same commands, chart load tests live, and list every saved report. A
-copy-ready GitHub Actions job ([examples/github-actions](examples/github-actions)) fails a
-pull request that regresses the agent. See [Test your agent](docs/testing.md).
+copy-ready GitHub Actions job ([examples/github-actions](https://github.com/iam-mkd/RunWeave/tree/main/examples/github-actions)) fails a
+pull request that regresses the agent. See [Test your agent](https://github.com/iam-mkd/RunWeave/blob/main/docs/testing.md).
 
 ## Run your own agent
 
@@ -104,37 +103,37 @@ uv run --locked runweave serve --agent mypkg.agent:run
 RunWeave validates its input and output, applies the run deadline and cancellation,
 records a step timeline, and exposes it through `/v1/agents`, `/v1/runs` (submit, list,
 poll, cancel) and a live `/v1/runs/{id}/events` stream. See the
-[agent guide](docs/agents.md) and the example in `examples/sample-agent`.
+[agent guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/agents.md) and the example in `examples/sample-agent`.
 
 Agents in their own process (any language) connect over HTTP with the versioned
 `runweave.agent/v1` contract: `runweave serve --http-agent http://127.0.0.1:9100`, or
 connect them from the workspace (Agents → Connect agent → HTTP endpoint). Serve Python
 agents with `runweave serve-agent mypkg.agent:run`, and Node agents with the TypeScript SDK
-in `sdk/typescript`. See [HTTP agents](docs/http-agents.md).
+in `sdk/typescript`. See [HTTP agents](https://github.com/iam-mkd/RunWeave/blob/main/docs/http-agents.md).
 
 Before an action that matters, an agent can wait for a person:
 `await ctx.request_approval("issue_refund", {"order": "A-17"})` returns the decision for
 those exact arguments (durable mode). Decide in the workspace's Approvals screen or with
-`runweave approvals`. See [Approvals for your agents](docs/agent-approvals.md).
+`runweave approvals`. See [Approvals for your agents](https://github.com/iam-mkd/RunWeave/blob/main/docs/agent-approvals.md).
 
 Point your model SDK at RunWeave's LLM proxy (`ctx.proxy`) and every call is metered,
 budgeted and shown on the run timeline. It speaks OpenAI Chat Completions, OpenAI
 Responses and Anthropic Messages, streaming included, and answers deterministically
-offline by default. See [LLM proxy](docs/llm-proxy.md).
+offline by default. See [LLM proxy](https://github.com/iam-mkd/RunWeave/blob/main/docs/llm-proxy.md).
 
 Framework examples show the same agent with plain Python and the `openai` client, the
 OpenAI Agents SDK, the Claude Agent SDK, LangGraph and TypeScript, each a project that
-`runweave eval` and `runweave bench` run offline in CI. See [Examples](docs/examples.md).
+`runweave eval` and `runweave bench` run offline in CI. See [Examples](https://github.com/iam-mkd/RunWeave/blob/main/docs/examples.md).
 
 ## Backend quick start (PowerShell)
 
-The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),
+The final backend milestone adds [offline shadow comparison and release verification](https://github.com/iam-mkd/RunWeave/blob/main/docs/release.md),
 including a durable restart/recall/approval demo and native/container startup checks.
-See [architecture and operations](docs/architecture.md) for deployment, migration,
+See [architecture and operations](https://github.com/iam-mkd/RunWeave/blob/main/docs/architecture.md) for deployment, migration,
 rollback and the public deployment gate. The React workspace builds on that backend.
 
 Milestone 15 adds opt-in disposable Python and read-only Chromium tools. See the
-[isolation guide](docs/isolation.md) for native verification, configuration,
+[isolation guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/isolation.md) for native verification, configuration,
 API examples, limits and the controlled fixture scope. Both tools stay disabled
 by default and verify the target Docker runtime before accepting work.
 
@@ -214,7 +213,7 @@ name and arguments against the allowlist, restricts calls to the incident's
 service, and requires the final result to cite both returned evidence IDs.
 
 Replace the pricing placeholders with your model/tier rates in USD per million
-tokens and a price revision. The [budget guide](docs/budgets.md) describes the
+tokens and a price revision. The [budget guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/budgets.md) describes the
 per-run cost estimate, reservations, and conservative missing-usage accounting.
 
 The default is `fake`. The `.env` file is ignored by Git. Groq requests use a
@@ -263,7 +262,7 @@ uv run --no-sync python -m runweave.evaluation.suite --workflow baseline --outpu
 uv run --no-sync python -m runweave.evaluation.suite --workflow pydanticai --output target/evals/pydanticai.json
 ```
 
-See the [evaluation baseline](evaluations/README.md) for fixture review, report
+See the [evaluation baseline](https://github.com/iam-mkd/RunWeave/blob/main/evaluations/README.md) for fixture review, report
 provenance, seeded regressions, and the scope of deterministic quality checks.
 
 ## Authentication and execution policy
@@ -277,32 +276,32 @@ deployments. Local multi-tenant tests can use the `test` identity provider.
 Foreign runs return 404, missing API scopes return 403, and tenant quota
 rejections return 429 with `Retry-After`. PostgreSQL deployments must apply
 `alembic upgrade head` before starting this version. See the
-[security setup and policy guide](docs/security.md) for configuration, migration,
+[security setup and policy guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/security.md) for configuration, migration,
 JWT claims, audit events, and verification.
 
 Durable mode resumes typed workflow checkpoints with pinned workflow/prompt/model
 identity and fenced operation receipts. Migration 0004 fails unfinished older
 runs that have no checkpoint; stop workers before upgrading. See the
-[checkpoint and replay guide](docs/checkpoints.md) for compatibility, effect
+[checkpoint and replay guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/checkpoints.md) for compatibility, effect
 reconciliation, and upgrade details.
 
 Milestone 12 adds opt-in sandbox ticket creation with durable human approval.
 Submit `create_ticket: true`, review `/v1/runs/{id}/approval`, then submit the
 exact bound decision. Waiting releases the worker lease and has a separate hard
-expiry. See the [approval guide](docs/approvals.md) for scopes, API examples,
+expiry. See the [approval guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/approvals.md) for scopes, API examples,
 revocation, and migration 0005.
 
 Milestone 13 adds opt-in scoped memory backed by PostgreSQL. Explicitly save
 committed health/runbook evidence through `/v1/memory`, then use `"memory": {}`
 on a later run to recall private facts. Project sharing requires configured
 membership. Recall is historical, untrusted data with bounded retention and
-context use. See the [memory guide](docs/memory.md) for migration 0006, scopes,
+context use. See the [memory guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/memory.md) for migration 0006, scopes,
 provenance, deletion, and examples.
 
 Milestone 14 adds `RUNWEAVE_AGENT_WORKFLOW=coordinated`: a fixed coordinator with
 one scoped health specialist and one scoped runbook specialist. Independent
 handoffs overlap within the shared budget and resume committed branches after
-restart. See the [coordination guide](docs/coordination.md) for required scopes,
+restart. See the [coordination guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/coordination.md) for required scopes,
 failure policy, checkpoint compatibility, and baseline quality/cost comparisons.
 
 ## Configuration
@@ -312,7 +311,7 @@ spend limits. Both workflows report aggregate `usage` in run snapshots. Durable
 recovery retains charges from previous attempts. PostgreSQL deployments must
 apply migration 0003. It fails unfinished legacy jobs whose prior usage is unknown
 and preserves terminal results with unavailable usage. See the
-[budget configuration and upgrade guide](docs/budgets.md).
+[budget configuration and upgrade guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/budgets.md).
 
 Settings load from `RUNWEAVE_` environment variables and an optional `.env`. Defaults
 work out of the box. `.env.example` lists supported options; copy it to `.env` if
@@ -320,7 +319,7 @@ needed. Timeout and connection limits are validated at startup. Unrecognized key
 in `.env` fail validation to catch typos. `.env` is excluded from version control.
 
 Every setting, with its default and allowed range, is in the [configuration
-reference](docs/configuration.md).
+reference](https://github.com/iam-mkd/RunWeave/blob/main/docs/configuration.md).
 
 The health lookup retries selected transient HTTP and transport failures with
 exponential backoff and jitter. It observes `Retry-After` in seconds or HTTP-date
@@ -390,14 +389,14 @@ uv run --locked python -m benchmarks.load --workers 128 --soak-seconds 600
 ```
 
 The benchmark commands, fault matrix, and measured results are in the
-[benchmark report](benchmarks/README.md).
+[benchmark report](https://github.com/iam-mkd/RunWeave/blob/main/benchmarks/README.md).
 
 ## Desktop app
 
 The desktop app wraps the same workspace in a window for Windows, macOS and Linux. It runs
 RunWeave beside it with its own PostgreSQL, so approvals and run history work without
 setting up a database. Your Python agents run with your own interpreter. Releases attach
-unsigned installers; see [Desktop app](docs/desktop.md) for installing, the first launch of
+unsigned installers; see [Desktop app](https://github.com/iam-mkd/RunWeave/blob/main/docs/desktop.md) for installing, the first launch of
 an unsigned app, and uninstalling.
 
 ## Docker
@@ -421,7 +420,7 @@ docker run --rm -p 127.0.0.1:8000:8000 runweave:local
 The container runs one Uvicorn process and defaults to the fake model. Publish it on
 `127.0.0.1` only: the workspace accepts the `127.0.0.1` host and its own origin only.
 Readiness is at `http://127.0.0.1:8000/health/ready` and metrics at
-`http://127.0.0.1:8000/metrics`. See [release and Compose](docs/release.md#service-image-and-compose).
+`http://127.0.0.1:8000/metrics`. See [release and Compose](https://github.com/iam-mkd/RunWeave/blob/main/docs/release.md#service-image-and-compose).
 
 ## Verification
 
@@ -449,10 +448,10 @@ evaluation reports passed their 13 cases and 68 assertions. Ruff, strict mypy,
 and the lockfile check passed. Groq coverage uses
 mocked HTTP responses. Live inference requires explicit opt-in and a key.
 Native Uvicorn startup/shutdown and the main container image were verified in
-milestone 16 (see [the release guide](docs/release.md)). The paired coordination comparison preserves fixture quality with three model
+milestone 16 (see [the release guide](https://github.com/iam-mkd/RunWeave/blob/main/docs/release.md)). The paired coordination comparison preserves fixture quality with three model
 requests per workflow and about one-third fewer conservatively estimated input
 tokens. Its prices are synthetic and its timing samples are illustrative; see
-[the comparison limits](docs/coordination.md#verification-and-comparison).
+[the comparison limits](https://github.com/iam-mkd/RunWeave/blob/main/docs/coordination.md#verification-and-comparison).
 
 ## Current boundaries
 
@@ -461,7 +460,7 @@ Shutdown's grace period bounds draining. Final cleanup depends on adapters
 cooperating with cancellation. The default in-memory mode keeps run state for
 the process lifetime, subject to retention limits.
 
-Follow [PLAN.md](PLAN.md) in milestone order and [AGENTS.md](AGENTS.md) for coding
+Follow [PLAN.md](https://github.com/iam-mkd/RunWeave/blob/main/PLAN.md) in milestone order and [AGENTS.md](https://github.com/iam-mkd/RunWeave/blob/main/AGENTS.md) for coding
 rules.
 
 ## PostgreSQL durable mode
@@ -523,9 +522,9 @@ uv run --no-sync pytest tests/test_postgres_recovery.py -q
 
 ## Contributing, security, and license
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the test-first workflow, and
+See [CONTRIBUTING.md](https://github.com/iam-mkd/RunWeave/blob/main/CONTRIBUTING.md) for setup, the test-first workflow, and
 pull request checks. Report vulnerabilities privately as described in
-[SECURITY.md](SECURITY.md). Changes are recorded in [CHANGELOG.md](CHANGELOG.md).
+[SECURITY.md](https://github.com/iam-mkd/RunWeave/blob/main/SECURITY.md). Changes are recorded in [CHANGELOG.md](https://github.com/iam-mkd/RunWeave/blob/main/CHANGELOG.md).
 
-RunWeave is licensed under the [Apache License 2.0](LICENSE). Third-party
-dependency licenses are summarized in [docs/licenses.md](docs/licenses.md).
+RunWeave is licensed under the [Apache License 2.0](https://github.com/iam-mkd/RunWeave/blob/main/LICENSE). Third-party
+dependency licenses are summarized in [docs/licenses.md](https://github.com/iam-mkd/RunWeave/blob/main/docs/licenses.md).

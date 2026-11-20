@@ -36,11 +36,11 @@ with `examples/sample-agent` on `PYTHONPATH`.
 
 ### TypeScript (Node)
 
-The `@runweave/agent` package in `sdk/typescript` (no runtime dependencies, Node 22.12+ or
+The `runweave-agent` package in `sdk/typescript` (no runtime dependencies, Node 22.12+ or
 24+) provides `defineAgent` and `serveAgents`:
 
 ```js
-import { defineAgent, serveAgents } from '@runweave/agent';
+import { defineAgent, serveAgents } from 'runweave-agent';
 
 const agent = defineAgent({
   name: 'word-count', version: '1.0.0', inputSchema, outputSchema,
@@ -53,8 +53,10 @@ const server = await serveAgents([agent], { port: 9200 }); // loopback only
 ```
 
 The context has `runId`, `attempt`, `signal` (aborted on cancellation or deadline; pass it
-to your I/O), `remainingMs()`, `step(title, fn, { detail })`, `log()` and `usage()`. The
-package is not on npm yet; install it from the repository:
+to your I/O), `remainingMs()`, `step(title, fn, { detail })`, `log()` and `usage()`. Install
+it with `npm install runweave-agent` once v0.1.0 is on npm (projects from
+`runweave init --language typescript` carry a copy in `vendor/`). To run the example from
+the repository:
 
 ```bash
 npm --prefix sdk/typescript ci

@@ -3,7 +3,7 @@
 A RunWeave project created by `runweave init --language typescript`.
 
 ```bash
-npm install                      # installs the bundled @runweave/agent SDK
+npm install                      # installs the bundled runweave-agent SDK
 runweave eval                    # starts agent.mjs, runs datasets/smoke.jsonl, stops it
 runweave eval --save-baseline    # keep this result to catch regressions later
 runweave bench                   # load-test: throughput, latency, memory, failures

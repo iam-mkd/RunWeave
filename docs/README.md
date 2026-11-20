@@ -32,7 +32,7 @@ same question with one tool, so you can compare how each connects to RunWeave.
 | [`examples/openai-agents`](../examples/openai-agents) | OpenAI Agents SDK |
 | [`examples/claude-agent-sdk`](../examples/claude-agent-sdk) | Claude Agent SDK |
 | [`examples/langgraph`](../examples/langgraph) | LangGraph |
-| [`examples/typescript`](../examples/typescript) | Node, with `@runweave/agent` and `openai` |
+| [`examples/typescript`](../examples/typescript) | Node, with `runweave-agent` and `openai` |
 
 Also: [`examples/github-actions`](../examples/github-actions), a CI job that fails a pull
 request when the agent regresses, and [`examples/sample-agent`](../examples/sample-agent),

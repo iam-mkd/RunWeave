@@ -1,7 +1,7 @@
-// A TypeScript agent on @runweave/agent with the `openai` client, Chat Completions and a
+// A TypeScript agent on runweave-agent with the `openai` client, Chat Completions and a
 // small tool loop. The client talks to RunWeave's LLM proxy (ctx.proxy); in mock mode the
 // proxy answers from fixtures.json, so the agent runs offline with no API key.
-import { AgentError, defineAgent, serveAgents } from '@runweave/agent';
+import { AgentError, defineAgent, serveAgents } from 'runweave-agent';
 import OpenAI from 'openai';
 
 const FORECASTS = { paris: 'sunny, 21 °C', london: 'light rain, 14 °C', tokyo: 'cloudy, 18 °C' };

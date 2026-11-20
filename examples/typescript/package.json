@@ -10,7 +10,7 @@
     "start": "node agent.mjs"
   },
   "dependencies": {
-    "@runweave/agent": "file:../../sdk/typescript",
+    "runweave-agent": "file:../../sdk/typescript",
     "openai": "7.52.0"
   }
 }

@@ -1,5 +1,5 @@
 // A small agent to start from, served over the RunWeave HTTP agent contract.
-import { defineAgent, serveAgents } from '@runweave/agent';
+import { defineAgent, serveAgents } from 'runweave-agent';
 
 const wordCount = defineAgent({
   name: 'word-count',

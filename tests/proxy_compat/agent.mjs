@@ -2,7 +2,7 @@
 // their base URL and key, which come from ctx.proxy (sent by RunWeave in the run request).
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import { defineAgent, serveAgents } from '@runweave/agent';
+import { defineAgent, serveAgents } from 'runweave-agent';
 
 const inputSchema = { type: 'object', properties: { scenario: { type: 'string' } }, required: ['scenario'] };
 const outputSchema = { type: 'object' };

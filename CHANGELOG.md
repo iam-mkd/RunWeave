@@ -6,7 +6,34 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-20
+
+The first public release. Install it with `uv tool install runweave`, `pipx install
+runweave` or `pip install runweave`; the TypeScript SDK is `runweave-agent` on npm. It
+covers milestones 1–27. Milestones 1–16 and the first workspace brought bounded async
+scheduling, deadlines, retries, cancellation and graceful shutdown; incident-triage
+workflows (baseline, PydanticAI, coordinated); observability and load benchmarks;
+PostgreSQL durable recovery, checkpoints, approvals, scoped memory and budgets;
+authentication and prompt-injection defenses; sandboxed Python and browser tools; and
+offline evaluation and shadow comparison. Everything after that is listed below. See
+PLAN.md for the verified scope and known limits.
+
 ### Added
+
+- First public release (milestone 27):
+  - **PyPI:** the release workflow publishes the wheel and sdist to PyPI by trusted
+    publishing (no token stored), from the same checksummed files as every other channel,
+    with attestations, after the owner approves the `release` environment.
+  - **Install check:** every pull request installs the built wheel with `pip` and with
+    `uv tool install` on fresh Windows, macOS and Linux runners, with no Node and no
+    clone, and runs `init`, `eval`, `bench`, `shadow` and the workspace from it.
+  - **`runweave --version`** prints the installed version.
+  - **Quickstart:** installs the package instead of cloning; building from source moves
+    to its own section. Docs CI runs it on three systems with the wheel the pull request
+    built, substituting only the install line.
+  - **Package metadata:** PyPI description, keywords, classifiers and project links, and
+    a README whose links and images are absolute so they work on pypi.org; npm keywords,
+    repository (required for provenance), homepage and bugs.
 
 - Developer documentation (milestone 26, part 1):
   - **Index and quickstart:** `docs/README.md` indexes every page. `docs/quickstart.md`
@@ -204,6 +231,11 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Changed
 
+- The TypeScript SDK is now `runweave-agent` on npm, not `@runweave/agent`: the `@runweave`
+  npm scope belongs to an unrelated project. A TypeScript project created by an earlier
+  `runweave init` imports `'@runweave/agent'`; change the import and the dependency's name
+  in `package.json` to `runweave-agent`.
+
 - `runweave serve` from a source checkout finds the checkout's built UI from any folder,
   not only from the checkout's root (milestone 26).
 - The incident-triage workspace uses the new navigation shell and components;
@@ -233,12 +265,5 @@ All notable changes to RunWeave are recorded here. The format follows
 - Frontend `vite` raised to 7.3.8 and `esbuild` to 0.28.2 (fixes
   GHSA-g7r4-m6w7-qqqr, development-server file read on Windows).
 
-## 0.1.0 — 2026-11-18 (not published)
-
-Milestones 1–16 and the local React workspace: bounded async scheduling,
-deadlines, retries, cancellation and graceful shutdown; incident-triage
-workflows (baseline, PydanticAI, coordinated); observability and load
-benchmarks; PostgreSQL durable recovery, checkpoints, approvals, scoped memory,
-and budgets; authentication and prompt-injection defenses; sandboxed Python and
-browser tools; offline evaluation and shadow comparison. See PLAN.md for the
-verified scope and known limits.
+[Unreleased]: https://github.com/iam-mkd/RunWeave/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/iam-mkd/RunWeave/releases/tag/v0.1.0

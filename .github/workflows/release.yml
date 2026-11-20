@@ -1,8 +1,10 @@
 name: Release
 
-# Every pull request builds and verifies the release artifacts. Publishing (npm, GHCR and a
+# Every pull request builds and verifies the release artifacts, then installs the built wheel
+# on fresh Windows, macOS and Linux runners and uses it. Publishing (PyPI, npm, GHCR and a
 # draft GitHub Release) runs only when the owner pushes a v* tag or starts this workflow by
-# hand, and only through the protected `release` environment.
+# hand, and only through the protected `release` environment, so each publishing job waits
+# for the owner's approval.
 on:
   pull_request:
   push:
@@ -98,8 +100,75 @@ jobs:
           name: compose-check
           path: target/release/compose-check.json
 
-  publish-npm:
+  install-check:
+    # The exact wheel that would be published, installed into a fresh environment with no
+    # Node and no clone, the two ways the quickstart gives: pip and `uv tool install`.
+    name: Install the wheel (${{ matrix.os }}, ${{ matrix.installer }})
     needs: build
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        installer: [pip, uv-tool]
+        include:
+          - installer: pip
+            python: '3.11'
+          - installer: uv-tool
+            python: '3.13'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: dist
+      - name: init, eval, bench, shadow and the workspace from the installed wheel
+        shell: bash
+        run: |
+          wheel=$(ls dist/runweave-*-py3-none-any.whl)
+          uv run --no-project --with httpx==0.28.1 python scripts/check-release.py --wheel "$wheel" --installer ${{ matrix.installer }} --skip-typescript --output target/release/install-check.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: install-check-${{ matrix.os }}-${{ matrix.installer }}
+          path: target/release/install-check.json
+
+  publish-pypi:
+    needs: [build, install-check]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: dist
+      - name: Verify the checksums and keep exactly the wheel and the sdist
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          mkdir pypi
+          cp dist/runweave-*-py3-none-any.whl dist/runweave-*.tar.gz pypi/
+          ls -l pypi
+          test "$(find pypi -type f | wc -l)" -eq 2
+      - name: Publish runweave to PyPI (trusted publishing, with attestations)
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: pypi/
+
+  publish-npm:
+    needs: [build, install-check]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: release
@@ -115,11 +184,19 @@ jobs:
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
-      - name: Publish @runweave/agent with provenance (npm trusted publishing)
+      - name: Verify the checksums, and that npm is new enough for trusted publishing
+        run: |
+          (cd dist && sha256sum --check SHA256SUMS)
+          printf '%s\n' 11.5.1 "$(npm --version)" | sort -V -C || { echo "npm $(npm --version) is older than 11.5.1"; exit 1; }
+      - name: Publish runweave-agent with provenance
+        env:
+          # Set only for the first publish (docs/release.md): npm's trusted publishing is
+          # configured on an existing package. Later, with no NPM_TOKEN, npm uses OIDC.
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish dist/runweave-agent-*.tgz --provenance --access public
 
   publish-image:
-    needs: build
+    needs: [build, install-check]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: release
@@ -155,7 +232,7 @@ jobs:
       ref: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
   draft-release:
-    needs: [build, desktop]
+    needs: [build, install-check, desktop]
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: release

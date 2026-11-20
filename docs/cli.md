@@ -1,7 +1,9 @@
 # CLI reference
 
-`runweave` is installed with RunWeave; from a checkout, prefix commands with `uv run`. Every
-command prints its own help with `--help`, for example `runweave eval --help`.
+`runweave` is installed with RunWeave (`uv tool install runweave`, `pipx install runweave`
+or `pip install runweave`); from a checkout, prefix commands with `uv run`. Every command
+prints its own help with `--help`, for example `runweave eval --help`, and
+`--version` prints the installed version (`runweave --version`).
 
 Exit codes for `eval`, `bench` and `shadow`: `0` every gate passed, `1` a gate failed, `2`
 a project, dataset or connection problem (printed as a message, never a traceback).

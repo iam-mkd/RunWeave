@@ -11,7 +11,7 @@ one tool, so you can compare how each framework connects to RunWeave.
 | [examples/openai-agents](../examples/openai-agents) | OpenAI Agents SDK | `Agent` and `Runner` with one `@function_tool` on the proxy's Responses endpoint, tracing disabled |
 | [examples/claude-agent-sdk](../examples/claude-agent-sdk) | Claude Agent SDK | The SDK's bundled Claude Code CLI on the proxy's Anthropic Messages endpoint, with an in-process MCP tool, built-in tools off, nonessential traffic disabled and a throwaway config folder |
 | [examples/langgraph](../examples/langgraph) | LangGraph | `create_react_agent` with `ChatOpenAI` from `langchain-openai` pointed at the proxy |
-| [examples/typescript](../examples/typescript) | `@runweave/agent` and `openai` (Node) | An HTTP agent that `runweave eval` starts and stops, with a Chat Completions tool loop that passes the run's abort signal |
+| [examples/typescript](../examples/typescript) | `runweave-agent` and `openai` (Node) | An HTTP agent that `runweave eval` starts and stops, with a Chat Completions tool loop that passes the run's abort signal |
 
 Every dataset checks three things: the agent called the tool (`tool_called`), the final
 answer uses its result, and an empty question is rejected before a run starts
@@ -30,10 +30,10 @@ uv run --no-sync runweave eval     # the dataset through the mock proxy: offline
 uv run --no-sync runweave bench    # a small concurrency sweep; any failed run fails it
 ```
 
-`--no-sync` matters: without it, `uv run` tries to install the example's `pyproject.toml`
-again and looks for `runweave` in the package registry, where it is not published, failing
-with "runweave was not found in the package registry". The previous line already installed
-it from the clone.
+`--no-sync` matters: without it, `uv run` installs the example's `pyproject.toml` again and
+takes `runweave` from the package registry instead of the clone (before the first release,
+it fails with "runweave was not found in the package registry"). The previous line already
+installed it from the clone, so the example tests the code you have checked out.
 
 The TypeScript example uses the clone's own environment, so after its `npm` steps (see its
 README) it is `uv run runweave eval` and `uv run runweave bench`.

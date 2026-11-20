@@ -55,7 +55,7 @@ function HttpSetup({ onBack }) {
     <div className="stack">
       <p>Start your agent so it listens on this machine, for example:</p>
       <CopyBlock id="serve-agent-command" text="runweave serve-agent mypkg.agent:run --port 9100" />
-      <p className="muted">TypeScript: <code>serveAgents([agent], {'{'} port: 9100 {'}'})</code> from <code>@runweave/agent</code>.</p>
+      <p className="muted">TypeScript: <code>serveAgents([agent], {'{'} port: 9100 {'}'})</code> from <code>runweave-agent</code>.</p>
       <form className="stack narrow" onSubmit={check}>
         <div className="field">
           <label htmlFor="agent-url">Agent URL</label>

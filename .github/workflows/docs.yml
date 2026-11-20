@@ -2,7 +2,8 @@ name: Docs
 
 # The developer docs stay true: the references match the code, every link resolves, and
 # the quickstart runs exactly as written on fresh Windows, macOS and Linux runners with no
-# API key. The transcript of each run is kept as evidence.
+# API key, installing the wheel this pull request built in place of the release on PyPI.
+# The transcript of each run is kept as evidence.
 on:
   pull_request:
   push:
@@ -30,8 +31,36 @@ jobs:
         run: uv run --no-sync python scripts/check-docs.py --links
       - run: uv run --no-sync pytest tests/test_docs.py -q
 
+  wheel:
+    # Until v0.1.0 is on PyPI, the quickstart installs the wheel this pull request builds.
+    name: Build the wheel the quickstart installs
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Build the workspace UI, bundle it and build the wheel
+        run: |
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+          python scripts/bundle-workspace-ui.py
+          uv build --wheel --out-dir wheel
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quickstart-wheel
+          path: wheel/
+          if-no-files-found: error
+
   quickstart:
     name: Quickstart (${{ matrix.os }})
+    needs: wheel
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     strategy:
@@ -39,19 +68,18 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      # Full history: the quickstart clones this checkout as a reader clones GitHub.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-          fetch-depth: 0
-      # What the quickstart asks the reader to have: Git, uv and Node.js.
+      # What the quickstart asks the reader to have: uv, and nothing else.
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          node-version: '24'
-      - name: Run docs/quickstart.md as written, with no API key
+          name: quickstart-wheel
+          path: wheel
+      - name: Run docs/quickstart.md as written, with no API key (the install line takes the wheel)
         shell: bash
-        run: uv run --no-project --with httpx python scripts/check-docs.py --quickstart --transcript target/quickstart/transcript.md
+        run: uv run --no-project --with httpx python scripts/check-docs.py --quickstart --wheel "$(ls wheel/runweave-*-py3-none-any.whl)" --transcript target/quickstart/transcript.md
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

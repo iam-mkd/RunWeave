@@ -118,3 +118,12 @@ def test_container_mode_listens_on_all_interfaces_inside_the_container_only() ->
     assert bind_host(parser().parse_args(["serve", "--container"])) == "0.0.0.0"
     result = run_cli("serve", "--demo", "--check", "--container", "--host", "0.0.0.0")
     assert result.returncode != 0 and "loopback" in result.stderr
+
+
+def test_version_prints_the_installed_package_version() -> None:
+    # After `pip install runweave` or `uv tool install runweave`, the first check a reader runs.
+    from importlib.metadata import version
+
+    result = run_cli("--version")
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == f"runweave {version('runweave')}"

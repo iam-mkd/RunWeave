@@ -9,6 +9,6 @@
     "start": "node agent.mjs"
   },
   "dependencies": {
-    "@runweave/agent": "file:vendor/runweave-agent"
+    "runweave-agent": "file:vendor/runweave-agent"
   }
 }
