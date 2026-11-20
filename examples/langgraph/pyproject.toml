@@ -1,0 +1,13 @@
+[project]
+name = "runweave-example-langgraph"
+version = "0.1.0"
+description = "A LangGraph ReAct agent on langchain-openai, tested offline by RunWeave"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+# Exact pins. RunWeave is installed from this repository (see README.md).
+dependencies = [
+    "runweave==0.1.0",
+    "langgraph==1.2.24",
+    "langchain-openai==1.8.5",
+    "langchain-core==1.8.4",
+]

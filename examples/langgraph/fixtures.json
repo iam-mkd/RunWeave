@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "rules": [
+    {"when": {"last_role": "tool"}, "reply": {"text": "It is sunny and 21 °C in Paris."}},
+    {"when": {"contains": "weather", "has_tools": true},
+     "reply": {"tool_calls": [{"name": "get_weather", "arguments": {"city": "Paris"}}]}}
+  ]
+}

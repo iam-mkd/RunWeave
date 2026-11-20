@@ -1,0 +1,3 @@
+{"id": "calls-the-weather-tool", "input": {"question": "What is the weather in Paris?"}, "expect": {"status": "SUCCEEDED", "tool_called": ["get_weather"]}}
+{"id": "answers-from-the-tool", "input": {"question": "What is the weather in Paris?"}, "expect": {"contains": {"answer": "sunny"}}}
+{"id": "rejects-an-empty-question", "input": {"question": ""}, "expect": {"status": "REJECTED"}}

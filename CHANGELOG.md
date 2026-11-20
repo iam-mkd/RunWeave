@@ -8,6 +8,15 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Framework examples (milestone 26, part 2): `examples/plain-python` (the `openai` client
+  and a Chat Completions tool loop), `examples/openai-agents` (OpenAI Agents SDK on the
+  Responses API, tracing off), `examples/claude-agent-sdk` (the SDK's bundled Claude Code
+  CLI on the Anthropic Messages endpoint with an in-process MCP tool), `examples/langgraph`
+  (`create_react_agent` with `langchain-openai`) and `examples/typescript` (`@runweave/agent`
+  with the `openai` npm client). Each is a project with exactly pinned dependencies, a
+  dataset and mock fixtures. `.github/workflows/examples.yml` runs `runweave eval` and
+  `runweave bench` for each one with no provider key and all outbound traffic blocked.
+  See `docs/examples.md`. `examples/typescript` replaces `examples/http-agent-typescript`.
 - Desktop releases (milestone 25, part 4; completes milestone 25):
   - **Draft releases:** for the owner's tag, the draft release attaches the unsigned
     installers (MSI and NSIS, DMG, `.deb`, `.rpm`, AppImage), `THIRD_PARTY_NOTICES.txt`

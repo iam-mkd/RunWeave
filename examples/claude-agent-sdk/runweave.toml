@@ -1,0 +1,24 @@
+# RunWeave project: `runweave eval` runs datasets/smoke.jsonl through the agent, offline.
+[agent]
+name = "claude-weather"
+python = "claude_weather:run"
+
+[limits]
+run_timeout_seconds = 60   # each run starts the Claude Code CLI
+concurrency = 2
+
+[proxy]
+mode = "mock"                  # the CLI's model calls get replies from fixtures.json
+mock_fixtures = "fixtures.json"
+
+[[datasets]]
+name = "smoke"
+path = "datasets/smoke.jsonl"
+
+[eval]
+min_pass_rate = 1.0
+
+[bench]
+concurrency = [1, 2]
+runs = 4
+max_failure_rate = 0      # any failed run fails the sweep

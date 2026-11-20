@@ -118,3 +118,5 @@ known-first-party = ["runweave"]
 python_version = "3.11"
 strict = true
 files = ["src", "tests", "benchmarks", "examples", "scripts/check-isolation.py", "scripts/check-container.py", "scripts/check-release.py", "scripts/measure-ui-overhead.py", "scripts/bundle-workspace-ui.py", "scripts/fetch-postgres.py", "scripts/build-sidecar.py", "scripts/third-party-notices.py", "scripts/check-desktop.py"]
+# Framework examples are checked in their own environments (.github/workflows/examples.yml).
+exclude = ['^examples/(openai-agents|claude-agent-sdk|langgraph)/']

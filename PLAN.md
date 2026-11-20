@@ -1154,7 +1154,8 @@ Implementation notes, pull request B (2026-11-18):
 - Connect gained the HTTP endpoint path (test the URL, see agents and conflicts,
   register, copy the `--http-agent` startup command, run each agent). The Agents
   screen removes runtime-registered agents after a confirming click.
-- `examples/http-agent-typescript` is a word-count agent on the SDK.
+- `examples/http-agent-typescript` is a word-count agent on the SDK (superseded by
+  `examples/typescript` in milestone 26).
 - Validation: 25 SDK tests, the contract suite (24 checks on Python 3.11 and 3.13),
   426 offline Python tests, Ruff, formatting and strict mypy (120 files), 60 Vitest
   tests, the production build and the browser smoke test (no CSP violations or page
