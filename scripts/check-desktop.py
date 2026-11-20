@@ -78,12 +78,11 @@ def _until(check: Callable[[], Any], what: str, seconds: float) -> Any:
         time.sleep(0.5)
 
 
-def _install_windows(installer: Path) -> Installed:
+if sys.platform == "win32":
     import winreg
 
-    _run(str(installer), "/S")
-
-    def entry() -> dict[str, str] | None:
+    def _uninstall_entry() -> dict[str, str] | None:
+        """RunWeave's entry among the registry's installed programs, if any."""
         key_path = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
         for root in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
             try:
@@ -102,7 +101,15 @@ def _install_windows(installer: Path) -> Installed:
                 continue
         return None
 
-    found = _until(entry, "the installer to register RunWeave", 120)
+else:
+
+    def _uninstall_entry() -> dict[str, str] | None:
+        raise RuntimeError("The Windows registry exists only on Windows")
+
+
+def _install_windows(installer: Path) -> Installed:
+    _run(str(installer), "/S")
+    found = _until(_uninstall_entry, "the installer to register RunWeave", 120)
     folder = Path(found["InstallLocation"].strip('"'))
     [executable] = [
         item for item in folder.glob("*.exe") if not item.name.lower().startswith("uninstall")
@@ -111,7 +118,7 @@ def _install_windows(installer: Path) -> Installed:
     return Installed(
         executable,
         lambda: _run(uninstaller, "/S"),
-        lambda: not executable.exists() and entry() is None,
+        lambda: not executable.exists() and _uninstall_entry() is None,
     )
 
 

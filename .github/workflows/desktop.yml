@@ -59,18 +59,18 @@ jobs:
       - name: Rust toolchain from rust-toolchain.toml
         working-directory: desktop/src-tauri
         run: rustup show active-toolchain || rustup toolchain install
+      - name: Third-party notices and the Rust SBOM (the Tauri build checks bundled resources exist)
+        shell: bash
+        run: |
+          mkdir -p target/notices
+          uv export --locked --no-dev --no-emit-project --extra durable --extra workflow --format requirements-txt > target/notices/requirements.txt
+          uv run --no-sync python scripts/third-party-notices.py --out target/notices
       - name: Rust format, lint and tests
         working-directory: desktop/src-tauri
         run: |
           cargo fmt --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked
-      - name: Third-party notices (THIRD_PARTY_NOTICES.txt) and the Rust SBOM
-        shell: bash
-        run: |
-          mkdir -p target/notices
-          uv export --locked --no-dev --no-emit-project --extra durable --extra workflow --format requirements-txt > target/notices/requirements.txt
-          uv run --no-sync python scripts/third-party-notices.py --out target/notices
       - name: Build the app and its unsigned installers
         working-directory: desktop
         run: |
