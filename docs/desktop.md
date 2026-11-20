@@ -1,9 +1,66 @@
 # Desktop app
 
 The desktop app (milestone 25) is a Tauri window around the workspace, with RunWeave
-running beside it as a frozen Python program: the **desktop service**. This page
-describes the service. The window, installers and first-launch steps are added in the
-next pull requests of milestone 25.
+running beside it as a frozen Python program: the **desktop service**. Installers and
+first-launch steps for unsigned builds come with the release pull request of milestone 25.
+
+## The window
+
+On first launch the window shows a setup page:
+- **Project folder:** pick a folder with a `runweave.toml` (`runweave init my-agent` creates
+  one).
+- **Python interpreter:** for Python agents, pick the `python` of the environment your
+  agent runs in, with `runweave` installed. HTTP agents don't need one.
+
+**Start RunWeave** saves both choices in the app's config folder (`desktop.json`), starts
+the service, and shows the workspace once it is ready. The first start sets up the local
+database and takes longer. Later launches start straight away with the saved choices. If
+the service cannot start, the page shows why, for example the exact command to install
+`runweave` in your interpreter, and lets you choose again.
+
+Quitting the window closes the service's input, so it stops your agent and PostgreSQL. It
+is killed only if it hasn't stopped after 20 seconds. If the window itself is killed, the
+service still sees its input close and shuts down the same way.
+
+### What the window allows
+
+- **App commands:** only the bundled setup page can call them, and there are four:
+  - read the saved choices;
+  - choose a folder;
+  - choose an interpreter;
+  - start.
+
+  They are granted by `capabilities/default.json`, and the build requires every command to
+  be granted explicitly.
+- **The workspace:** it is a page served by the service on `127.0.0.1`. It has no access to
+  those commands, and the window navigates only to the setup page and that one origin.
+- **Restrictions:**
+  - no shell, file system or updater plugins;
+  - the folder and interpreter pickers run in Rust, not in the page;
+  - auto-update is off;
+  - the setup page has its own strict CSP.
+
+### Build it from a checkout
+
+You need Rust (the version is pinned in `desktop/src-tauri/rust-toolchain.toml`) and Node 22
+or newer. Windows also needs the MSVC build tools; Linux needs WebKitGTK 4.1 (see
+`.github/workflows/desktop.yml`). Then:
+
+```powershell
+uv run --no-sync python scripts/fetch-postgres.py --out target/postgres --archive target/postgres-archive/postgres.txz
+uv run --no-sync python scripts/build-sidecar.py
+npm.cmd --prefix desktop ci
+npm.cmd --prefix desktop run build
+```
+
+The installers land in `desktop/src-tauri/target/release/bundle/`:
+- Windows: MSI and NSIS;
+- macOS: `.app` and DMG;
+- Linux: `.deb`, `.rpm` and AppImage.
+
+They bundle the frozen service (`sidecar/`) and the PostgreSQL archive (`postgres/`) as
+resources. `cargo test` in `desktop/src-tauri` runs the window's own tests: the saved
+choices, and the service lifecycle against a fake service.
 
 ## What the service does
 
@@ -86,4 +143,5 @@ CI does this on Windows, Linux and macOS (`.github/workflows/desktop.yml`).
   next start, which stops it first.
 - **The first start is slower** because PostgreSQL is unpacked and initialized: about
   20 s on the Windows machine used for development.
-- **Nothing is signed yet,** and there is no auto-update.
+- **Nothing is signed yet,** and there is no auto-update. Windows SmartScreen and macOS
+  Gatekeeper warn about unsigned apps; the release notes will give first-launch steps.

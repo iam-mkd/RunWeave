@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-current-choices"
+description = "Enables the current_choices command without any pre-configured scope."
+commands.allow = ["current_choices"]
+
+[[permission]]
+identifier = "deny-current-choices"
+description = "Denies the current_choices command without any pre-configured scope."
+commands.deny = ["current_choices"]
