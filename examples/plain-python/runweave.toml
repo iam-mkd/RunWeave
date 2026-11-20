@@ -1,0 +1,24 @@
+# RunWeave project: `runweave eval` runs datasets/smoke.jsonl through the agent, offline.
+[agent]
+name = "plain-python-weather"
+python = "openai_weather:run"
+
+[limits]
+run_timeout_seconds = 30
+concurrency = 4
+
+[proxy]
+mode = "mock"                  # model calls through ctx.proxy get replies from fixtures.json
+mock_fixtures = "fixtures.json"
+
+[[datasets]]
+name = "smoke"
+path = "datasets/smoke.jsonl"
+
+[eval]
+min_pass_rate = 1.0
+
+[bench]
+concurrency = [1, 4]
+runs = 8
+max_failure_rate = 0      # any failed run fails the sweep

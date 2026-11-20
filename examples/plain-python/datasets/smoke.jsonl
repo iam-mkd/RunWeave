@@ -1,0 +1,4 @@
+{"id": "calls-the-weather-tool", "input": {"question": "What is the weather in Paris?"}, "expect": {"status": "SUCCEEDED", "tool_called": ["get_weather"], "max_model_calls": 2}}
+{"id": "answers-from-the-tool", "input": {"question": "What is the weather in Paris?"}, "expect": {"contains": {"answer": "sunny"}, "output": {"turns": 2}}}
+{"id": "answers-without-a-tool", "input": {"question": "Say hello"}, "expect": {"output": {"turns": 1}, "max_model_calls": 1}}
+{"id": "rejects-an-empty-question", "input": {"question": ""}, "expect": {"status": "REJECTED"}}

@@ -1,0 +1,102 @@
+name: Examples
+
+# One job per framework example in examples/ (see docs/examples.md). Each installs RunWeave
+# from this checkout and the example's pinned dependencies, then runs `runweave eval` and
+# `runweave bench` in mock mode and uploads the reports. Those steps run offline: no
+# provider keys are set and every proxy variable points at a closed local port, so any
+# request that tries to leave the machine fails.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  BLOCKED_PROXY: http://127.0.0.1:9
+
+jobs:
+  python:
+    name: Example (${{ matrix.example }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - plain-python
+          - openai-agents
+          - claude-agent-sdk
+          - langgraph
+    defaults:
+      run:
+        shell: bash
+        working-directory: examples/${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - name: Install RunWeave from the checkout and the example's pinned dependencies
+        run: |
+          uv venv
+          uv pip install ../.. -r pyproject.toml
+      - name: Type-check the agent (strict, in the example's own environment)
+        run: MYPYPATH=../../src uvx mypy@1.20.2 --python-executable "$PWD/.venv/bin/python" --strict --python-version 3.11 ./*.py
+      - name: Block outbound traffic and check that it is blocked
+        run: ../../scripts/block-egress.sh
+      - name: runweave eval (offline)
+        run: .venv/bin/runweave eval
+      - name: runweave bench (offline)
+        run: .venv/bin/runweave bench
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: example-${{ matrix.example }}-reports
+          path: examples/${{ matrix.example }}/.runweave/reports/
+          include-hidden-files: true
+          if-no-files-found: error
+
+  typescript:
+    name: Example (typescript)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: examples/typescript
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+      - name: Install RunWeave from the checkout
+        run: |
+          uv venv
+          uv pip install ../..
+      - name: Build the TypeScript SDK and install the example's locked dependencies
+        run: |
+          npm --prefix ../../sdk/typescript ci --no-audit --no-fund
+          npm --prefix ../../sdk/typescript run build
+          npm ci --no-audit --no-fund
+      - name: Block outbound traffic and check that it is blocked
+        run: ../../scripts/block-egress.sh
+      - name: runweave eval (offline)
+        run: .venv/bin/runweave eval
+      - name: runweave bench (offline)
+        run: .venv/bin/runweave bench
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: example-typescript-reports
+          path: examples/typescript/.runweave/reports/
+          include-hidden-files: true
+          if-no-files-found: error

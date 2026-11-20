@@ -1,7 +1,8 @@
 {
-  "name": "runweave-example-word-count",
+  "name": "runweave-example-typescript",
   "private": true,
   "type": "module",
+  "license": "Apache-2.0",
   "engines": {
     "node": "^22.12.0 || >=24"
   },
@@ -9,6 +10,7 @@
     "start": "node agent.mjs"
   },
   "dependencies": {
-    "@runweave/agent": "file:../../sdk/typescript"
+    "@runweave/agent": "file:../../sdk/typescript",
+    "openai": "7.52.0"
   }
 }

@@ -95,6 +95,10 @@ budgeted and shown on the run timeline. It speaks OpenAI Chat Completions, OpenA
 Responses and Anthropic Messages, streaming included, and answers deterministically
 offline by default. See [LLM proxy](docs/llm-proxy.md).
 
+Framework examples show the same agent with plain Python and the `openai` client, the
+OpenAI Agents SDK, the Claude Agent SDK, LangGraph and TypeScript, each a project that
+`runweave eval` and `runweave bench` run offline in CI. See [Examples](docs/examples.md).
+
 ## Backend quick start (PowerShell)
 
 The final backend milestone adds [offline shadow comparison and release verification](docs/release.md),

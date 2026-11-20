@@ -1,0 +1,11 @@
+[project]
+name = "runweave-example-plain-python"
+version = "0.1.0"
+description = "A plain Python agent with an OpenAI Chat Completions tool loop, tested offline by RunWeave"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+# Exact pins. RunWeave is installed from this repository (see README.md).
+dependencies = [
+    "runweave==0.1.0",
+    "openai==3.57.0",
+]

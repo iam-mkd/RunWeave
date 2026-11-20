@@ -59,11 +59,12 @@ package is not on npm yet; install it from the repository:
 ```bash
 npm --prefix sdk/typescript ci
 npm --prefix sdk/typescript run build
-npm --prefix examples/http-agent-typescript install
-npm --prefix examples/http-agent-typescript start
+npm --prefix examples/typescript ci
+PORT=9200 npm --prefix examples/typescript start   # prints RUNWEAVE_AGENT_READY <url>
 ```
 
-See `sdk/typescript/README.md` and `examples/http-agent-typescript`.
+See `sdk/typescript/README.md` and [`examples/typescript`](../examples/typescript), which
+`runweave eval` also starts by itself from its `runweave.toml`.
 
 ### Other languages
 
