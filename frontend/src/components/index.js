@@ -5,5 +5,6 @@ export { DataTable } from './DataTable.jsx';
 export { Icon } from './icons.jsx';
 export { KeyValueList, PageHeader, Panel, ThemeSwitch } from './layout.jsx';
 export { EmptyState, ErrorState, LoadingState } from './states.jsx';
+export { Pager, downsample, pageWindow, usePages } from './pages.jsx';
 export { useScrollRegion } from './scroll.js';
 export { StatusBadge } from './StatusBadge.jsx';

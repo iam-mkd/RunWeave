@@ -51,6 +51,9 @@ jobs:
         working-directory: frontend
       - run: npm run test:browser
         working-directory: frontend
+      - name: Large-data checks (thousands of runs, 5,000-case reports, long live charts)
+        run: npm run test:perf
+        working-directory: frontend
       - run: npm run build:prototype
         working-directory: frontend
       - run: npm run test:prototype
@@ -59,4 +62,6 @@ jobs:
         if: always()
         with:
           name: workspace-screenshots
-          path: frontend/test-results/**/*.png
+          path: |
+            frontend/test-results/**/*.png
+            frontend/test-results/*.json

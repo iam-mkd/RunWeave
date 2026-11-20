@@ -1587,6 +1587,35 @@ Implementation notes, pull request A (2026-11-19):
 - A screen-reader pass with Narrator or VoiceOver needs a person; it is listed as a
   release check in the design system and for the owner's review in pull request C.
 
+Implementation notes, pull request B (2026-11-19):
+- Test first: `frontend/test/pages.test.jsx` (page windows and clamping, the pager's
+  announcements and disabled ends, downsampling bounds and spikes and aligned series, eval
+  and shadow pages and filters) and `frontend/perf-smoke.mjs` (`npm run test:perf`, added
+  to the workspace CI job).
+- `usePages`, `pageWindow` and `Pager` (`frontend/src/components/pages.jsx`) show 100 rows a
+  page with a labelled `nav` and a polite "Rows 101–200 of 5,000". They are applied to:
+  - eval cases, which start on failed cases when any failed and can be searched by id;
+  - shadow pairs, which start on changed pairs;
+  - bench failure categories;
+  - the Approvals inbox (50 a page);
+  - loaded runs, where "Load older runs" still fetches from the server and the DOM keeps
+    one page.
+- `LineChart` downsamples series over 400 points (lowest and highest per bucket, shared x
+  positions), and its data table says so.
+- Measured on Windows (Edge, 16 CPUs). Seeding 3,001 runs took 5.6 s.
+
+  | Check | Result |
+  | --- | --- |
+  | Runs | first render 91 ms; loading older runs at most 420 ms; 100 DOM rows |
+  | 200-step timeline | 101 ms |
+  | 5,000-case eval report | 217 ms; next page 75 ms; search 36 ms; 100 DOM rows |
+  | 5,000-pair shadow report | 331 ms; next page 76 ms; 100 DOM rows |
+  | 2,000-tick live chart | 133 ms; 400 points drawn |
+
+  No main-thread task reached 50 ms on any screen. The check first proves its long-task
+  observer sees a deliberate 120 ms block in a page task, since tasks started through
+  DevTools are not reported. The paginated states pass four more accessibility audits.
+
 ### 25. Packaging and desktop app
 
 - The wheel bundles the built UI so `uvx runweave` serves it. Publish the

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { isRunId, listAgents, listRuns, terminal } from '../api.js';
-import { DataTable, ErrorState, LoadingState, PageHeader, Panel, StatusBadge } from '../components/index.js';
+import { DataTable, ErrorState, LoadingState, PageHeader, Pager, Panel, StatusBadge, usePages } from '../components/index.js';
 import { compactNumber, duration, statusLabel, usd } from '../format.js';
 import { href } from '../router.js';
 
@@ -76,6 +76,7 @@ export function RunsScreen({ params, navigate }) {
 
   const filter = (change) => navigate(href({ screen: 'runs', params: { ...params, ...change } }));
   const rows = [...(runs ?? []), ...more];
+  const pages = usePages(rows, { resetKey: `${params.agent}|${params.status}` });
 
   return <>
     <PageHeader eyebrow="Runs" title="Runs" description="Your runs across every agent, newest first."
@@ -102,10 +103,14 @@ export function RunsScreen({ params, navigate }) {
     {runs === null && !error && <LoadingState>Loading runs…</LoadingState>}
     {runs !== null && <Panel title="Runs" id="runs-table" className="runs-panel">
       <div className="panel-body flush">
-        <DataTable caption="Runs" captionHidden columns={columns} rows={rows} rowKey={(run) => run.id}
+        <DataTable caption="Runs" captionHidden columns={columns} rows={pages.visible} rowKey={(run) => run.id}
           empty={params.agent || params.status ? 'No runs match these filters.' : 'No runs yet. Start one with New run.'} />
+        <Pager label="Runs" window={pages.window} onPage={pages.setPage} />
       </div>
-      {rows.length >= 50 && <div className="table-footer"><button type="button" onClick={loadMore}>Load older runs</button></div>}
+      {rows.length >= 50 && <div className="table-footer row">
+        <button type="button" onClick={loadMore}>Load older runs</button>
+        <span className="muted">{rows.length} runs loaded</span>
+      </div>}
     </Panel>}
   </>;
 }

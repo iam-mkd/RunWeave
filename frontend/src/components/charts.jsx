@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { downsample } from './pages.jsx';
 
 const margin = { top: 12, right: 16, bottom: 28, left: 52 };
 
@@ -26,8 +27,12 @@ function linePath(points, x, y) {
   return points.map((point, index) => `${index ? 'L' : 'M'}${x(point.x).toFixed(1)},${y(point.y).toFixed(1)}`).join('');
 }
 
-export function LineChart({ title, series, formatX = String, formatY = String, xLabel = 'Time', height = 220 }) {
+const MAX_POINTS = 400;
+
+export function LineChart({ title, series: full, formatX = String, formatY = String, xLabel = 'Time', height = 220 }) {
   const [ref, width] = useWidth(640);
+  const series = downsample(full, MAX_POINTS);
+  const reduced = (full[0]?.points.length ?? 0) > (series[0]?.points.length ?? 0);
   const [active, setActive] = useState(null);
   const xs = series[0]?.points.map((point) => point.x) ?? [];
   const [minX, maxX] = [Math.min(...xs), Math.max(...xs)];
@@ -89,7 +94,7 @@ export function LineChart({ title, series, formatX = String, formatY = String, x
       </div>}
     </div>
     <details className="chart-data">
-      <summary>Data table</summary>
+      <summary>Data table{reduced ? ` (${series[0].points.length} of ${full[0].points.length} points, lowest and highest kept)` : ''}</summary>
       <table className="data-table compact">
         <caption className="visually-hidden">{title}</caption>
         <thead><tr><th scope="col">{xLabel}</th>{series.map((line) => <th scope="col" className="num" key={line.name}>{line.name}</th>)}</tr></thead>
