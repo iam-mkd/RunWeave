@@ -1,6 +1,6 @@
 # TypeScript example
 
-A Node agent on the RunWeave TypeScript SDK (`@runweave/agent`, from
+A Node agent on the RunWeave TypeScript SDK (`runweave-agent`, from
 [`sdk/typescript`](../../sdk/typescript)) that uses the `openai` npm client with Chat
 Completions and a small tool loop. RunWeave starts it (`command` in `runweave.toml`),
 calls it over the HTTP agent contract and stops it afterwards.

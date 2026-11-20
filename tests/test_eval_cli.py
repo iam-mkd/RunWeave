@@ -188,7 +188,7 @@ def test_init_creates_a_typescript_project_that_passes_its_own_eval(tmp_path: Pa
     project = tmp_path / "ts-agent"
     assert (project / "vendor" / "runweave-agent" / "dist" / "index.js").is_file()
     manifest = json.loads((project / "package.json").read_text(encoding="utf-8"))
-    assert manifest["dependencies"]["@runweave/agent"] == "file:vendor/runweave-agent"
+    assert manifest["dependencies"]["runweave-agent"] == "file:vendor/runweave-agent"
     installed = subprocess.run(
         [npm, "install", "--no-audit", "--no-fund"],
         cwd=project,

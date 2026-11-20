@@ -151,3 +151,45 @@ def test_serve_imports_project_agents_like_the_installed_command(tmp_path: Path)
     )
     assert checked.returncode == 0, checked.stderr
     assert "word-count 0.1.0" in checked.stdout
+
+
+# Installing the wheel the ways the quickstart gives
+
+
+def _check_release() -> Any:
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_release", ROOT / "scripts" / "check-release.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_each_installer_puts_the_wheel_in_a_fresh_environment(tmp_path: Path) -> None:
+    check = _check_release()
+    wheel = tmp_path / "runweave-0.1.0-py3-none-any.whl"
+    scripts = "Scripts" if sys.platform == "win32" else "bin"
+    exe = ".exe" if sys.platform == "win32" else ""
+
+    uvx = check.plan_install("uvx", wheel, tmp_path / "w")
+    assert uvx.steps == [] and uvx.command == ["uvx", "--from", str(wheel), "runweave"]
+
+    pip = check.plan_install("pip", wheel, tmp_path / "w")
+    venv = tmp_path / "w" / "venv"
+    assert pip.steps[0] == [sys.executable, "-m", "venv", str(venv)]
+    assert pip.steps[1] == [str(venv / scripts / f"python{exe}"), "-m", "pip", "install",
+                            str(wheel)]  # fmt: skip
+    assert pip.command == [str(venv / scripts / f"runweave{exe}")]
+
+    tool = check.plan_install("uv-tool", wheel, tmp_path / "w")
+    assert tool.steps == [["uv", "tool", "install", str(wheel)]]
+    # Kept inside the scratch folder, so the check never touches the user's own uv tools.
+    assert tool.env == {
+        "UV_TOOL_DIR": str(tmp_path / "w" / "uv-tools"),
+        "UV_TOOL_BIN_DIR": str(tmp_path / "w" / "uv-bin"),
+    }
+    assert tool.command == [str(tmp_path / "w" / "uv-bin" / f"runweave{exe}")]

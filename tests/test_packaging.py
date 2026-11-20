@@ -77,7 +77,7 @@ def test_release_workflow_publishes_only_when_the_owner_asks() -> None:
     assert set(triggers) == {"pull_request", "push", "workflow_dispatch"}
     assert triggers["push"] == {"tags": ["v*"]}
     assert workflow["permissions"] == {}
-    publishing = {"publish-npm", "publish-image", "draft-release"}
+    publishing = {"publish-pypi", "publish-npm", "publish-image", "draft-release"}
     jobs = workflow["jobs"]
     assert publishing <= jobs.keys()
     for name, job in jobs.items():
@@ -91,6 +91,8 @@ def test_release_workflow_publishes_only_when_the_owner_asks() -> None:
             assert job.get("environment") == "release", name
         else:
             assert set(job.get("permissions", {}).values()) <= {"read"}, name
+    for name in publishing:  # nothing is published before the wheel works on three systems
+        assert {"build", "install-check"} <= set(_needs(jobs[name])), name
     assert jobs["publish-npm"]["permissions"] == {"contents": "read", "id-token": "write"}
     assert "--provenance" in yaml.safe_dump(jobs["publish-npm"])
     assert jobs["publish-image"]["permissions"] == {"contents": "read", "packages": "write"}
@@ -112,7 +114,7 @@ def test_draft_release_carries_the_desktop_installers_built_for_the_tag() -> Non
     assert desktop["permissions"] == {"contents": "read"}
     assert "refs/tags/" in str(desktop["with"]["ref"])
     draft = jobs["draft-release"]
-    assert set(draft["needs"]) == {"build", "desktop"}
+    assert set(draft["needs"]) == {"build", "install-check", "desktop"}
     text = yaml.safe_dump(draft)
     for expected in ("desktop-*", ".msi", "-setup.exe", ".dmg", ".deb", ".rpm", ".AppImage",
                      "THIRD_PARTY_NOTICES.txt", "runweave-desktop-rust.cdx.json"):  # fmt: skip
@@ -148,3 +150,167 @@ def test_installers_bundle_the_third_party_notices() -> None:
     )
     resources = config["bundle"]["resources"]
     assert resources["../../target/notices/THIRD_PARTY_NOTICES.txt"] == "THIRD_PARTY_NOTICES.txt"
+
+
+def _needs(job: dict[str, Any]) -> list[str]:
+    needs = job.get("needs", [])
+    return [needs] if isinstance(needs, str) else list(needs)
+
+
+def _run_text(job: dict[str, Any]) -> str:
+    return "\n".join(step.get("run", "") for step in job.get("steps", []))
+
+
+# PyPI (milestone 27)
+
+
+def test_pypi_is_published_by_trusted_publishing_from_the_verified_files() -> None:
+    job = _load(".github/workflows/release.yml")["jobs"]["publish-pypi"]
+    assert job["environment"] == "release"
+    assert job["permissions"] == {"contents": "read", "id-token": "write"}
+    assert "refs/tags/v" in job["if"] and "workflow_dispatch" in job["if"]
+    steps = job["steps"]
+    (download,) = [s for s in steps if s.get("uses", "").startswith("actions/download-artifact@")]
+    assert download["with"]["name"] == "release-files"
+    (publish,) = [s for s in steps if "gh-action-pypi-publish" in s.get("uses", "")]
+    assert PINNED_ACTION.match(publish["uses"]) and publish["uses"].startswith(
+        "pypa/gh-action-pypi-publish@"
+    )
+    # No API token: the upload authenticates with the job's OIDC identity.
+    assert "password" not in publish.get("with", {})
+    assert "secrets." not in yaml.safe_dump(job)
+    upload_dir = publish["with"]["packages-dir"]
+    before = _run_text({"steps": steps[: steps.index(publish)]})
+    # The checksums are verified before anything is copied for upload, and exactly the
+    # wheel and the sdist are copied.
+    assert before.index("sha256sum --check SHA256SUMS") < before.index(upload_dir.rstrip("/"))
+    assert "runweave-*-py3-none-any.whl" in before and "runweave-*.tar.gz" in before
+    assert 'wc -l)" -eq 2' in before  # the upload folder holds exactly two files
+
+
+def test_the_built_wheel_is_installed_and_used_on_three_fresh_systems() -> None:
+    job = _load(".github/workflows/release.yml")["jobs"]["install-check"]
+    assert _needs(job) == ["build"]
+    assert "if" not in job  # every pull request, not only releases
+    assert set(job.get("permissions", {}).values()) <= {"read"}
+    matrix = job["strategy"]["matrix"]
+    assert set(matrix["os"]) == {"ubuntu-latest", "windows-latest", "macos-latest"}
+    assert set(matrix["installer"]) == {"pip", "uv-tool"}
+    steps = job["steps"]
+    (download,) = [s for s in steps if s.get("uses", "").startswith("actions/download-artifact@")]
+    assert download["with"]["name"] == "release-files"
+    run = _run_text(job)
+    assert "scripts/check-release.py" in run and "--wheel" in run
+    assert "--installer ${{ matrix.installer }}" in run
+    assert "frontend" not in run and "npm " not in run  # no Node and no UI build
+
+
+# Package metadata
+
+
+def _project() -> dict[str, Any]:
+    data: dict[str, Any] = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return data["project"]  # type: ignore[no-any-return]
+
+
+REPOSITORY = "https://github.com/iam-mkd/RunWeave"
+
+
+def test_pypi_metadata_describes_and_links_the_project() -> None:
+    project = _project()
+    assert "agent" in project["description"].lower() and len(project["description"]) <= 120
+    assert {"agents", "llm", "evaluation", "load-testing", "testing"} <= set(project["keywords"])
+    assert project["readme"] == {"file": "README.md", "content-type": "text/markdown"}
+    # PEP 639: the license is the SPDX expression alone, with no license classifier.
+    assert project["license"] == "Apache-2.0"
+    classifiers = project["classifiers"]
+    assert not any(c.startswith("License ::") for c in classifiers)
+    for expected in ("Environment :: Console", "Topic :: Software Development :: Testing",
+                     "Programming Language :: Python :: 3.13"):  # fmt: skip
+        assert expected in classifiers
+    urls = project["urls"]
+    assert {"Homepage", "Documentation", "Repository", "Issues", "Changelog"} <= set(urls)
+    assert all(url.startswith(REPOSITORY) for url in urls.values())
+
+
+def test_the_wheel_carries_the_ui_and_every_command_a_developer_runs() -> None:
+    scripts = _project()["scripts"]
+    assert scripts["runweave"] == "runweave.cli:main"
+    text = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert '"workspace_ui/**/*"' in text
+
+
+# The npm package
+
+
+def _sdk() -> dict[str, Any]:
+    data: dict[str, Any] = json.loads(
+        (ROOT / "sdk" / "typescript" / "package.json").read_text(encoding="utf-8")
+    )
+    return data
+
+
+def test_the_sdk_is_published_under_a_name_the_owner_can_use() -> None:
+    # The @runweave npm scope belongs to an unrelated project, so the SDK is unscoped.
+    sdk = _sdk()
+    assert sdk["name"] == "runweave-agent"
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "@runweave/" not in workflow
+
+
+def test_npm_metadata_matches_the_repository_for_provenance() -> None:
+    sdk = _sdk()
+    # npm rejects a provenance publish whose repository.url is not the workflow's repository.
+    assert sdk["repository"] == {
+        "type": "git",
+        "url": f"git+{REPOSITORY}.git",
+        "directory": "sdk/typescript",
+    }
+    assert sdk["homepage"].startswith(REPOSITORY)
+    assert sdk["bugs"] == {"url": f"{REPOSITORY}/issues"}
+    assert {"runweave", "agents", "llm", "testing"} <= set(sdk["keywords"])
+    assert sdk["license"] == "Apache-2.0"
+    assert sdk["publishConfig"] == {"access": "public", "provenance": True}
+    assert sdk["files"] == ["dist"]
+
+
+def test_npm_publishing_says_how_the_first_publish_authenticates() -> None:
+    job = _load(".github/workflows/release.yml")["jobs"]["publish-npm"]
+    text = yaml.safe_dump(job)
+    # Trusted publishing is configured on an existing package, so the first publish uses a
+    # short-lived token kept in the release environment; later ones use OIDC alone.
+    assert "secrets.NPM_TOKEN" in text and "NODE_AUTH_TOKEN" in text
+    assert "11.5.1" in text  # the oldest npm with trusted publishing
+    assert "sha256sum --check SHA256SUMS" in text
+    assert "runweave-agent-" in text
+
+
+# Versions
+
+
+def test_every_version_matches_the_release_tag_check() -> None:
+    version = _project()["version"]
+    assert _sdk()["version"] == version
+    vendored = ROOT / "src/runweave/templates/typescript/vendor/runweave-agent/package.json"
+    manifest = json.loads(vendored.read_text(encoding="utf-8"))
+    assert (manifest["name"], manifest["version"]) == ("runweave-agent", version)
+    changelog = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    assert re.search(rf"^## \[{re.escape(version)}\] - \d{{4}}-\d{{2}}-\d{{2}}$", changelog, re.M)
+    assert f"[{version}]: {REPOSITORY}/releases/tag/v{version}" in changelog
+    build = yaml.safe_dump(_load(".github/workflows/release.yml")["jobs"]["build"])
+    assert "pyproject.toml" in build and "sdk/typescript/package.json" in build
+
+
+def test_the_owner_checklist_names_exactly_what_the_workflow_uses() -> None:
+    guide = (ROOT / "docs" / "release.md").read_text(encoding="utf-8")
+    checklist = guide[guide.index("### Owner checklist") :]
+    for expected in (
+        "PyPI Project Name: `runweave`", "Owner: `iam-mkd`", "Repository name: `RunWeave`",
+        "Workflow name: `release.yml`", "Environment name: `release`", "`NPM_TOKEN`",
+        "Prevent self-review", "Ref type **Tag**, pattern `v*`", "Review deployments",
+        "Approve and deploy", "Publish release", "disallow tokens",
+    ):  # fmt: skip
+        assert expected in checklist, expected
+    jobs = _load(".github/workflows/release.yml")["jobs"]
+    assert {"publish-pypi", "publish-npm", "publish-image", "draft-release"} <= jobs.keys()
+    assert "secrets.NPM_TOKEN" in yaml.safe_dump(jobs["publish-npm"])

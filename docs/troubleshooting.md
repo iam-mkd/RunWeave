@@ -5,14 +5,22 @@ traceback; API errors carry a stable `code`.
 
 ## Installing and starting
 
-**`runweave: command not found`** (or "not recognized"). From a clone, run commands
-through uv: `uv run runweave ...`, inside the clone or a folder below it. Elsewhere, install
-RunWeave into the environment you use: `uv pip install -e path/to/RunWeave`.
+**`runweave: command not found`** (or "not recognized"). After `uv tool install runweave`,
+run `uv tool update-shell` and open a new terminal, so uv's command folder is on your PATH.
+After `pip install runweave`, activate the virtual environment you installed it into. From
+a clone, run commands through uv: `uv run runweave ...`, inside the clone or a folder below
+it.
+
+**An agent's import fails** (`No module named 'openai'`, for example) after
+`uv tool install runweave`. The tool has an environment of its own: add the agent's
+packages to it with `uv tool install runweave --with openai`, or install `runweave` into
+your project's environment instead.
 
 **`npm ci` fails with an engine or syntax error.** The workspace needs Node.js 22.12 or newer
 (or 24): check with `node --version`.
 
-**`No built workspace UI in ...`** when starting `runweave serve`. Build it once in the clone:
+**`No built workspace UI in ...`** when starting `runweave serve` from a clone (the installed
+package carries the UI). Build it once in the clone:
 `npm --prefix frontend ci`, then `npm --prefix frontend run build`. To serve only the API,
 add `--api-only`.
 

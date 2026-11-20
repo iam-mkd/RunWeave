@@ -16,6 +16,9 @@ owner on 2026-11-18: developers install RunWeave and test their own agents. Thes
 milestones are planned, not authorized; implement each only when the owner
 authorizes it.
 
+Milestones 17–26 are complete. Milestone 27, the first public release (v0.1.0 on PyPI and
+npm), was authorized by the owner on 2026-11-20 and is in progress.
+
 ## How we will follow this plan
 This file is the project's source of truth for implementation order and scope.
 Work through the milestones in sequence, starting with milestone 1 when the
@@ -48,6 +51,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 24. UI polish and accessibility audit
 - [x] 25. Packaging and desktop app
 - [x] 26. Developer documentation and framework examples
+- [ ] 27. First public release (authorized 2026-11-20, in progress)
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -1887,6 +1891,45 @@ Implementation notes (2026-11-20), three pull requests:
 - [Durable execution integrations](https://pydantic.dev/docs/ai/capabilities/durable_execution/overview/)
 - [Multi-agent patterns](https://pydantic.dev/docs/ai/guides/multi-agent-applications/)
 - [Pydantic Evals](https://pydantic.dev/docs/ai/evals/evals/)
+
+## Milestone 27: first public release
+
+Authorized by the owner on 2026-11-20. Status: **in progress**. Goal: a developer installs
+RunWeave without cloning, `uv tool install runweave` (or `pipx` / `pip`), and gets a
+working `runweave` with the workspace UI built in, no Node needed. Version 0.1.0, a 0.x public
+alpha (see "Release v1.0" above).
+
+### 27. First public release
+
+- **Names:** `runweave` was free on PyPI on 2026-11-20. The `@runweave` npm scope belongs
+  to an unrelated project (npm user `jackshen310`, `@runweave/cli`, `@runweave/server` and
+  others), and the unscoped `runweave` is taken too, so the TypeScript SDK is renamed
+  `runweave-agent` (free on that date), as the owner chose.
+- **PyPI publishing:** a `publish-pypi` job in `release.yml`, by trusted publishing (OIDC,
+  `id-token: write`) through the `release` environment, with `pypa/gh-action-pypi-publish`
+  pinned by SHA. It verifies `SHA256SUMS`, then uploads exactly the wheel and the sdist
+  from the verified `release-files` artifact, only for a `v*` tag or a dispatch.
+- **Installable package:** the wheel carries the built UI. An `install-check` job installs
+  the built wheel with `pip` and with `uv tool install` on fresh Windows, macOS and Linux
+  runners and runs `--version`, `init`, `eval`, `bench`, `shadow` and the workspace;
+  every publishing job needs it. `runweave --version` is added.
+- **Metadata:** PyPI description, keywords, classifiers and project URLs; the README's
+  links and image are absolute so they render on pypi.org, and `check-docs.py --links`
+  checks that they name files that exist. npm keywords, repository (npm's provenance
+  check needs it to match), homepage, bugs and `publishConfig`.
+- **Docs:** the quickstart installs the package; building from a clone becomes "From
+  source". Docs CI runs the quickstart with the wheel the pull request built, substituting
+  only the install line, on three systems. `docs/release.md` has a phone-friendly owner
+  checklist: the PyPI pending publisher, npm's first publish (npm's trusted publishing
+  needs an existing package, so the first one uses a 7-day token kept as a `release`
+  environment secret), the `release` environment and approving deployments. A `CHANGELOG`
+  0.1.0 section; versions match the tag check.
+- **Not in scope:** signing the desktop installers; a docs site; publishing anything
+  before the owner says "go" after merging.
+- **Done when** the pull request is merged with CI green, the owner has pushed (or asked
+  for) the `v0.1.0` tag, approved the `release` environment, and `uv tool install
+  runweave` from PyPI gives a working `runweave`. Checked off after the owner confirms the
+  published packages.
 
 ## Benchmark acceptance plan
 These are initial targets to validate, not performance claims.

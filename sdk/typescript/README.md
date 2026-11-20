@@ -1,10 +1,10 @@
-# @runweave/agent
+# runweave-agent
 
 Serve Node agents over the RunWeave HTTP agent contract (`runweave.agent/v1`), so RunWeave
 can run, time-limit, cancel and test them. No runtime dependencies. Node 22.12+ or 24+.
 
 ```js
-import { defineAgent, serveAgents } from '@runweave/agent';
+import { defineAgent, serveAgents } from 'runweave-agent';
 
 const echo = defineAgent({
   name: 'echo',

@@ -2,12 +2,15 @@
 
     npm --prefix frontend run build
     uv run --no-sync python scripts/check-release.py --output target/release/check.json
+    python scripts/check-release.py --wheel dist/runweave-0.1.0-py3-none-any.whl --installer pip
 
 Outside the repository, with no RunWeave settings or provider keys in the environment,
-it runs `uvx --from <wheel> runweave` to create Python and TypeScript projects, then
-eval, bench and shadow from the CLI, then serves the workspace and runs an eval and a
-load test through the same jobs API the screens use. Offline apart from installing the
-wheel's dependencies; no API key is needed or used.
+it installs the wheel into a fresh environment (`uvx --from <wheel>` by default; a new
+virtual environment with `pip`, or `uv tool install` with its folders in the scratch
+folder) and uses that `runweave` to create Python and TypeScript projects, then eval,
+bench and shadow from the CLI, then serves the workspace and runs an eval and a load test
+through the same jobs API the screens use. Offline apart from installing the wheel's
+dependencies; no API key is needed or used. Needs only httpx besides the standard library.
 """
 
 import argparse
@@ -20,6 +23,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +33,44 @@ ROOT = Path(__file__).resolve().parents[1]
 SECRET_PREFIXES = ("RUNWEAVE_", "OPENAI_", "ANTHROPIC_", "GROQ_", "XAI_", "GEMINI_")
 
 
+INSTALLERS = ("uvx", "pip", "uv-tool")
+
+
 class CheckFailed(RuntimeError):
     pass
+
+
+@dataclass(frozen=True)
+class Install:
+    """How to put the wheel in a fresh environment, and the `runweave` it then gives."""
+
+    steps: list[list[str]]
+    command: list[str]
+    env: dict[str, str] = field(default_factory=dict)
+
+
+def plan_install(installer: str, wheel: Path, scratch: Path) -> Install:
+    scripts, exe = ("Scripts", ".exe") if sys.platform == "win32" else ("bin", "")
+    if installer == "uvx":
+        return Install([], ["uvx", "--from", str(wheel), "runweave"])
+    if installer == "pip":
+        venv = scratch / "venv"
+        python = str(venv / scripts / f"python{exe}")
+        return Install(
+            [
+                [sys.executable, "-m", "venv", str(venv)],
+                [python, "-m", "pip", "install", str(wheel)],
+            ],  # fmt: skip
+            [str(venv / scripts / f"runweave{exe}")],
+        )
+    if installer == "uv-tool":
+        tools, bin_dir = scratch / "uv-tools", scratch / "uv-bin"
+        return Install(
+            [["uv", "tool", "install", str(wheel)]],
+            [str(bin_dir / f"runweave{exe}")],
+            {"UV_TOOL_DIR": str(tools), "UV_TOOL_BIN_DIR": str(bin_dir)},
+        )
+    raise ValueError(f"Unknown installer {installer!r}; choose one of {INSTALLERS}")
 
 
 def clean_env() -> dict[str, str]:
@@ -178,21 +218,32 @@ def main() -> int:
     parser.add_argument("--wheel", type=Path, help="Use this wheel instead of building one")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--skip-typescript", action="store_true")
+    parser.add_argument(
+        "--installer", choices=INSTALLERS, default="uvx", help="How to install the wheel"
+    )
     args = parser.parse_args()
     report: dict[str, Any] = {
         "platform": platform.platform(),
         "python": platform.python_version(),
+        "installer": args.installer,
         "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
     try:
         wheel = (args.wheel or build_wheel(ROOT / "target" / "release" / "dist")).resolve()
         report["wheel"] = wheel.name
-        env = clean_env()
-        runweave = ["uvx", "--from", str(wheel), "runweave"]
         with tempfile.TemporaryDirectory(
             prefix="runweave-clean-", ignore_cleanup_errors=True
         ) as scratch:
             work = Path(scratch)
+            install = plan_install(args.installer, wheel, work / ".install")
+            env = {**clean_env(), **install.env}
+            print(f"Install the wheel ({args.installer})", flush=True)
+            for step in install.steps:
+                run(step, work, env)
+            runweave = install.command
+            report["version"] = run([*runweave, "--version"], work, env).strip()
+            if report["version"] != f"runweave {wheel.name.split('-')[1]}":
+                raise CheckFailed(f"{report['version']} is not the wheel's version")
             print("Python project from the CLI", flush=True)
             run([*runweave, "init", "py-agent"], work, env)
             py = work / "py-agent"

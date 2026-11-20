@@ -1,14 +1,20 @@
 """Check the docs: every relative link resolves, and the quickstart runs as written.
 
     uv run python scripts/check-docs.py --links
-    uv run python scripts/check-docs.py --quickstart --transcript target/quickstart/transcript.md
+    uv run python scripts/check-docs.py --quickstart --wheel dist/runweave-0.1.0-py3-none-any.whl
 
 The quickstart runs the fenced blocks that follow a `<!-- quickstart:run -->` marker, in
 order, in an empty folder, with no provider keys in the environment. A block after
 `<!-- quickstart:background URL -->` starts in the background; the next step waits until
 URL answers, and the check then submits one run to the workspace's API, as the page's
-"try it in the workspace" step does by hand. The only substitution: `git clone` of the
-repository clones the checkout under test instead.
+"try it in the workspace" step does by hand. `uv tool install` keeps its tools in the
+scratch folder, whose command folder is first on PATH (as in a new terminal after
+`uv tool update-shell`). The only substitution: with `--wheel`, `uv tool install runweave`
+installs that wheel instead of the release on PyPI.
+
+Links: relative links, and links to this repository's files on GitHub at `main` (the
+README uses those, so they also work on PyPI), must name a file that exists, and an
+anchor must name a heading in it.
 """
 
 import argparse
@@ -26,6 +32,11 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY = "https://github.com/iam-mkd/RunWeave"
+RAW = "https://raw.githubusercontent.com/iam-mkd/RunWeave/main"
+IN_REPOSITORY = re.compile(
+    rf"^(?:{re.escape(REPOSITORY)}/(?:blob|tree)/main|{re.escape(RAW)})/([^#?]+)(?:#(.*))?$"
+)
+REGISTRY_INSTALL = "uv tool install runweave"
 MARKER = re.compile(
     r"<!-- quickstart:(run|background)(?: (\S+))? -->\s*\n```[^\n]*\n(.*?)```", re.S
 )
@@ -65,16 +76,20 @@ def anchors(markdown: str) -> set[str]:
     return found
 
 
-def broken_links(files: list[Path]) -> list[str]:
+def broken_links(files: list[Path], root: Path = ROOT) -> list[str]:
     broken = []
     for page in files:
         text = page.read_text(encoding="utf-8")
         prose = re.sub(r"`[^`\n]*`", "", FENCE.sub("", text))
         for target in LINK.findall(prose):
-            if re.match(r"^[a-z][a-z0-9+.-]*:", target):
-                continue  # https:, mailto: and other schemes
-            path_part, _, anchor = target.partition("#")
-            resolved = (page.parent / path_part) if path_part else page
+            in_repository = IN_REPOSITORY.match(target)
+            if in_repository:
+                resolved, anchor = root / in_repository[1], in_repository[2] or ""
+            elif re.match(r"^[a-z][a-z0-9+.-]*:", target):
+                continue  # other https: links, mailto: and other schemes
+            else:
+                path_part, _, anchor = target.partition("#")
+                resolved = (page.parent / path_part) if path_part else page
             if not resolved.exists():
                 broken.append(f"{page}: {target}")
             elif anchor and resolved.suffix == ".md":
@@ -96,10 +111,21 @@ def quickstart_steps(markdown: str) -> list[Step]:
     return steps
 
 
-def substitute(command: str, checkout: Path) -> str:
-    if command.startswith(f"git clone {REPOSITORY}"):
-        return f'git clone "{checkout}" RunWeave'
+def substitute(command: str, wheel: Path | None) -> str:
+    if wheel is not None and command == REGISTRY_INSTALL:
+        return f'uv tool install "{wheel}"'
     return command
+
+
+def tool_environment(environment: dict[str, str], work: Path) -> dict[str, str]:
+    """`uv tool` folders inside the scratch folder, never the reader's own tools."""
+    bin_dir = work / "uv-bin"
+    return {
+        **environment,
+        "UV_TOOL_DIR": str(work / "uv-tools"),
+        "UV_TOOL_BIN_DIR": str(bin_dir),
+        "PATH": os.pathsep.join([str(bin_dir), environment.get("PATH", "")]),
+    }
 
 
 class Transcript:
@@ -183,13 +209,14 @@ def _stop(server: subprocess.Popen[str]) -> None:
         server.wait()
 
 
-def run_quickstart(page: Path, checkout: Path, work: Path, transcript: Transcript) -> None:
-    cwd = work
+def run_quickstart(page: Path, wheel: Path | None, work: Path, transcript: Transcript) -> None:
+    cwd = work / "home"
+    cwd.mkdir()
     servers: list[subprocess.Popen[str]] = []
-    environment = _environment()
+    environment = tool_environment(_environment(), work)
     try:
         for step in quickstart_steps(page.read_text(encoding="utf-8")):
-            command = substitute(step.command, checkout)
+            command = substitute(step.command, wheel)
             if command.startswith("cd "):
                 cwd = (cwd / shlex.split(command[3:])[0]).resolve()
                 transcript.add(f"`{command}`", f"now in {cwd.name}")
@@ -228,7 +255,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--links", action="store_true", help="Check links and anchors")
     parser.add_argument("--quickstart", action="store_true", help="Run docs/quickstart.md")
-    parser.add_argument("--checkout", type=Path, default=ROOT, help="Repository to clone")
+    parser.add_argument(
+        "--wheel", type=Path, help="Install this wheel in place of the release on PyPI"
+    )
     parser.add_argument("--transcript", type=Path, help="Write the quickstart transcript here")
     args = parser.parse_args()
     if args.links:
@@ -243,8 +272,8 @@ def main() -> int:
         work = Path(tempfile.mkdtemp(prefix="runweave-quickstart-")).resolve()
         started = time.monotonic()
         try:
-            run_quickstart(ROOT / "docs" / "quickstart.md", args.checkout.resolve(), work,
-                           transcript)  # fmt: skip
+            wheel = args.wheel.resolve() if args.wheel else None
+            run_quickstart(ROOT / "docs" / "quickstart.md", wheel, work, transcript)
             transcript.add("Result", f"completed in {time.monotonic() - started:.0f} s")
         finally:
             if args.transcript:

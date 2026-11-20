@@ -190,8 +190,11 @@ repository with no RunWeave settings or provider keys, runs
 `uvx --from <wheel> runweave` to create Python and TypeScript projects, run eval, bench and
 shadow, serve the workspace (UI and assets from the wheel) and run an eval and a load test
 through the jobs API the screens use. CI runs it on Linux and Windows (`clean-install`).
+`--installer pip` or `--installer uv-tool` installs the wheel those ways instead of `uvx`.
 
-Publishing to PyPI (Trusted Publishing, a 0.x pre-release) happens only when the owner asks.
+The release workflow installs the same wheel with `pip` and `uv tool install` on all three
+systems and publishes it to PyPI only when the owner asks; see
+[Releases](#releases-owner-only).
 
 ## Service image and Compose
 
@@ -232,18 +235,28 @@ request.
 
 `.github/workflows/release.yml` builds on every pull request:
 - the wheel and sdist, with the UI bundled;
-- the TypeScript SDK tarball;
+- the TypeScript SDK tarball (`runweave-agent`);
 - CycloneDX SBOMs for the Python package, the workspace UI and the SDK;
 - `SHA256SUMS`;
 - the service image, checked through Compose.
 
-These are kept as workflow artifacts. Nothing is published from a pull request.
+Then `install-check` installs that exact wheel on fresh Windows, macOS and Linux runners,
+once with `pip` into a new virtual environment (Python 3.11) and once with
+`uv tool install` (Python 3.13), with no Node and no clone, and runs `runweave --version`,
+`init`, `eval`, `bench`, `shadow` and the workspace (UI, assets, an eval and a load test
+through its jobs API) from it (`scripts/check-release.py --installer`). These are kept as
+workflow artifacts. Nothing is published from a pull request.
 
 Publishing runs only when the owner pushes a tag (`vX.Y.Z` or `vX.Y.Z-rc.N`, matching
 `pyproject.toml` and the SDK's `package.json`) or starts the workflow by hand for an
-existing tag. All three publishing jobs run in the `release` environment:
-- `publish-npm`: `@runweave/agent` with provenance, through npm trusted publishing (no
-  token stored);
+existing tag. Every publishing job needs `build` and `install-check`, and runs in the
+`release` environment, so each one waits for the owner's approval:
+- `publish-pypi`: verifies `SHA256SUMS`, then uploads exactly the wheel and the sdist to
+  PyPI with `pypa/gh-action-pypi-publish` through trusted publishing (no token stored),
+  with PEP 740 attestations;
+- `publish-npm`: verifies `SHA256SUMS`, then publishes `runweave-agent` with provenance.
+  The first publish uses a short-lived `NPM_TOKEN` (see the checklist); after that, npm
+  trusted publishing;
 - `publish-image`: pushes the exact image that was checked to
   `ghcr.io/<owner>/runweave:<version>`;
 - `draft-release`: verifies the checksums, adds the desktop files, and creates a **draft**
@@ -252,22 +265,90 @@ existing tag. All three publishing jobs run in the `release` environment:
   - `THIRD_PARTY_NOTICES.txt`;
   - the Rust crates' SBOM (`runweave-desktop-rust.cdx.json`).
 
-  `SHA256SUMS` is rebuilt to cover all of them.
+  `SHA256SUMS` is rebuilt to cover all of them. The release stays a draft until the owner
+  publishes it.
 
 For the tag, the `desktop` job runs `.github/workflows/desktop.yml` as a reusable
 workflow: it builds the installers on Windows, macOS and Linux, then installs, uses and
 uninstalls each one on a fresh runner (see [Desktop app](desktop.md#checked-on-clean-machines)).
 The draft is created only after those checks pass.
 
-One-time setup by the owner, before the first release:
-- create the `release` environment with yourself as required reviewer, limited to `v*`
-  tags;
-- add this repository and workflow as a trusted publisher of `@runweave/agent` on
-  npmjs.com.
-
 Actions are pinned by commit SHA, the workflow has no default permissions, and each job
-gets only what it needs. CI also runs actionlint (with shellcheck) on every workflow. PyPI
-publishing is not part of this workflow.
+gets only what it needs. CI also runs actionlint (with shellcheck) on every workflow.
+
+### Owner checklist for v0.1.0
+
+Everything here works from a phone's browser. Where a page is cramped, choose **Desktop
+site** in the browser menu. The names must be typed exactly: they are case-sensitive.
+
+1. **PyPI: add a pending trusted publisher.** Sign in at pypi.org (an account with
+   two-factor authentication). Open **Your account → Publishing** (the menu under your
+   name), then **Add a new pending publisher → GitHub**:
+   - PyPI Project Name: `runweave`
+   - Owner: `iam-mkd`
+   - Repository name: `RunWeave`
+   - Workflow name: `release.yml`
+   - Environment name: `release`
+
+   Choose **Add**. A pending publisher does not reserve the name: if someone else
+   registers `runweave` first, it is invalidated, so tag soon after adding it. The first
+   upload creates the project and turns it into a normal trusted publisher.
+2. **npm: an account and a one-time token for the first publish.** The `@runweave` npm
+   scope belongs to an unrelated project, and the unscoped name `runweave` is taken too,
+   so the SDK is the unscoped `runweave-agent`, owned by your personal npm account; no npm
+   organization is needed. The first publish creates the package under your account.
+   npm sets up trusted publishing on an existing package's settings page, and has no
+   pending publisher, so the first publish cannot use it:
+   1. Sign in (or sign up) at npmjs.com and turn on two-factor authentication.
+   2. Open your avatar → **Access Tokens → Generate New Token → Granular Access Token**:
+      name `runweave-agent first publish`, expiration **7 days**, tick **Bypass
+      two-factor authentication** (the workflow cannot answer a 2FA prompt), **Packages
+      and scopes: Read and write, All packages** (the package does not exist yet, so it
+      cannot be picked), **Organizations: No access**. Generate it and copy it.
+   3. On GitHub, add it as an environment secret (step 3): name `NPM_TOKEN`. It is
+      available only to jobs you approve in `release`.
+3. **GitHub: the `release` environment.** In the repository open **Settings →
+   Environments → New environment**, name it `release`, then:
+   - **Required reviewers:** add yourself. Leave **Prevent self-review** unticked: you
+     push the tag yourself, and with it ticked you could not approve your own release.
+   - **Deployment branches and tags → Selected branches and tags → Add deployment
+     branch or tag rule:** Ref type **Tag**, pattern `v*`.
+   - **Environment secrets → Add environment secret:** `NPM_TOKEN` from step 2.
+4. **Say "go"** in the Claude session after merging the pull request. The `v0.1.0` tag is
+   pushed from `main`, and the Release workflow starts.
+5. **Approve the deployments.** GitHub notifies you that the run is waiting (also in the
+   GitHub Mobile app's inbox). Open the run (**Actions → Release → the v0.1.0 run**). If
+   the app has no **Review deployments** button on your version, open the run in the
+   phone's browser. Choose **Review deployments**, tick `release`, optionally leave a
+   comment, then **Approve and deploy**. **Reject** fails those jobs and publishes
+   nothing. You approve twice:
+   - once when `install-check` has passed, for `publish-pypi`, `publish-npm` and
+     `publish-image`, which wait together;
+   - once more for `draft-release`, which waits for the desktop installers to be built and
+     checked on three systems, so its request comes later.
+
+   The approval request expires after 30 days. A rejected or failed job can be re-run from
+   the run page once the cause is fixed: **Re-run failed jobs** (after a new commit on
+   `main`, use a new tag instead, such as `v0.1.1`).
+6. **Check, then publish the GitHub Release.** Check pypi.org/project/runweave,
+   npmjs.com/package/runweave-agent and the GHCR package. A new GHCR package can start
+   private: in the package's **Package settings**, set **Change visibility → Public**.
+   Then open **Releases**, edit the **v0.1.0** draft, review its files and notes, and
+   choose **Publish release**. It stays a draft, visible only to you, until you do.
+7. **npm: switch to trusted publishing, then drop the token.** On npmjs.com open
+   **runweave-agent → Settings → Trusted publisher → GitHub Actions**: organization or
+   user `iam-mkd`, repository `RunWeave`, workflow filename `release.yml`, environment
+   `release`, and allow `npm publish`. A new trusted publisher must be used for a publish
+   within 2 days or it expires, so add it when you prepare the next release, right before
+   tagging. After that publish succeeds, set **Publishing access → Require two-factor
+   authentication and disallow tokens**. Whatever you decide about the next release,
+   delete the `NPM_TOKEN` secret on GitHub and the token on npmjs.com once v0.1.0 is out.
+
+To release again: raise the version in `pyproject.toml`, `sdk/typescript/package.json` (and
+its vendored copy, `scripts/vendor-typescript-sdk.py`) and `CHANGELOG.md` in a pull
+request; the `build` job refuses a tag that does not match. Starting the workflow by hand
+(**Actions → Release → Run workflow**) needs **Use workflow from: Tags → vX.Y.Z**, as the
+`release` environment accepts only `v*` tags.
 
 ## Load tests with the workspace open
 

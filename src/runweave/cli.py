@@ -340,8 +340,18 @@ def _project_arguments(command: argparse.ArgumentParser) -> None:
     command.add_argument("--watch-stdin", action="store_true", help=argparse.SUPPRESS)
 
 
+def _installed_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("runweave")
+    except PackageNotFoundError:  # a source tree on PYTHONPATH, never installed
+        return "unknown"
+
+
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(prog="runweave", description="Run and test your agents locally")
+    root.add_argument("--version", action="version", version=f"runweave {_installed_version()}")
     commands = root.add_subparsers(dest="command", required=True)
     start = commands.add_parser("serve", help="Start the local workspace and API")
     start.add_argument(

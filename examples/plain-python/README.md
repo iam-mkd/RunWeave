@@ -21,7 +21,7 @@ uv run --no-sync runweave bench    # a small concurrency sweep; any failed run f
 ```
 
 `--no-sync` keeps `uv run` from reinstalling this folder's `pyproject.toml`, which would look
-for `runweave` in the package registry (it is not published there); the line before
+for `runweave` in the package registry instead of using the clone's; the line before
 installed it from the clone.
 
 Reports are written to `.runweave/reports/`.

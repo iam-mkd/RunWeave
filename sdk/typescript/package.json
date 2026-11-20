@@ -1,8 +1,26 @@
 {
-  "name": "@runweave/agent",
+  "name": "runweave-agent",
   "version": "0.1.0",
   "description": "Serve agents over the RunWeave HTTP agent contract (runweave.agent/v1)",
+  "keywords": [
+    "runweave",
+    "agents",
+    "ai-agents",
+    "llm",
+    "testing",
+    "evaluation",
+    "load-testing"
+  ],
   "license": "Apache-2.0",
+  "homepage": "https://github.com/iam-mkd/RunWeave/tree/main/sdk/typescript#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/iam-mkd/RunWeave.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/iam-mkd/RunWeave/issues"
+  },
   "type": "module",
   "engines": {
     "node": "^22.12.0 || >=24"
@@ -16,6 +34,10 @@
   "types": "./dist/index.d.ts",
   "files": ["dist"],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "test": "tsc -p tsconfig.json && node --test test/*.test.mjs"
