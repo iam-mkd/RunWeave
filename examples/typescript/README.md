@@ -18,8 +18,8 @@ With Node 22.12 or newer, and RunWeave installed in a Python environment (see th
 npm --prefix ../../sdk/typescript ci
 npm --prefix ../../sdk/typescript run build
 npm ci
-runweave eval     # datasets/smoke.jsonl through the mock proxy: offline, no API key
-runweave bench    # a small concurrency sweep; any failed run fails it
+uv run runweave eval     # datasets/smoke.jsonl through the mock proxy: offline, no API key
+uv run runweave bench    # a small concurrency sweep; any failed run fails it
 ```
 
 To serve it yourself instead, run `npm start` (it prints `RUNWEAVE_AGENT_READY <url>`) and

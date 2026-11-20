@@ -19,12 +19,24 @@ answer uses its result, and an empty question is rejected before a run starts
 
 ## Run one
 
-Each example's README has its install steps. Then, from its folder:
+Start from a clone of RunWeave (the [quickstart](quickstart.md) has the steps), then go into
+the example's folder. The Python examples each get an environment of their own, with
+RunWeave installed from the clone:
 
 ```bash
-runweave eval     # the dataset through the mock proxy: offline, no API key
-runweave bench    # a small concurrency sweep; any failed run fails it
+uv venv
+uv pip install ../.. -r pyproject.toml
+uv run --no-sync runweave eval     # the dataset through the mock proxy: offline, no API key
+uv run --no-sync runweave bench    # a small concurrency sweep; any failed run fails it
 ```
+
+`--no-sync` matters: without it, `uv run` tries to install the example's `pyproject.toml`
+again and looks for `runweave` in the package registry, where it is not published, failing
+with "runweave was not found in the package registry". The previous line already installed
+it from the clone.
+
+The TypeScript example uses the clone's own environment, so after its `npm` steps (see its
+README) it is `uv run runweave eval` and `uv run runweave bench`.
 
 To use a real model instead, switch the proxy to passthrough with your own key and a spend
 cap ([LLM proxy](llm-proxy.md#passthrough-to-your-provider)). The agents do not change.

@@ -238,3 +238,19 @@ def test_ci_runs_the_quickstart_on_three_fresh_runners_without_secrets() -> None
     assert job["strategy"]["matrix"]["os"] == ["ubuntu-latest", "windows-latest", "macos-latest"]
     assert any("check-docs.py --quickstart" in step.get("run", "") for step in job["steps"])
     assert "secrets." not in (ROOT / ".github" / "workflows" / "docs.yml").read_text("utf-8")
+
+
+def test_the_examples_never_give_a_bare_runweave_command() -> None:
+    # The dry run: a bare `runweave eval` on the examples page failed with "command not
+    # found", because the examples run RunWeave through uv from a clone.
+    pages = [DOCS / "examples.md", *sorted((ROOT / "examples").glob("*/README.md"))]
+    bare = [
+        f"{page.relative_to(ROOT)}: {line}"
+        for page in pages
+        for block in re.findall(
+            r"```(?:bash|sh|powershell)\n(.*?)```", page.read_text("utf-8"), re.S
+        )
+        for line in block.splitlines()
+        if line.strip().startswith("runweave ")
+    ]
+    assert bare == []

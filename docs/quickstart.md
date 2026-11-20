@@ -8,7 +8,8 @@ replies.
 
 - **Git**
 - **uv**, the Python package manager: see [Installing uv](https://docs.astral.sh/uv/getting-started/installation/).
-  uv downloads a suitable Python (3.11 or newer) for you.
+  uv uses a Python 3.11 or newer that it finds on your computer, or downloads one. CI tests
+  3.11, 3.12 and 3.13; `uv sync --python 3.13` picks one explicitly.
 - **Node.js 22.12 or newer (or 24)**, only to build the workspace UI once.
 
 The commands below work the same in bash, zsh, PowerShell and Command Prompt.
@@ -26,7 +27,8 @@ npm --prefix frontend run build
 
 `uv sync` creates `.venv` with RunWeave and its dependencies; the two `npm` commands build
 the workspace UI into `frontend/dist`, which `runweave serve` finds by itself. This step
-takes a minute or two the first time.
+takes a minute or two the first time. Recent npm versions may warn that an install script
+for `esbuild` was blocked; the build does not need it, so the warning is harmless.
 
 ## 2. Create an agent project
 
@@ -36,9 +38,11 @@ uv run runweave init my-agent
 cd my-agent
 ```
 
-`my-agent/` holds `runweave.toml` (the project), `agent.py` (a small word-count agent) and
-`datasets/smoke.jsonl` (four test cases). Because it sits inside the clone, `uv run` uses
-RunWeave's environment. To create it elsewhere later, see [next steps](#next-steps).
+`my-agent/` holds `runweave.toml` (the project), `agent.py` (a small word-count agent),
+`datasets/smoke.jsonl` (four test cases), a `README.md` and a `.gitignore` for the reports.
+Because it sits inside the clone, `uv run` uses RunWeave's environment; keep the `uv run`
+prefix, since `runweave` itself is not on your PATH. To create a project elsewhere later,
+see [next steps](#next-steps).
 
 ## 3. Evaluate it
 
@@ -53,11 +57,11 @@ assertions, and prints a summary like:
 ```text
 word-count on smoke: 4/4 cases passed (100%), p95 6.5 ms, 0 tokens, $0
 Gates passed.
-Report: my-agent/.runweave/reports/eval-20261120T150025Z-4b21a6
+Report: C:\...\RunWeave\my-agent\.runweave\reports\eval-20261120T150025Z-4b21a6
 ```
 
 The exit code is `0` when every gate passes and `1` when one fails, so the same command
-gates a pull request. Open `report.md` in the report folder it names: [Reading reports](reports.md) explains
+gates a pull request. The report folder is printed with its full path; open `report.md` in it: [Reading reports](reports.md) explains
 each part.
 
 ## 4. Load-test it
@@ -67,9 +71,9 @@ each part.
 uv run runweave bench
 ```
 
-`bench` sweeps concurrency levels 1, 4 and 16 with 32 runs each (about ten seconds) and
-reports throughput,
-p50/p95/p99 latency, queue wait, API latency, event-loop lag and memory per level. Add
+`bench` sweeps concurrency levels 1, 4 and 16 with 32 runs each, in about ten seconds. The
+terminal shows throughput, p95 latency and failures per level; the `report.md` it names adds
+p50/p99 latency, queue wait, API latency, event-loop lag and memory. Add
 `--fault-profile chaos` to inject provider failures; the [fault catalog](faults.md) lists
 them. These numbers describe your machine with a mock model, [not provider
 capacity](limits.md).
@@ -83,7 +87,8 @@ uv run runweave serve --agent agent:run
 
 Open <http://127.0.0.1:8000> in your browser:
 
-1. **Agents** lists `word-count`. Choose **New run** on its row.
+1. **Agents** lists `word-count`, next to the built-in example agent `incident-triage`.
+   Choose **New run** on `word-count`'s row.
 2. In **text**, type `RunWeave tests agents`, then choose **Start run**.
 3. The run detail shows each step on a timeline and the output: `{"words": 3, "longest":
    "RunWeave"}`.
@@ -91,6 +96,10 @@ Open <http://127.0.0.1:8000> in your browser:
    reports.
 
 Press Ctrl+C in the terminal to stop the server.
+
+Without a browser, the same steps go through the API the workspace uses: `GET /v1/agents`,
+then `POST /v1/runs` with `{"agent": "word-count", "input": {"text": "RunWeave tests
+agents"}}` and `GET /v1/runs/{id}` ([submit and follow runs](agents.md#3-submit-and-follow-runs)).
 
 ## Next steps
 

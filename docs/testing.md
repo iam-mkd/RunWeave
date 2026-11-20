@@ -214,7 +214,7 @@ The screens use a small API you can also script against:
 | --- | --- |
 | `GET /v1/jobs/project` | The project's agent, datasets, bench and shadow defaults, and fault profiles (404 `NO_PROJECT` without one) |
 | `POST /v1/jobs` | Start `{"kind": "eval" \| "bench" \| "shadow", ...options}`; 202, or 409 `JOB_RUNNING` |
-| `GET /v1/jobs`, `GET /v1/jobs/{id}?after=N` | Recent jobs; one job with its progress events after sequence `N` |
+| `GET /v1/jobs`, `GET /v1/jobs/{id}?after=N` | Recent jobs; one job as `{"job": {...}, "events": [...]}`, with its progress events after sequence `N` |
 | `POST /v1/jobs/{id}/cancel` | Stop a running job |
 | `GET /v1/reports?kind=eval`, `GET /v1/reports/{id}` | Saved report summaries, newest first; one full `report.json` |
 
