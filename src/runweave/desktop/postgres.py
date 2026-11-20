@@ -15,7 +15,6 @@ import shutil
 import socket
 import sys
 import tarfile
-import tempfile
 from pathlib import Path
 
 import asyncpg  # type: ignore[import-untyped]
@@ -33,7 +32,10 @@ def extract_binaries(archive: Path, state: Path) -> Path:
     if (target / ".complete").is_file():
         return target
     target.parent.mkdir(parents=True, exist_ok=True)
-    staging = Path(tempfile.mkdtemp(prefix="binaries-", dir=target.parent))
+    # Not tempfile.mkdtemp: its private (0o700) folder would, on Windows, admit only the
+    # owner, which an elevated PostgreSQL's restricted token cannot use.
+    staging = target.parent / f".staging-{secrets.token_hex(8)}"
+    staging.mkdir()
     try:
         with tarfile.open(archive, "r:xz") as tar:
             try:
@@ -106,8 +108,14 @@ class PortablePostgres:
     async def _initialize(self) -> None:
         self._folder.mkdir(parents=True, exist_ok=True)
         # initdb accepts an existing empty folder; creating it here keeps a restricted
-        # (elevated Windows) initdb from walking parent folders it may not inspect.
-        self._data.mkdir(mode=0o700)
+        # (elevated Windows) initdb from walking parent folders it may not inspect. On
+        # Windows no mode is given: Python 3.13 turns 0o700 into an ACL for the owner,
+        # which for an elevated user is the Administrators group, deny-only for initdb;
+        # without it the folder inherits the user's own grant (see _grant_current_user).
+        if sys.platform == "win32":
+            self._data.mkdir()
+        else:
+            self._data.mkdir(mode=0o700)
         if not self._password_file.is_file():
             descriptor = os.open(self._password_file, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
