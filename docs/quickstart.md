@@ -51,12 +51,13 @@ RunWeave starts in the background, runs each case through the agent, checks the
 assertions, and prints a summary like:
 
 ```text
-smoke: 4/4 passed (100%), gate min_pass_rate=1.0 passed
-Report: .runweave/reports/eval-<time>-<id>/report.md
+word-count on smoke: 4/4 cases passed (100%), p95 6.5 ms, 0 tokens, $0
+Gates passed.
+Report: my-agent/.runweave/reports/eval-20261120T150025Z-4b21a6
 ```
 
 The exit code is `0` when every gate passes and `1` when one fails, so the same command
-gates a pull request. Open the `report.md` it names: [Reading reports](reports.md) explains
+gates a pull request. Open `report.md` in the report folder it names: [Reading reports](reports.md) explains
 each part.
 
 ## 4. Load-test it
@@ -66,7 +67,8 @@ each part.
 uv run runweave bench
 ```
 
-`bench` sweeps concurrency levels 1, 4 and 16 with 32 runs each and reports throughput,
+`bench` sweeps concurrency levels 1, 4 and 16 with 32 runs each (about ten seconds) and
+reports throughput,
 p50/p95/p99 latency, queue wait, API latency, event-loop lag and memory per level. Add
 `--fault-profile chaos` to inject provider failures; the [fault catalog](faults.md) lists
 them. These numbers describe your machine with a mock model, [not provider

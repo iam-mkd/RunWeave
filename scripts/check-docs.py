@@ -113,8 +113,13 @@ class Transcript:
 
 
 def _environment() -> dict[str, str]:
-    """This environment without provider keys: the quickstart must not need one."""
-    return {name: value for name, value in os.environ.items() if not SECRET_NAMES.search(name)}
+    """A reader's environment: no provider keys (the quickstart must not need one), and not
+    the virtual environment this check itself may run in."""
+    return {
+        name: value
+        for name, value in os.environ.items()
+        if not SECRET_NAMES.search(name) and name not in {"VIRTUAL_ENV", "UV_PROJECT_ENVIRONMENT"}
+    }
 
 
 def _wait(url: str, seconds: float, server: subprocess.Popen[str]) -> None:
