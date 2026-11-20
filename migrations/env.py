@@ -14,7 +14,9 @@ def migrate(connection: Connection) -> None:
 
 
 async def main() -> None:
-    engine = postgres_engine(Settings())
+    # The desktop service passes its database URL directly instead of the environment.
+    url = context.config.attributes.get("database_url")
+    engine = postgres_engine(Settings(_env_file=None, database_url=url) if url else Settings())
     try:
         async with engine.connect() as connection:
             await connection.run_sync(migrate)

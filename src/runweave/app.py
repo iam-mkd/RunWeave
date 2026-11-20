@@ -1,3 +1,4 @@
+import sys
 from collections.abc import AsyncIterator, Sequence
 from contextlib import asynccontextmanager
 
@@ -74,7 +75,7 @@ def create_app(
     live = LiveSettings(config, checks=(build_proxy_config,))
     live.subscribe(lambda current: setattr(app.state, "proxy_config", build_proxy_config(current)))
     app.state.live_settings = live
-    jobs = JobManager(config.project_file)
+    jobs = JobManager(config.project_file, python=str(config.job_python or sys.executable))
     app.state.jobs = jobs
     install_log_filter()
     app.state.identity_provider = IdentityProvider(config)
