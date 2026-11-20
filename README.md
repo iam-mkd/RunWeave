@@ -1,21 +1,48 @@
 # RunWeave
 
-Run and test your AI agents on your own computer. RunWeave runs many agent runs at once,
-with limits, and tells you how your agent behaved: whether it gave the right answers
-(`runweave eval`), how it holds up under load and a failing model provider (`runweave
-bench`), and whether a new version is at least as good (`runweave shadow`). It works offline
-with no API key, connects agents written in Python or any language, and is open source
-(Apache-2.0).
+**Test your AI agents like you test the rest of your code.** Check their answers, load-test
+them, break their model provider on purpose, and compare versions, all on your own machine,
+offline, with no API key.
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/agents-dark.png">
-  <img alt="RunWeave workspace: the Agents screen" src="docs/images/agents-light.png">
-</picture>
+![RunWeave in 12 seconds: evaluate and load-test an agent from the CLI, start a run in the workspace, see every model and tool call, and compare load-test results with and without injected provider faults](docs/images/demo.gif)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/run-detail-dark.png">
-  <img alt="RunWeave workspace: a finished run with its timeline, findings and input" src="docs/images/run-detail-light.png">
-</picture>
+## Why RunWeave
+
+Agents are easy to demo and hard to trust. The same prompt can take a different path every
+time, a provider can rate-limit you mid-run, a "small" prompt change can quietly break three
+other cases, and nobody knows what happens when fifty users arrive at once. Unit tests do
+not catch any of that, and finding out in production is expensive.
+
+RunWeave gives you the missing test harness:
+
+| You want to know | RunWeave gives you |
+| --- | --- |
+| Does it still give the right answers? | `runweave eval`: a dataset of cases with assertions (output, schema, tools called, latency, cost), pass-rate gates and baselines that catch regressions. A failed gate exits 1, so CI fails the pull request |
+| Will it hold up under load? | `runweave bench`: concurrency sweeps with throughput, p50/p95/p99 latency, queue wait, event-loop lag and memory per level |
+| What happens when the provider misbehaves? | Seeded [faults](docs/faults.md): rate limits, 5xx, timeouts, cut-off streams, broken tool calls, so you see whether your retries actually work |
+| Is the new version at least as good? | `runweave shadow`: the old and new versions on the same cases, side by side, with promotion gates |
+| What did the agent actually do? | A local workspace with a live timeline of every model call (with tokens and cost) and tool call |
+| Can it do something risky without asking? | `ctx.request_approval(...)`: the run waits until a person approves those exact arguments (durable mode, with PostgreSQL) |
+
+## Built for developers
+
+- **Bring your agent as it is.** A Python function with a decorator, any HTTP service in any
+  language, or your existing framework: [examples](docs/examples.md) for the OpenAI Agents
+  SDK, Claude Agent SDK, LangGraph, plain `openai` and TypeScript.
+- **Offline and deterministic by default.** Point your OpenAI or Anthropic SDK at RunWeave's
+  [LLM proxy](docs/llm-proxy.md): replies are mocked from a fixtures file, so tests are free,
+  fast and reproducible. Switch to your own key when you want real models, with a spend cap
+  per run.
+- **Made for CI.** Exit codes, JUnit, JSON and Markdown reports, and a [GitHub Actions
+  job](examples/github-actions) that fails a pull request when the agent regresses.
+- **Honest numbers.** Every report records the machine, settings and dataset digest, and says
+  plainly that a mock benchmark is [not provider capacity](docs/limits.md).
+- **Yours.** Runs on `127.0.0.1`, keeps prompts out of logs, never needs an account, and is
+  open source under Apache-2.0.
+
+It is also useful beyond the team that writes the agent: **reviewers** read the eval report
+on the pull request, **QA** builds datasets of the cases that matter, and **whoever pays the
+provider bill** sees tokens and estimated cost per run before anything ships.
 
 ## Get started
 

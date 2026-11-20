@@ -15,7 +15,8 @@
     "test:browser": "node browser-smoke.mjs",
     "test:prototype": "node prototype-smoke.mjs",
     "test:perf": "node perf-smoke.mjs",
-    "screenshots": "node screenshots.mjs"
+    "screenshots": "node screenshots.mjs",
+    "demo-gif": "node demo-gif.mjs"
   },
   "dependencies": {
     "react": "19.2.7",
