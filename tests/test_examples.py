@@ -10,6 +10,7 @@ import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 
 from runweave.evals.cases import load_cases
 from runweave.project import load_project
@@ -114,3 +115,28 @@ def test_examples_doc_lists_every_example_and_the_readme_links_it() -> None:
     for name in ALL_EXAMPLES:
         assert f"examples/{name}" in doc
     assert "docs/examples.md" in (ROOT / "README.md").read_text(encoding="utf-8")
+
+
+def test_only_the_example_runs_are_offline_not_the_report_upload() -> None:
+    # The block is job-wide once set, so it must be lifted before the upload: on main the
+    # uploads failed with ECONNRESET against the closed proxy although eval and bench passed.
+    workflow = yaml.safe_load(
+        (ROOT / ".github" / "workflows" / "examples.yml").read_text(encoding="utf-8")
+    )
+    for job in workflow["jobs"].values():
+        steps = job["steps"]
+        runs = [str(step.get("run", "")) for step in steps]
+        blocked = next(i for i, run in enumerate(runs) if run.endswith("block-egress.sh"))
+        lifted = next(i for i, run in enumerate(runs) if run.endswith("block-egress.sh off"))
+        upload = next(
+            i
+            for i, step in enumerate(steps)
+            if str(step.get("uses", "")).startswith("actions/upload")
+        )
+        evals = [
+            i for i, run in enumerate(runs) if "runweave eval" in run or "runweave bench" in run
+        ]
+        assert blocked < min(evals) and max(evals) < lifted < upload
+        assert steps[lifted].get("if") == "always()"
+    blocker = (ROOT / "scripts" / "block-egress.sh").read_text(encoding="utf-8")
+    assert '"$name="' in blocker  # off: every proxy variable emptied
