@@ -8,6 +8,17 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- Desktop releases (milestone 25, part 4; completes milestone 25):
+  - **Draft releases:** for the owner's tag, the draft release attaches the unsigned
+    installers (MSI and NSIS, DMG, `.deb`, `.rpm`, AppImage), `THIRD_PARTY_NOTICES.txt`
+    and a CycloneDX SBOM of the window's Rust crates, all covered by `SHA256SUMS`.
+  - **Clean-runner check:** `scripts/check-desktop.py` installs each installer on a fresh
+    Windows, macOS or Linux runner. It runs an eval, a load test, a run and an approved
+    agent action through the app, quits, uninstalls, and fails if any process is left.
+  - **License notices:** every installer carries `THIRD_PARTY_NOTICES.txt`, with the
+    license texts of everything bundled.
+  - **Docs:** `docs/desktop.md` covers install, first launch of an unsigned app, uninstall
+    and data removal.
 - Desktop window (milestone 25, part 3): a Tauri 2 app (`desktop/`).
   - **First launch:** a setup page to choose the project folder and Python interpreter
     (saved for later launches). It starts the desktop service and shows its workspace,

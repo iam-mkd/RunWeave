@@ -246,8 +246,18 @@ existing tag. All three publishing jobs run in the `release` environment:
   token stored);
 - `publish-image`: pushes the exact image that was checked to
   `ghcr.io/<owner>/runweave:<version>`;
-- `draft-release`: verifies the checksums and creates a **draft** GitHub Release with every
-  file.
+- `draft-release`: verifies the checksums, adds the desktop files, and creates a **draft**
+  GitHub Release with every file:
+  - the unsigned desktop installers: MSI and NSIS, DMG, `.deb`, `.rpm` and AppImage;
+  - `THIRD_PARTY_NOTICES.txt`;
+  - the Rust crates' SBOM (`runweave-desktop-rust.cdx.json`).
+
+  `SHA256SUMS` is rebuilt to cover all of them.
+
+For the tag, the `desktop` job runs `.github/workflows/desktop.yml` as a reusable
+workflow: it builds the installers on Windows, macOS and Linux, then installs, uses and
+uninstalls each one on a fresh runner (see [Desktop app](desktop.md#checked-on-clean-machines)).
+The draft is created only after those checks pass.
 
 One-time setup by the owner, before the first release:
 - create the `release` environment with yourself as required reviewer, limited to `v*`

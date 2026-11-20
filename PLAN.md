@@ -46,7 +46,7 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 22. Testing CLI, reports, screens, and public alpha
 - [x] 23. Approvals through the agent SDKs
 - [x] 24. UI polish and accessibility audit
-- [ ] 25. Packaging and desktop app
+- [x] 25. Packaging and desktop app
 - [ ] 26. Developer documentation and framework examples
 
 ## Goal
@@ -1789,6 +1789,53 @@ Implementation notes, pull request C (2026-11-20):
       remained.
   - The test's app-data folders were removed afterwards.
   - Installing from the installers, macOS and Linux are for pull request D and CI.
+
+Implementation notes, pull request D (2026-11-20), completing milestone 25:
+- **Tests first:**
+  - `tests/test_desktop_release.py` (11 tests):
+    - the notices cover Python, npm and Rust packages with their license files;
+    - a missing Python package is an error;
+    - `uv export` markers are evaluated;
+    - the standard license texts are included;
+    - the Rust SBOM is CycloneDX 1.5 with purls;
+    - the app folders resolve correctly on each system.
+  - `tests/test_packaging.py` (3 more):
+    - the draft release attaches the installers, notices and Rust SBOM after the desktop
+      job;
+    - `desktop.yml` is reusable and install-checks on all three runners;
+    - the installers bundle the notices.
+- **`scripts/third-party-notices.py`** writes `THIRD_PARTY_NOTICES.txt` (3.5 MiB, 557
+  entries, 436 Rust crates). It includes PostgreSQL's COPYRIGHT verbatim from the
+  REL_18_7 tag. 36 packages, mostly macOS and Windows binding crates, declare a license
+  without shipping a file; they are covered by the standard texts in `scripts/licenses/`.
+  It also writes the Rust crates' SBOM.
+- **`scripts/check-desktop.py`:**
+  - installs (NSIS silently, the DMG by copy, the `.deb` with apt);
+  - launches twice with saved choices: eval, bench and a run, then an approved refund
+    through the sample agent;
+  - quits like a user each time and uninstalls;
+  - fails if any app, service, agent or PostgreSQL process is left, or if PostgreSQL did
+    not log a clean shutdown.
+
+  `desktop.yml` runs it on fresh runners after every build. `release.yml` calls
+  `desktop.yml` for the owner's tag and attaches its outputs to the draft release.
+- **Local result (Windows 11, NSIS installer):**
+  - first launch ready in 31.2 s (PostgreSQL unpacked and initialized); eval, bench and the
+    run completed;
+  - second launch ready in 9.5 s; the approval was approved and the run succeeded;
+  - after each quit and after uninstalling, nothing was running, and PostgreSQL logged a
+    clean shutdown.
+- **Found while building the check:**
+  - When the check failed partway, it killed the window and uninstalled at once. The
+    uninstaller then stopped the service before it could stop PostgreSQL, which kept
+    running. The check now always quits gracefully and waits before uninstalling, and
+    `docs/desktop.md` tells users to quit before uninstalling.
+  - Programs started from inside a packaged Windows app (as during development here) get
+    their app-data folder redirected, so the check matches the app's processes by its
+    identifier, not a full path.
+- **Not covered:** SmartScreen and Gatekeeper prompts, Intel Macs, ARM Linux and
+  Windows, and code signing.
+- **Owner sign-off:** merging this pull request.
 
 ### 26. Developer documentation and framework examples
 

@@ -368,6 +368,14 @@ uv run --locked python -m benchmarks.load --workers 128 --soak-seconds 600
 The benchmark commands, fault matrix, and measured results are in the
 [benchmark report](benchmarks/README.md).
 
+## Desktop app
+
+The desktop app wraps the same workspace in a window for Windows, macOS and Linux. It runs
+RunWeave beside it with its own PostgreSQL, so approvals and run history work without
+setting up a database. Your Python agents run with your own interpreter. Releases attach
+unsigned installers; see [Desktop app](docs/desktop.md) for installing, the first launch of
+an unsigned app, and uninstalling.
+
 ## Docker
 
 The service image carries the workspace UI, durable mode (PostgreSQL driver and
