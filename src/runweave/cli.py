@@ -358,11 +358,11 @@ def parser() -> argparse.ArgumentParser:
     )
     start.add_argument("--demo", action="store_true", help="Offline, in-memory, ignore .env")
     start.add_argument("--host", default=LOOPBACK, help=argparse.SUPPRESS)
-    start.add_argument("--port", type=int, default=8000)
+    start.add_argument("--port", type=int, default=8000, help="Port on 127.0.0.1")
     start.add_argument(
         "--assets",
         type=Path,
-        help="Built workspace UI directory (default: the packaged UI, else frontend/dist)",
+        help="Built workspace UI (default: the packaged UI, else the checkout's frontend/dist)",
     )
     start.add_argument("--check", action="store_true", help="Load agents, list them and exit")
     start.add_argument("--api-only", action="store_true", help="Serve the API without the UI")
@@ -379,8 +379,13 @@ def parser() -> argparse.ArgumentParser:
     )
     start.set_defaults(handler=serve)
     create = commands.add_parser("init", help="Create a project with a sample agent and dataset")
-    create.add_argument("directory", nargs="?", default=".")
-    create.add_argument("--language", choices=("python", "typescript"), default="python")
+    create.add_argument("directory", nargs="?", default=".", help="Folder to create the project in")
+    create.add_argument(
+        "--language",
+        choices=("python", "typescript"),
+        default="python",
+        help="The sample agent's language",
+    )
     create.add_argument("--force", action="store_true", help="Overwrite existing files")
     create.set_defaults(handler=init)
     evaluate = commands.add_parser("eval", help="Run a dataset through the agent and gate on it")
@@ -423,7 +428,9 @@ def parser() -> argparse.ArgumentParser:
     expose = commands.add_parser(
         "serve-agent", help="Serve Python agents over the RunWeave HTTP agent contract"
     )
-    expose.add_argument("target", nargs="+", metavar="MODULE:ATTRIBUTE")
+    expose.add_argument(
+        "target", nargs="+", metavar="MODULE:ATTRIBUTE", help="Python @agent functions to serve"
+    )
     expose.add_argument("--port", type=int, default=9100, help="0 picks a free port")
     expose.add_argument("--host", default=LOOPBACK, help=argparse.SUPPRESS)
     expose.set_defaults(handler=serve_agent)

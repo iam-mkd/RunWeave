@@ -14,10 +14,10 @@ from runweave.agents.provider_wire import Provider
 from runweave.app import create_app
 from runweave.core.settings import Settings
 
-# Wheels carry the built UI here (scripts/bundle-workspace-ui.py); source checkouts use
-# frontend/dist.
+# Wheels carry the built UI here (scripts/bundle-workspace-ui.py); a source checkout uses
+# its own frontend/dist, wherever `runweave serve` runs from.
 BUNDLED_UI = Path(__file__).resolve().parent / "workspace_ui"
-CHECKOUT_UI = Path("frontend") / "dist"
+CHECKOUT_UI = Path(__file__).resolve().parents[2] / "frontend" / "dist"
 
 
 def _built(folder: Path) -> bool:

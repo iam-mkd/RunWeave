@@ -63,16 +63,16 @@ def _options(root: argparse.ArgumentParser) -> list[str]:
     for action in root._actions:
         if isinstance(action, argparse._SubParsersAction):
             for name, sub in action.choices.items():
-                found.append(name)
+                found.append(f" {name}`")  # a heading such as `runweave approvals list`
                 found += _options(sub)
         elif action.help != argparse.SUPPRESS:
-            found += [option for option in action.option_strings if option.startswith("--")]
+            found += [f"`{option}" for option in action.option_strings if option.startswith("--")]
     return found
 
 
 def test_every_command_and_option_is_in_the_cli_reference() -> None:
     text = _read("cli.md")
-    missing = [option for option in _options(parser()) if f"`{option}" not in text]
+    missing = [token for token in _options(parser()) if token not in text]
     assert missing == []
 
 
@@ -174,6 +174,7 @@ def test_anchors_follow_githubs_heading_slugs() -> None:
         == "test-your-agent-runweave-init-eval"
     )
     assert check.slug("1. Create a project") == "1-create-a-project"
+    assert check.slug("Service settings (`RUNWEAVE_*`)") == "service-settings-runweave_"
 
 
 # The runnable quickstart

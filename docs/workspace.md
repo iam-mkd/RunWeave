@@ -20,6 +20,37 @@ with every registered agent, including your own Python agents (see the
 Run detail follows the run over server-sent events and falls back to polling once a
 second when streams are busy or unavailable. Old `/?run=<id>` links still open the run.
 
+## A tour of the workspace
+
+Start it from your project folder with your agent loaded, then open
+<http://127.0.0.1:8000>:
+
+```bash
+runweave serve --agent agent:run
+```
+
+1. **Agents** is the home screen: every registered agent with how it connects (Python or
+   HTTP), its version, and how many of its recent runs succeeded. **Connect agent** walks you
+   through adding a Python or HTTP agent.
+2. **New run** on an agent's row opens a form built from its input schema. **Start run**
+   submits it and opens the run.
+3. **Run detail** follows the run live: its status, a timeline of steps (model calls with
+   their token usage, tool calls, the steps you named, injected faults), then the output,
+   input and usage. **Cancel run** stops a running run; **Re-run** opens the form with the same input.
+4. **Runs** lists your runs, newest first. Filter by agent and state, or paste a run ID.
+5. **Evals** runs `runweave eval` on one of the project's datasets and shows each case with
+   its assertions, the gates, and every saved eval report.
+6. **Load tests** runs `runweave bench`: pick concurrency levels, runs per level, fault
+   profiles and a soak, and watch throughput, latency and failures chart live.
+7. **Shadow** compares a candidate version with the current agent on a dataset and shows
+   the promotion gates and each paired case.
+8. **Approvals** (durable mode) lists requests from agents waiting for a person, with the
+   exact arguments, and approves or rejects them after you confirm.
+9. **Settings** switches the proxy between mock and your own key, stores provider keys in
+   your OS credential store, sets per-run budgets, and picks a fault profile and seed.
+
+The theme switch chooses dark, light, or your system's setting. The screenshots below show every screen.
+
 ## Screens
 
 Every screen in both themes, from a seeded project (a real eval with one failing case, a

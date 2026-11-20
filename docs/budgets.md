@@ -46,6 +46,39 @@ synthetic test configuration. Actual billing depends on the supplied rates,
 provider reporting, and the applicable agreement. The cost field is an estimate.
 [Groq model listing](https://console.groq.com/docs/models)
 
+## Bring your own key
+
+RunWeave never needs a key to test: the LLM proxy answers in mock mode by default. To run
+your agent against a real model, give RunWeave **your own** OpenAI or Anthropic API key and
+switch the proxy to passthrough. RunWeave never signs in with a consumer subscription and
+never stores provider OAuth tokens.
+
+1. Open **Settings** in the workspace, choose **Passthrough**, and list the models you allow.
+2. Paste your key. It is stored in your OS credential store (Windows Credential Manager,
+   macOS Keychain, Linux Secret Service), never shown again, never logged, and never given
+   to your agent: the agent keeps using its run's proxy token, and RunWeave swaps in the key
+   when it forwards the call.
+3. Set the **prices** of the most expensive model you allow and a **spend cap per run**.
+   Passthrough refuses to start without prices, because the cap is computed from them.
+
+The same with environment variables, for CI or a server:
+
+```dotenv
+RUNWEAVE_PROXY_MODE=passthrough
+RUNWEAVE_PROXY_OPENAI_API_KEY=<your OpenAI key>
+RUNWEAVE_PROXY_MODELS=["gpt-4.1-mini"]
+RUNWEAVE_MODEL_INPUT_USD_PER_MILLION=<price>
+RUNWEAVE_MODEL_OUTPUT_USD_PER_MILLION=<price>
+RUNWEAVE_MODEL_PRICE_VERSION=<your price list date>
+RUNWEAVE_AGENT_MAX_COST_USD=0.05
+```
+
+Every call reserves its worst case before it is forwarded, and the output-token limit sent
+upstream is capped at what the run has left, so a run cannot spend past its cap. Costs are
+estimates from your prices, not your provider's bill. See [passthrough to your
+provider](llm-proxy.md#passthrough-to-your-provider) for the details, and keep
+CI on mock mode: RunWeave's own CI never calls a real provider.
+
 ## Context preparation
 
 The canonical request builder is shared with the Groq adapter. Preflight includes
