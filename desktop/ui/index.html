@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RunWeave</title>
+  <link rel="stylesheet" href="setup.css">
+  <script type="module" src="setup.js"></script>
+</head>
+<body>
+  <main class="setup" aria-labelledby="setup-title">
+    <p class="brand"><span class="mark" aria-hidden="true">R</span>RunWeave</p>
+    <h1 id="setup-title">Open a project</h1>
+    <p class="lead">RunWeave runs your agent from its project folder, with your own Python environment.
+      Everything stays on this computer and works offline with the mock model.</p>
+
+    <section id="starting" class="status" hidden aria-live="polite">
+      <span class="spinner" aria-hidden="true"></span>
+      <p><strong>Starting RunWeave…</strong> The first start sets up a local database and takes a little longer.</p>
+    </section>
+
+    <section id="failed" class="error" role="alert" hidden>
+      <h2>RunWeave could not start</h2>
+      <pre id="failure"></pre>
+    </section>
+
+    <form id="choices" class="card" novalidate>
+      <div class="field">
+        <span class="label" id="project-label">Project folder</span>
+        <p class="hint" id="project-hint">A folder with a <code>runweave.toml</code>. Create one with <code>runweave init my-agent</code>.</p>
+        <div class="row">
+          <output id="project" class="path" aria-labelledby="project-label" aria-describedby="project-hint">No folder chosen</output>
+          <button type="button" id="choose-project">Choose folder…</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="label" id="python-label">Python interpreter</span>
+        <p class="hint" id="python-hint">For Python agents: the <code>python</code> of the environment your agent runs in, with <code>runweave</code> installed. Not needed for HTTP agents.</p>
+        <div class="row">
+          <output id="python" class="path" aria-labelledby="python-label" aria-describedby="python-hint">Not chosen</output>
+          <button type="button" id="choose-python">Choose interpreter…</button>
+        </div>
+      </div>
+      <p id="choice-error" class="field-error" role="alert"></p>
+      <div class="actions">
+        <button type="submit" id="start" class="primary">Start RunWeave</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
