@@ -109,3 +109,12 @@ def test_serve_agent_binds_only_to_loopback() -> None:
 def test_settings_validate_http_agent_urls(url: str) -> None:
     with pytest.raises(ValidationError):
         Settings(http_agents=(url,))
+
+
+def test_container_mode_listens_on_all_interfaces_inside_the_container_only() -> None:
+    from runweave.cli import bind_host, parser
+
+    assert bind_host(parser().parse_args(["serve"])) == "127.0.0.1"
+    assert bind_host(parser().parse_args(["serve", "--container"])) == "0.0.0.0"
+    result = run_cli("serve", "--demo", "--check", "--container", "--host", "0.0.0.0")
+    assert result.returncode != 0 and "loopback" in result.stderr
