@@ -454,7 +454,9 @@ def main() -> int:
         )
     for folder in {config, data}:
         shutil.rmtree(folder, ignore_errors=True)
-    work = Path(tempfile.mkdtemp(prefix="runweave-desktop-check-"))
+    # Resolved: on macOS the temp folder is under /var, a symlink to /private/var, and Tauri
+    # refuses to find its resources when the running executable's path has a symlink.
+    work = Path(tempfile.mkdtemp(prefix="runweave-desktop-check-")).resolve()
     report: dict[str, Any] = {"platform": sys.platform, "installer": args.installer.name}
     installed = install(args.installer, work)
     report["installed"] = str(installed.executable)
