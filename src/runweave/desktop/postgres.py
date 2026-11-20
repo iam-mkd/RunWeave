@@ -122,6 +122,25 @@ class PortablePostgres:
         with (self._data / "postgresql.conf").open("a", encoding="utf-8") as conf:
             conf.write("\n# RunWeave desktop\n" + "\n".join(settings) + "\n")
 
+    async def _grant_current_user(self) -> None:
+        """Windows: give the user's own SID full control of the PostgreSQL folder.
+
+        Started by an administrator, initdb and pg_ctl restart themselves with a restricted
+        token in which the Administrators group is deny-only. Where a profile folder grants
+        access only through that group (as on GitHub's Windows runners), the restricted
+        process could not open its folders; an explicit entry for the user's SID fixes it.
+        """
+        system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+        code, output = await self._run(str(system / "whoami.exe"), "/user", "/fo", "csv", "/nh")
+        sid = output.strip().rsplit(",", 1)[-1].strip('"') if code == 0 else ""
+        if not sid.startswith("S-1-"):
+            raise PostgresError("Could not read the current user's security identifier")
+        code, output = await self._run(
+            str(system / "icacls.exe"), str(self._folder), "/grant", f"*{sid}:(OI)(CI)F", "/q"
+        )
+        if code != 0:
+            raise PostgresError(f"Could not set access to {self._folder}: {output.strip()}")
+
     async def _running(self) -> bool:
         if not (self._data / "postmaster.pid").is_file():
             return False
@@ -130,6 +149,8 @@ class PortablePostgres:
 
     async def start(self) -> str:
         """Starts the server and returns its database URL (postgresql+asyncpg)."""
+        if sys.platform == "win32":
+            await self._grant_current_user()
         if await self._running():
             await self.stop()
         if not (self._data / "PG_VERSION").is_file():
