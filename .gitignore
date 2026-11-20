@@ -32,3 +32,5 @@ src/runweave/workspace_ui/
 # The TypeScript SDK copy that runweave init gives new projects (see scripts/vendor-typescript-sdk.py).
 !src/runweave/templates/typescript/vendor/runweave-agent/dist/
 compose.env
+desktop/node_modules/
+desktop/src-tauri/gen/
