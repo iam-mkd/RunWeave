@@ -315,6 +315,11 @@ def test_every_version_matches_the_release_tag_check() -> None:
     assert f"[{version}]: {REPOSITORY}/releases/tag/v{version}" in changelog
     build = yaml.safe_dump(_load(".github/workflows/release.yml")["jobs"]["build"])
     assert "pyproject.toml" in build and "sdk/typescript/package.json" in build
+    # The desktop installers are named after this version and attached to the same release.
+    tauri = json.loads((ROOT / "desktop/src-tauri/tauri.conf.json").read_text(encoding="utf-8"))
+    cargo = (ROOT / "desktop/src-tauri/Cargo.toml").read_text(encoding="utf-8")
+    assert tauri["version"] == version
+    assert re.search(rf'^version = "{re.escape(version)}"$', cargo, re.M)
 
 
 def test_the_owner_checklist_names_exactly_what_the_workflow_uses() -> None:

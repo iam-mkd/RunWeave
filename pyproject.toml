@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "runweave"
-version = "0.1.0"
+version = "0.1.1"
 description = "Test AI agents locally: evaluations, load tests with injected provider faults, and version comparison"
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"

@@ -1,6 +1,6 @@
 {
   "name": "runweave-agent",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Serve agents over the RunWeave HTTP agent contract (runweave.agent/v1)",
   "license": "Apache-2.0",
   "type": "module",
