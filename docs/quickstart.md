@@ -23,7 +23,7 @@ runweave --version
 
 `uv tool install` puts the `runweave` command in its own environment, with the workspace
 UI already built in. The second line prints the installed version, such as
-`runweave 0.1.0`. If your terminal says `runweave` is not found, run `uv tool update-shell`,
+`runweave 0.1.1`. If your terminal says `runweave` is not found, run `uv tool update-shell`,
 then open a new terminal.
 
 Without uv, install it with [pipx](https://pipx.pypa.io/) (`pipx install runweave`), or

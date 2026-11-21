@@ -6,12 +6,18 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-21
+
+The first release of the TypeScript SDK on npm (`npm install runweave-agent`). The Python
+package and the service image are the same as 0.1.0, apart from the version.
+
 ### Fixed
 
 - Release: `publish-npm` now runs `npm publish ./dist/runweave-agent-*.tgz`. Without the
   `./`, npm read `dist/runweave-agent-0.1.0.tgz` as a GitHub repository shorthand and tried
-  to clone it over SSH, so `runweave-agent` 0.1.0 was not published. The SDK's first npm
-  release comes with the next version.
+  to clone it over SSH, so `runweave-agent` 0.1.0 was not published.
+- The desktop app's version (and so its installers' file names) now follows the release
+  version; a test keeps them equal.
 
 ## [0.1.0] - 2026-11-20
 
@@ -273,5 +279,6 @@ PLAN.md for the verified scope and known limits.
 - Frontend `vite` raised to 7.3.8 and `esbuild` to 0.28.2 (fixes
   GHSA-g7r4-m6w7-qqqr, development-server file read on Windows).
 
-[Unreleased]: https://github.com/iam-mkd/RunWeave/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/iam-mkd/RunWeave/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/iam-mkd/RunWeave/releases/tag/v0.1.1
 [0.1.0]: https://github.com/iam-mkd/RunWeave/releases/tag/v0.1.0

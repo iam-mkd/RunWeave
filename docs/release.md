@@ -349,9 +349,15 @@ site** in the browser menu. The names must be typed exactly: they are case-sensi
    `runweave-agent`'s first publish comes with the next release. If the 7-day token has
    expired by then, generate a new one as in step 2 and replace the `NPM_TOKEN` secret.
 
-To release again: raise the version in `pyproject.toml`, `sdk/typescript/package.json` (and
-its vendored copy, `scripts/vendor-typescript-sdk.py`) and `CHANGELOG.md` in a pull
-request; the `build` job refuses a tag that does not match. Starting the workflow by hand
+To release again: raise the version in `pyproject.toml` (then `uv lock`),
+`sdk/typescript/package.json` and its lockfile (and its vendored copy,
+`scripts/vendor-typescript-sdk.py`), the desktop app (`desktop/src-tauri/tauri.conf.json`,
+`desktop/src-tauri/Cargo.toml` and `Cargo.lock`), the `runweave==` pin in each Python
+example's `pyproject.toml`, and `CHANGELOG.md` in a pull request, then
+tag the merged commit. The `build` job refuses a tag that does not match: a tag such as
+`v0.1.1` on a commit that still says `0.1.0` fails at "The tag matches the package
+versions". Delete such a tag (`git push origin :refs/tags/v0.1.1`, or **Tags → the tag →
+Delete** on GitHub) and tag again after the version pull request is merged. Starting the workflow by hand
 (**Actions → Release → Run workflow**) needs **Use workflow from: Tags → vX.Y.Z**, as the
 `release` environment accepts only `v*` tags.
 
