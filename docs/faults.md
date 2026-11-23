@@ -46,6 +46,7 @@ The tables are generated from the code by `scripts/reference-docs.py`.
 | `malformed_tool_call` | A tool call whose JSON arguments are cut off; requests with tools only. Charged as usual. |
 | `unknown_tool` | A tool call naming a tool the request did not declare; requests with tools only. Charged as usual. |
 | `context_length` | HTTP 400 `context_length_exceeded` (OpenAI) or `prompt is too long` (Anthropic). Not charged. |
+| `response_lost` | Effects only (`ctx.effect`): the write commits, then the response is dropped and the agent gets `EffectResponseLost`, a timeout. `effects` limits it to named effects. Never applies to model calls. |
 
 ### Built-in profiles
 
@@ -57,6 +58,7 @@ The tables are generated from the code by `scripts/reference-docs.py`.
 | `slow` | Slow first tokens and some timeouts. | `slow_first_token` 0.5, seconds 3; `timeout` 0.1, seconds 60 |
 | `broken-tools` | Malformed tool-call JSON and unknown tool names. | `malformed_tool_call` 0.3; `unknown_tool` 0.2 |
 | `chaos` | A little of everything. | `rate_limit` 0.1; `server_error` 0.08, status 502; `timeout` 0.04, seconds 30; `slow_first_token` 0.08, seconds 2; `stream_disconnect` 0.08; `malformed_tool_call` 0.08; `unknown_tool` 0.06; `context_length` 0.04 |
+| `lost-writes` | Half of all effects commit their write, then lose the response. | `response_lost` 0.5 |
 <!-- /generated:faults -->
 
 ## What a good agent does

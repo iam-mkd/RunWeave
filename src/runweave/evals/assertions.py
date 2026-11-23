@@ -3,9 +3,10 @@
 Built-in: status, error_code, schema (the agent's output schema, on by default for
 successful runs), output (subset), output_equals, contains / matches (dotted paths),
 tool_called (step titles, or the built-in agent's "Tool call" steps), not_contains
-(canaries anywhere in the output or timeline), max_latency_ms, max_cost_usd, max_tokens and
-max_model_calls. Also custom Python checks (`module:function`, called with the case and the
-result; return a bool or (bool, message), or raise) and Pydantic Evals evaluators.
+(canaries anywhere in the output or timeline), max_latency_ms, max_cost_usd, max_tokens,
+max_model_calls and exactly_once (no duplicate write after a lost response). Also custom
+Python checks (`module:function`, called with the case and the result; return a bool or
+(bool, message), or raise) and Pydantic Evals evaluators.
 """
 
 import importlib
@@ -18,6 +19,8 @@ from typing import Any, Literal
 
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field
+
+from runweave.agent_effects import duplicate_writes
 
 # REJECTED: refused at admission (for example invalid input), so no run exists.
 Status = Literal["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED", "REJECTED"]
@@ -47,6 +50,9 @@ class Expectations(BaseModel):
     max_cost_usd: Decimal | None = Field(default=None, ge=0)
     max_tokens: int | None = Field(default=None, ge=0)
     max_model_calls: int | None = Field(default=None, ge=0)
+    # No operation of these effects (True: of every effect) produced two resources in a run:
+    # a retry after a lost response did not write twice. See ctx.effect.
+    exactly_once: bool | list[str] | None = Field(default=None)
     python: list[str] | None = Field(default=None, max_length=20)
     pydantic_evals: list[EvaluatorSpec] | None = Field(default=None, max_length=20)
 
@@ -304,6 +310,16 @@ def check(
         ok = tokens <= e.max_tokens
         out.append(
             Outcome("max_tokens", ok, "" if ok else f"{tokens} tokens, limit {e.max_tokens}")
+        )
+    if e.exactly_once:
+        names = None if e.exactly_once is True else e.exactly_once
+        doubled = duplicate_writes(result.steps, names)
+        out.append(
+            Outcome(
+                "exactly_once",
+                not doubled,
+                f"wrote twice after a retry: {', '.join(doubled)}" if doubled else "",
+            )
         )
     if e.max_model_calls is not None:
         calls = sum(s.get("kind") == "model_call" for s in result.steps)

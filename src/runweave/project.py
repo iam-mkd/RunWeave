@@ -103,6 +103,7 @@ class BenchSection(_Section):
     soak_seconds: float = Field(default=0, ge=0, le=3600)
     max_failure_rate: float | None = Field(default=None, ge=0, le=1)
     max_p95_latency_ms: float | None = Field(default=None, gt=0)
+    max_duplicate_writes: int | None = Field(default=None, ge=0)
 
     @field_validator("concurrency")
     @classmethod
