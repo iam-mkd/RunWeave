@@ -110,10 +110,10 @@ twice. Route side-effecting calls through `ctx.effect` so RunWeave can test that
 
 ```python
 ticket = await ctx.effect(
-    "create_ticket",                                   # a name for the effect
+    "create_ticket",  # a name for the effect
     lambda: tickets.create(title, idempotency_key=key),
-    key=key,                                           # the idempotency key you send
-    resource=lambda t: t["id"],                        # what identifies the result
+    key=key,  # the idempotency key you send
+    resource=lambda t: t["id"],  # what identifies the result
 )
 ```
 
