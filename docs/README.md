@@ -34,7 +34,8 @@ same question with one tool, so you can compare how each connects to RunWeave.
 | [`examples/langgraph`](../examples/langgraph) | LangGraph |
 | [`examples/typescript`](../examples/typescript) | Node, with `runweave-agent` and `openai` |
 
-Also: [`examples/github-actions`](../examples/github-actions), a CI job that fails a pull
+Also: [`examples/exactly-once`](../examples/exactly-once), a retry after a lost response that
+writes twice, and the fix; [`examples/github-actions`](../examples/github-actions), a CI job that fails a pull
 request when the agent regresses, and [`examples/sample-agent`](../examples/sample-agent),
 small Python agents used by RunWeave's own tests.
 

@@ -27,6 +27,7 @@ from typing import Any
 import httpx
 import psutil  # type: ignore[import-untyped]
 
+from runweave.agent_effects import duplicate_writes
 from runweave.evals import report as reports
 from runweave.evals.cases import load_cases
 from runweave.evals.runner import TERMINAL, InProcessLimits, Target, environment, open_target
@@ -110,6 +111,8 @@ class Sample:
     cost: Decimal
     model_calls: int
     admission_retries: int
+    # 1 when a retry after a lost response wrote twice in this run (see ctx.effect).
+    duplicate_writes: int = 0
     observed_at: float = field(default_factory=time.monotonic)
 
     @property
@@ -138,6 +141,7 @@ def _sample(snapshot: dict[str, Any], retries: int) -> Sample:
         cost=Decimal(str(usage.get("estimated_cost_usd") or 0)),
         model_calls=sum(s.get("kind") == "model_call" for s in snapshot.get("steps") or []),
         admission_retries=retries,
+        duplicate_writes=int(bool(duplicate_writes(snapshot.get("steps") or []))),
     )
 
 
@@ -347,6 +351,7 @@ def _totals(samples: list[Sample]) -> dict[str, Any]:
         "tokens": sum(s.tokens for s in samples),
         "cost_usd": str(sum((s.cost for s in samples), Decimal(0))),
         "model_calls": sum(s.model_calls for s in samples),
+        "duplicate_writes": sum(s.duplicate_writes for s in samples),
     }
 
 
@@ -475,9 +480,21 @@ def _gates(project: Project, measured: list[dict[str, Any]]) -> dict[str, Any]:
                     f"p95 latency {p95} ms at {where} is above the maximum "
                     f"{limits.max_p95_latency_ms} ms"
                 )
+    if limits.max_duplicate_writes is not None:
+        for case in measured:
+            doubled = case.get("duplicate_writes", 0)
+            if doubled > limits.max_duplicate_writes:
+                where = f"concurrency {case['concurrency']}"
+                if case.get("fault_profile"):
+                    where += f", fault profile {case['fault_profile']}"
+                reasons.append(
+                    f"{doubled} run(s) wrote twice after a retry at {where}; the maximum is "
+                    f"{limits.max_duplicate_writes}"
+                )
     return {
         "max_failure_rate": limits.max_failure_rate,
         "max_p95_latency_ms": limits.max_p95_latency_ms,
+        "max_duplicate_writes": limits.max_duplicate_writes,
         "passed": not reasons,
         "reasons": reasons,
     }
@@ -608,8 +625,9 @@ def markdown(report: dict[str, Any]) -> str:
     lines += [
         "",
         "| Faults | Concurrency | Runs | Runs/s | p50 / p95 / p99 ms | Queue wait p95 ms "
-        "| Status API p95 ms | Loop lag p99 ms | Peak RSS MiB | Failures | Tokens |",
-        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: |",
+        "| Status API p95 ms | Loop lag p99 ms | Peak RSS MiB | Failures | Duplicate writes "
+        "| Tokens |",
+        "| --- | ---: | ---: | ---: | --- | ---: | ---: | ---: | ---: | --- | ---: | ---: |",
     ]
     for case in report["cases"]:
         latency = case["latency_ms"]
@@ -619,7 +637,8 @@ def markdown(report: dict[str, Any]) -> str:
             f"| {_profile(case['fault_profile'])} | {case['concurrency']} | {case['runs']} "
             f"| {case['throughput_rps']} | {latency['p50']} / {latency['p95']} / {latency['p99']} "
             f"| {case['queue_wait_ms']['p95']} | {case['status_api_ms']['p95']} "
-            f"| {case['loop_lag_p99_bucket_ms']} | {memory} | {failures} | {case['tokens']} |"
+            f"| {case['loop_lag_p99_bucket_ms']} | {memory} | {failures} "
+            f"| {case.get('duplicate_writes', 0)} | {case['tokens']} |"
         )
     if report["soak"]:
         soaked = report["soak"]
@@ -649,6 +668,7 @@ def summary_text(report: dict[str, Any], folder: Path) -> str:
             f"  faults {_profile(case['fault_profile'])}, concurrency {case['concurrency']}: "
             f"{case['throughput_rps']} runs/s, p95 {case['latency_ms']['p95']} ms, "
             f"{failures}/{case['runs']} failed"
+            + (f", {case['duplicate_writes']} wrote twice" if case.get("duplicate_writes") else "")
         )
     if report["soak"]:
         soaked = report["soak"]

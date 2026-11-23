@@ -1,3 +1,4 @@
+import { type EffectFaults } from './effects.js';
 export declare const CONTRACT_VERSION = "runweave.agent/v1";
 export declare const MANIFEST_PATH = "/runweave/v1/agents";
 export declare const NAME_PATTERN: RegExp;
@@ -36,12 +37,20 @@ export interface RunRequest {
     proxy: ProxyBinding | null;
     /** Where to request approvals (durable RunWeave only). */
     approvals_url: string | null;
+    /** The run's effect faults, when its fault profile has any (see ctx.effect). */
+    effect_faults: EffectFaults | null;
 }
 export interface StepRecord {
     title: string;
     detail: string | null;
     status: 'succeeded' | 'failed';
     duration_ms: number;
+    /** Effects (ctx.effect) only: the name, and digests of the operation and the resource. */
+    kind?: 'step' | 'effect';
+    effect?: string;
+    operation?: string;
+    resource?: string | null;
+    fault?: 'response_lost' | null;
 }
 export interface RunResponse {
     output: JsonObject;

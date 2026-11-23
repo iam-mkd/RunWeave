@@ -6,6 +6,22 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- Effects and exactly-once writes (milestone 28):
+  - **`ctx.effect(name, call, key=..., resource=...)`** in the Python SDK and in
+    `runweave-agent` routes a side-effecting call through RunWeave as an effect step,
+    recording only digests of the idempotency key and of the resource.
+  - **The `response_lost` fault** and the built-in **`lost-writes`** profile: the write
+    commits, then the response is dropped and the agent gets `EffectResponseLost`. Effect
+    faults never change which model calls fail.
+  - **`exactly_once`** in eval cases fails a case whose retry wrote twice; `runweave bench`
+    reports runs that wrote twice, gated by `[bench] max_duplicate_writes`; the workspace
+    labels effect steps and adds a "Wrote twice" column.
+  - **HTTP contract:** optional `effect_faults` in run requests and effect fields in returned
+    steps (additive; older SDKs ignore them).
+  - **`examples/exactly-once`:** an agent that writes twice, and one that does not.
+
 ## [0.1.1] - 2026-11-21
 
 The first release of the TypeScript SDK on npm (`npm install runweave-agent`). The Python

@@ -25,7 +25,9 @@ before your users do. Faults apply only to model calls made through `ctx.proxy`.
 A profile's probabilities add up to at most 1. For each proxied call, one draw from the
 seed (`fault_seed`, `RUNWEAVE_PROXY_FAULT_SEED`) and the call's position in the run picks at
 most one fault that applies to that call, so the same seed and the same calls give the same
-faults. Faults apply in mock and passthrough mode, and errors use each provider's own format,
+faults. `response_lost` is different: it acts on an agent's own side-effecting calls made
+through `ctx.effect`, never on model calls, and is drawn on a separate counter, so adding
+effects never changes which model calls fail. Faults apply in mock and passthrough mode, and errors use each provider's own format,
 so SDK retry logic behaves as it would against the real API. `apis` limits a fault to `"chat"`, `"responses"` or `"messages"`.
 
 Each injected fault is shown on the run's timeline (`Injected fault: rate_limit`) and
@@ -46,6 +48,7 @@ The tables are generated from the code by `scripts/reference-docs.py`.
 | `malformed_tool_call` | A tool call whose JSON arguments are cut off; requests with tools only. Charged as usual. |
 | `unknown_tool` | A tool call naming a tool the request did not declare; requests with tools only. Charged as usual. |
 | `context_length` | HTTP 400 `context_length_exceeded` (OpenAI) or `prompt is too long` (Anthropic). Not charged. |
+| `response_lost` | Effects only (`ctx.effect`): the write commits, then the response is dropped and the agent gets `EffectResponseLost`, a timeout. `effects` limits it to named effects. Never applies to model calls. |
 
 ### Built-in profiles
 
@@ -57,6 +60,7 @@ The tables are generated from the code by `scripts/reference-docs.py`.
 | `slow` | Slow first tokens and some timeouts. | `slow_first_token` 0.5, seconds 3; `timeout` 0.1, seconds 60 |
 | `broken-tools` | Malformed tool-call JSON and unknown tool names. | `malformed_tool_call` 0.3; `unknown_tool` 0.2 |
 | `chaos` | A little of everything. | `rate_limit` 0.1; `server_error` 0.08, status 502; `timeout` 0.04, seconds 30; `slow_first_token` 0.08, seconds 2; `stream_disconnect` 0.08; `malformed_tool_call` 0.08; `unknown_tool` 0.06; `context_length` 0.04 |
+| `lost-writes` | Half of all effects commit their write, then lose the response. | `response_lost` 0.5 |
 <!-- /generated:faults -->
 
 ## What a good agent does
@@ -68,6 +72,7 @@ The tables are generated from the code by `scripts/reference-docs.py`.
 | `stream_disconnect` | Treats a cut stream as a failed call, not as a complete answer |
 | `malformed_tool_call`, `unknown_tool` | Validates tool calls before running them and asks the model again, or fails the run with a clear error |
 | `context_length` | Trims context before calling, rather than retrying the same request |
+| `response_lost` | Retries a write with the same idempotency key, so the downstream returns the first result instead of writing again. Check it with `exactly_once` ([effects](agents.md#effects-and-exactly-once-writes)) |
 
 `runweave bench` reports failure categories per profile, so you can see which of these your
 agent handles.

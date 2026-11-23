@@ -13,7 +13,9 @@ from itertools import count
 from typing import TYPE_CHECKING
 from uuid import UUID
 
+from runweave.agent_effects import effect_faults_scope
 from runweave.budgets import BudgetLedger
+from runweave.proxy.faults import FaultPlan
 from runweave.sdk import ModelProxy
 from runweave.steps import StepLog
 
@@ -51,9 +53,12 @@ def _key(token: str) -> str:
 
 
 class ProxyBindings:
-    def __init__(self, public_url: str) -> None:
+    def __init__(self, public_url: str, faults: FaultPlan | None = None) -> None:
         self._public_url = public_url.rstrip("/")
         self._bindings: dict[str, Binding] = {}
+        # The current fault profile and seed (live settings replace it); each attempt takes
+        # its effect faults from it when it starts.
+        self.faults = faults
 
     @property
     def approvals_url(self) -> str:
@@ -76,12 +81,14 @@ class ProxyBindings:
         self._bindings[key] = Binding(
             run_id, attempt, agent, ledger, steps, expires_at, approvals=approvals
         )
+        effect_faults = self.faults.effect_faults() if self.faults is not None else None
         try:
-            yield ModelProxy(
-                token=token,
-                openai_base_url=f"{self._public_url}/llm/v1",
-                anthropic_base_url=f"{self._public_url}/llm",
-            )
+            with effect_faults_scope(effect_faults):
+                yield ModelProxy(
+                    token=token,
+                    openai_base_url=f"{self._public_url}/llm/v1",
+                    anthropic_base_url=f"{self._public_url}/llm",
+                )
         finally:
             self._bindings.pop(key, None)
 

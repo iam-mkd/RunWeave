@@ -144,6 +144,9 @@ FAULTS: dict[str, str] = {
     "tools only. Charged as usual.",
     "context_length": "HTTP 400 `context_length_exceeded` (OpenAI) or `prompt is too long` "
     "(Anthropic). Not charged.",
+    "response_lost": "Effects only (`ctx.effect`): the write commits, then the response is "
+    "dropped and the agent gets `EffectResponseLost`, a timeout. `effects` limits it to "
+    "named effects. Never applies to model calls.",
 }
 
 
@@ -320,6 +323,12 @@ def cli_markdown() -> str:
     return _commands(parser(), "runweave")
 
 
+def _value(value: Any) -> str:
+    if isinstance(value, (tuple, list)):
+        return "/".join(str(item) for item in value)
+    return f"{value:g}"
+
+
 def faults_markdown() -> str:
     from runweave.proxy.faults import BUILT_IN_PROFILES, FaultKind
 
@@ -338,8 +347,8 @@ def faults_markdown() -> str:
         faults = "; ".join(
             f"`{fault.kind}` {fault.probability:g}"
             + "".join(
-                f", {key} {getattr(fault, key):g}"
-                for key in ("retry_after", "status", "seconds", "after_chunks")
+                f", {key} {_value(getattr(fault, key))}"
+                for key in ("retry_after", "status", "seconds", "after_chunks", "effects")
                 if key in fault.model_fields_set
             )
             for fault in profile.faults

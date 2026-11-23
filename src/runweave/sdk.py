@@ -9,7 +9,7 @@ async def run(input: MyInput, ctx: RunContext) -> MyOutput: ...
 import inspect
 import logging
 import re
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -17,6 +17,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ValidationError
 
+from runweave.agent_effects import EffectResponseLost, check_name, run_effect
 from runweave.budgets import BudgetSummary, current_ledger
 from runweave.deadline import remaining_budget
 from runweave.security import ContentPolicy
@@ -31,6 +32,8 @@ from runweave.steps import (
 
 if TYPE_CHECKING:
     from runweave.action_approvals import Approval
+
+__all__ = ["AgentError", "EffectResponseLost", "ModelProxy", "RunContext", "agent"]
 
 NAME_PATTERN = re.compile(r"^[a-z][a-z0-9-]{0,62}$")
 VERSION_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9.+_-]{0,39}$")
@@ -91,6 +94,7 @@ class AgentSpec:
 
 AgentFunction = Callable[[Any, "RunContext"], Awaitable[Any]]
 F = TypeVar("F", bound=AgentFunction)
+T = TypeVar("T")
 
 
 def agent(
@@ -167,6 +171,7 @@ class RunContext:
         self.approvals_url = approvals_url
         self._max_steps = max_steps
         self._steps = 0
+        self._effects = 0
         self._policy = content_policy or ContentPolicy()
 
     @classmethod
@@ -195,6 +200,31 @@ class RunContext:
             clip(self._policy.redact(title), TITLE_LIMIT) or "Step", clip(redacted, DETAIL_LIMIT)
         )
 
+    async def effect(
+        self,
+        name: str,
+        call: Callable[[], Awaitable[T]],
+        *,
+        key: str | None = None,
+        resource: Callable[[T], Any] | None = None,
+    ) -> T:
+        """Run a side-effecting call (a write) through RunWeave, as one timeline step.
+
+        Pass the idempotency key you send downstream as `key`, and how to identify what the
+        write produced as `resource` (for example `lambda ticket: ticket["id"]`; default: the
+        whole result). Only digests of both are recorded. Under a fault profile with
+        `response_lost`, RunWeave may drop the result after the write committed and raise
+        `EffectResponseLost` (a `TimeoutError`); the `exactly_once` assertion then checks
+        that your retry did not write twice. Outside a run, `call` simply runs.
+        """
+        check_name(name)
+        if self._steps >= self._max_steps:
+            raise StepLimitExceeded()
+        self._steps += 1
+        position = self._effects
+        self._effects += 1
+        return await run_effect(name, call, position=position, key=key, resource=resource)
+
     async def request_approval(
         self, action: str, arguments: Any, *, expires_in: float | None = None
     ) -> "Approval":
@@ -215,18 +245,24 @@ class RunContext:
         return await current_gate().request(action, arguments, expires_in)
 
     async def add_finished_steps(
-        self, steps: Sequence[tuple[str, str | None, StepStatus, float]]
+        self,
+        steps: Sequence[tuple[str, str | None, StepStatus, float]],
+        effects: Sequence[Mapping[str, str | None]] | None = None,
     ) -> None:
-        """Record steps an agent ran elsewhere (title, detail, status, duration in ms)."""
+        """Record steps an agent ran elsewhere (title, detail, status, duration in ms).
+
+        `effects`, when given, holds each step's effect fields (empty for plain steps).
+        """
         if self._steps + len(steps) > self._max_steps:
             raise StepLimitExceeded()
-        for title, detail, status, duration_ms in steps:
+        for index, (title, detail, status, duration_ms) in enumerate(steps):
             self._steps += 1
             await record_finished_step(
                 clip(self._policy.redact(title), TITLE_LIMIT) or "Step",
                 clip(self._policy.redact(detail), DETAIL_LIMIT) if detail is not None else None,
                 status,
                 duration_ms,
+                **(effects[index] if effects is not None else {}),
             )
 
     def log(self, message: str) -> None:

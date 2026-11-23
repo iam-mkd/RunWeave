@@ -1,0 +1,26 @@
+# The safe agent: one idempotency key per order, so a retry after a lost response writes once.
+# `runweave eval` passes. The naive agent (naive.toml) writes twice and fails.
+[agent]
+name = "safe-ticketing"
+python = "tickets:safe_agent"
+
+[limits]
+run_timeout_seconds = 30
+concurrency = 2
+
+[proxy]
+mode = "mock"
+fault_profile = "lost-writes"   # commit the write, then lose the response
+fault_seed = 0                  # with seed 0, every run's first write loses its response
+
+[[datasets]]
+name = "orders"
+path = "datasets/orders.jsonl"
+
+[eval]
+min_pass_rate = 1.0
+
+[bench]
+concurrency = [1, 4]
+runs = 12
+max_duplicate_writes = 0        # any run that wrote twice fails the sweep

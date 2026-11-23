@@ -36,6 +36,7 @@ from runweave.action_approvals import (
     ApprovalUnavailable,
     approval_scope,
 )
+from runweave.agent_effects import effect_faults_scope
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, deadline_scope, paused_deadline
 from runweave.http_contract import (
     CONTRACT_VERSION,
@@ -89,12 +90,20 @@ class _CollectedSteps:
         self._events[event.index] = event
 
     def records(self) -> list[dict[str, Any]]:
+        effect = ("effect", "operation", "resource", "fault")
         return [
-            StepRecord(
-                title=event.title,
-                detail=event.detail,
-                status="succeeded" if event.status == "succeeded" else "failed",
-                duration_ms=event.duration_ms or 0,
+            StepRecord.model_validate(
+                {
+                    "title": event.title,
+                    "detail": event.detail,
+                    "status": "succeeded" if event.status == "succeeded" else "failed",
+                    "duration_ms": event.duration_ms or 0,
+                    **(
+                        {"kind": "effect", **{key: getattr(event, key) for key in effect}}
+                        if event.kind == "effect"
+                        else {}
+                    ),
+                }
             ).model_dump(mode="json")
             for event in self._events
         ]
@@ -357,7 +366,7 @@ class AgentServer:
             else nullcontext()
         )
         try:
-            with step_scope(steps), approvals:
+            with step_scope(steps), approvals, effect_faults_scope(envelope.effect_faults):
                 async with deadline_scope(expires, RUN_DEADLINE):
                     result = await function(parsed, context)
             output = (

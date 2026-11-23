@@ -109,7 +109,7 @@ Registration errors: `AGENT_URL_NOT_ALLOWED` (422), `AGENT_UNREACHABLE`,
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /runweave/v1/agents` | Manifest: `{"contract": "runweave.agent/v1", "agents": [{name, version, description, input_schema, output_schema, max_steps}]}` (1–16 agents) |
-| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms, proxy, approvals_url}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}`. `proxy` (`{token, openai_base_url, anthropic_base_url}`) is the run's [LLM proxy](llm-proxy.md) binding; `approvals_url` (durable mode only) is where the agent [requests approvals](agent-approvals.md) |
+| `POST /runweave/v1/agents/{name}/runs` | Body `{run_id, attempt, input, deadline_ms, proxy, approvals_url, effect_faults}`, header `Idempotency-Key: <run_id>`. Answer 200 `{"output": {...}, "steps": [{title, detail, status, duration_ms}]}`. `proxy` (`{token, openai_base_url, anthropic_base_url}`) is the run's [LLM proxy](llm-proxy.md) binding; `approvals_url` (durable mode only) is where the agent [requests approvals](agent-approvals.md); `effect_faults` (see below) is present only when the run's fault profile has effect faults |
 | `POST /runweave/v1/agents/{name}/runs/{run_id}/cancel` | Best-effort cancellation; answer 202, or 404 for unknown runs |
 
 Schemas are JSON Schema 2020-12 with local references only (`#/$defs/...`, as Pydantic
@@ -147,6 +147,16 @@ anything else becomes `AGENT_SERVER_ERROR`. Answer 503 with
   request and sends the cancel call with a one-second limit.
 - **Steps:** returned steps are added to the run timeline, redacted like in-process
   steps. More steps than the manifest's `max_steps` fail the run with `AGENT_STEP_LIMIT`.
+- **Effects:** an agent's `ctx.effect` calls come back as steps with `kind: "effect"`,
+  `effect` (the name), `operation` and `resource` (32-hex-digit SHA-256 digests) and `fault`
+  (`response_lost` or null), so `exactly_once` and bench's duplicate-write count work for HTTP
+  agents too ([effects](agents.md#effects-and-exactly-once-writes)). When the fault profile has
+  `response_lost` faults, the run request carries `effect_faults: {seed, faults}`, and the SDK
+  decides which effect calls lose their response: the n-th effect call of the attempt
+  (counting from 0) loses it when the first 8 bytes of
+  `sha256("runweave-effect-faults:{seed}:{n}")`, read as a fraction of 2^64, fall below the
+  summed probabilities of the faults that apply to that effect. Both SDKs do this; both fields
+  are optional, and older SDKs ignore them.
 - **Approvals:** with `approvals_url`, the run request may stay open while the agent waits
   for a person; RunWeave pauses the run deadline meanwhile, so the request has no separate
   read timeout. See [the approval callback](agent-approvals.md#http-agents-and-the-typescript-sdk).

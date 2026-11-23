@@ -1,6 +1,6 @@
 // Contract fixture agent (TypeScript SDK). Behavior is specified in tests/contract/README.md.
 // Run: node tests/contract/typescript_agent.mjs  ->  prints "RUNWEAVE_AGENT_READY <url>".
-import { createAgentHandler, defineAgent, serveAgents } from '../../sdk/typescript/dist/index.js';
+import { createAgentHandler, defineAgent, EffectResponseLost, serveAgents } from '../../sdk/typescript/dist/index.js';
 
 const inputSchema = {
   type: 'object',
@@ -16,7 +16,7 @@ const outputSchema = {
   properties: { reply: { type: 'string' }, attempt: { type: 'integer' } },
   required: ['reply', 'attempt'],
 };
-const events = { cancelled: [], requests: {}, approvals: [] };
+const events = { cancelled: [], requests: {}, approvals: [], tickets: {} };
 
 function sleep(ms, signal) {
   return new Promise((resolve, reject) => {
@@ -74,6 +74,47 @@ const approver = defineAgent({
   },
 });
 
+// A downstream that honours idempotency keys.
+async function createTicket(order, key) {
+  const tickets = (events.tickets[order] ??= []);
+  const existing = key === null ? undefined : tickets.find((ticket) => ticket.key === key);
+  if (existing) return { id: existing.id };
+  const ticket = { id: `${order}-${tickets.length + 1}`, key };
+  tickets.push(ticket);
+  return { id: ticket.id };
+}
+
+const ticketing = defineAgent({
+  name: 'contract-ticketing', version: '1.0.0',
+  inputSchema: {
+    type: 'object',
+    properties: {
+      order: { type: 'string', minLength: 1, maxLength: 40 },
+      use_key: { type: 'boolean', default: true },
+    },
+    required: ['order'],
+    additionalProperties: false,
+  },
+  outputSchema: {
+    type: 'object',
+    properties: { ticket: { type: 'string' }, tries: { type: 'integer' } },
+    required: ['ticket', 'tries'],
+  },
+  async run(input, ctx) {
+    const key = input.use_key === false ? null : `order-${input.order}`;
+    for (let tries = 1; tries <= 5; tries += 1) {
+      try {
+        const ticket = await ctx.effect('create_ticket', () => createTicket(input.order, key),
+          { key, resource: (t) => t.id });
+        return { ticket: ticket.id, tries };
+      } catch (error) {
+        if (!(error instanceof EffectResponseLost)) throw error;
+      }
+    }
+    throw new Error('no ticket after 5 tries');
+  },
+});
+
 const raw = {
   'contract-malformed': [200, { 'Content-Type': 'application/json' }, '{"output": '],
   'contract-oversized': [200, { 'Content-Type': 'application/json' },
@@ -87,7 +128,7 @@ const misbehaving = Object.keys(raw).map((name) => defineAgent({
   async run() { throw new Error('the fixture answers this agent itself'); },
 }));
 
-const handler = createAgentHandler([echo, crash, approver, ...misbehaving]);
+const handler = createAgentHandler([echo, crash, approver, ticketing, ...misbehaving]);
 
 function fixture(request, response) {
   const path = new URL(request.url, 'http://fixture').pathname;

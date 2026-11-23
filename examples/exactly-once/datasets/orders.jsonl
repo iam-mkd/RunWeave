@@ -1,0 +1,4 @@
+{"id": "printer-on-fire", "input": {"order": "A-17", "problem": "Printer on fire"}, "expect": {"exactly_once": true, "tool_called": ["create_ticket"]}}
+{"id": "wrong-size", "input": {"order": "B-22", "problem": "Wrong size delivered"}, "expect": {"exactly_once": ["create_ticket"]}}
+{"id": "late-delivery", "input": {"order": "C-31", "problem": "Delivery is two days late"}, "expect": {"exactly_once": true}}
+{"id": "rejects-an-empty-problem", "input": {"order": "D-40", "problem": ""}, "expect": {"status": "REJECTED"}}

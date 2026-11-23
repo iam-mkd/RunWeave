@@ -189,3 +189,33 @@ def test_pydantic_evals_evaluators_run_on_the_result() -> None:
     }
     assert found["pydantic_evals:Contains"] is True
     assert found["pydantic_evals:MaxDuration"] is False  # 120 ms > 50 ms
+
+
+def effect(
+    name: str, operation: str, resource: str | None, fault: str | None = None
+) -> dict[str, Any]:
+    return {
+        "title": name, "kind": "effect", "effect": name, "operation": operation,
+        "resource": resource, "fault": fault, "detail": None,
+        "status": "failed" if fault else "succeeded",
+    }  # fmt: skip
+
+
+def test_exactly_once_fails_a_retry_that_wrote_twice() -> None:
+    twice = {"steps": [effect("create_ticket", "op", "r1", "response_lost"),
+                       effect("create_ticket", "op", "r2")]}  # fmt: skip
+    once = {"steps": [effect("create_ticket", "op", "r1", "response_lost"),
+                      effect("create_ticket", "op", "r1")]}  # fmt: skip
+    assert outcomes({"exactly_once": True}, snapshot=once)["exactly_once"] is True
+    assert outcomes({"exactly_once": True}, snapshot=twice)["exactly_once"] is False
+    assert outcomes({"exactly_once": ["send_email"]}, snapshot=twice)["exactly_once"] is True
+    [failure] = [
+        a for a in check({"exactly_once": ["create_ticket"]}, result(snapshot=twice), input={})
+        if a.name == "exactly_once"
+    ]  # fmt: skip
+    assert not failure.passed and "create_ticket" in failure.message
+
+
+def test_tool_called_sees_effects() -> None:
+    steps = {"steps": [effect("create_ticket", "op", "r1")]}
+    assert outcomes({"tool_called": ["create_ticket"]}, snapshot=steps)["tool_called"] is True

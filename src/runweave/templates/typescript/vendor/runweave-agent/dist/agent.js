@@ -1,4 +1,5 @@
 import { ACTION_PATTERN, DETAIL_LIMIT, NAME_PATTERN, STEP_EVENT_CAP, TITLE_LIMIT, VERSION_PATTERN, clip, isObject, } from './contract.js';
+import { EFFECT_NAME_PATTERN, EffectResponseLost, effectLost, operationDigest, resourceDigest, } from './effects.js';
 /** A classified failure whose code RunWeave may show in run snapshots. */
 export class AgentError extends Error {
     code;
@@ -157,6 +158,7 @@ function modelProxy(binding) {
 export function createContext(parts) {
     const steps = [];
     let started = 0;
+    let effects = 0;
     const remainingMs = () => parts.clock.remainingMs();
     const context = {
         runId: parts.runId,
@@ -196,6 +198,45 @@ export function createContext(parts) {
         },
         usage: () => null,
         requestApproval: (action, args, options = {}) => requestApproval(parts, action, args, options.expiresIn),
+        async effect(name, fn, options = {}) {
+            if (typeof name !== 'string' || !EFFECT_NAME_PATTERN.test(name)) {
+                throw new TypeError(`Effect name ${JSON.stringify(name)} must be 1-64 lowercase letters, digits, '_', '.' or '-'`);
+            }
+            if (started >= parts.maxSteps)
+                throw new StepLimitError();
+            started += 1;
+            const position = effects;
+            effects += 1;
+            const record = {
+                title: name, detail: null, status: 'failed', duration_ms: 0, kind: 'effect', effect: name,
+                operation: operationDigest(name, options.key ?? null), resource: null, fault: null,
+            };
+            if (steps.length < STEP_EVENT_CAP)
+                steps.push(record);
+            const begin = performance.now();
+            try {
+                let result;
+                try {
+                    result = await fn();
+                }
+                catch (error) {
+                    record.detail = `call failed: ${error instanceof Error ? error.name : 'Error'}`;
+                    throw error;
+                }
+                record.resource = resourceDigest(options.resource ? options.resource(result) : result);
+                if (effectLost(parts.effectFaults ?? null, position, name)) {
+                    record.detail = 'write committed · response lost';
+                    record.fault = 'response_lost';
+                    throw new EffectResponseLost(name);
+                }
+                record.detail = 'write committed';
+                record.status = 'succeeded';
+                return result;
+            }
+            finally {
+                record.duration_ms = Math.max(0, performance.now() - begin);
+            }
+        },
     };
     return { context, steps };
 }

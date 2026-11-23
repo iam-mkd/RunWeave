@@ -19,6 +19,8 @@ import pytest
 from runweave.bench import (
     SHARD_SLOTS,
     Driver,
+    _sample,
+    _totals,
     client_shards,
     failure_category,
     lag_p99_upper_ms,
@@ -449,3 +451,20 @@ async def test_each_client_pool_serves_a_few_runs_so_its_scan_stays_short(tmp_pa
     assert ports[0] and ports[1] and not ports[2]  # 16 slots fill two clients
     # Each client holds a connection per run it serves, plus the probe and /metrics on the first.
     assert all(len(set(used)) <= SHARD_SLOTS + 2 for used in ports)
+
+
+def test_bench_counts_runs_that_wrote_twice() -> None:
+    def snapshot(*resources: str) -> dict[str, Any]:
+        steps = [
+            {"kind": "effect", "effect": "create_ticket", "operation": "op", "resource": r}
+            for r in resources
+        ]
+        return {"status": "SUCCEEDED", "steps": steps, "usage": {}}
+
+    samples = [
+        _sample(snapshot("a", "b"), 0),
+        _sample(snapshot("c", "c"), 0),
+        _sample(snapshot(), 0),
+    ]
+    assert [s.duplicate_writes for s in samples] == [1, 0, 0]
+    assert _totals(samples)["duplicate_writes"] == 1

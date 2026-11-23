@@ -17,6 +17,10 @@ Every dataset checks three things: the agent called the tool (`tool_called`), th
 answer uses its result, and an empty question is rejected before a run starts
 (`status: REJECTED`).
 
+One more example is about a failure rather than a framework:
+[examples/exactly-once](../examples/exactly-once) loses the response after a write, and shows
+an agent that writes twice (caught by `exactly_once`) and one that writes once.
+
 ## Run one
 
 Start from a clone of RunWeave (the [quickstart](quickstart.md) has the steps), then go into

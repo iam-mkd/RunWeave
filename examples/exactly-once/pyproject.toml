@@ -1,0 +1,10 @@
+[project]
+name = "runweave-example-exactly-once"
+version = "0.1.0"
+description = "Lost responses after a write: an agent that writes twice, and one that writes once"
+requires-python = ">=3.11"
+license = "Apache-2.0"
+# Exact pins. RunWeave is installed from this repository (see README.md).
+dependencies = [
+    "runweave==0.1.1",
+]

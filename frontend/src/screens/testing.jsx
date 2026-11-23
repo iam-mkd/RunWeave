@@ -242,6 +242,7 @@ export function BenchResults({ report }) {
           { key: 'lag', label: 'Loop lag p99', numeric: true, render: (row) => ms(row.loop_lag_p99_bucket_ms) },
           { key: 'memory', label: 'Peak RSS', numeric: true, render: (row) => (row.memory ? `${row.memory.rss_peak_mib} MiB` : 'n/a') },
           { key: 'failed', label: 'Failed', numeric: true, render: (row) => compactNumber(Object.values(row.failures).reduce((a, b) => a + b, 0)) },
+          { key: 'duplicates', label: 'Wrote twice', numeric: true, render: (row) => compactNumber(row.duplicate_writes ?? 0) },
           { key: 'tokens', label: 'Tokens', numeric: true, render: (row) => compactNumber(row.tokens) },
         ]} />
       </div>

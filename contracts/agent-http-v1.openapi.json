@@ -48,6 +48,32 @@
         "title": "AgentDescriptor",
         "type": "object"
       },
+      "EffectFaults": {
+        "additionalProperties": false,
+        "description": "The effect faults of a run, as sent to agents in their own process.\n\n`lost(n, name)` draws from sha256(\"runweave-effect-faults:{seed}:{n}\"), the first 8\nbytes as a fraction of 2**64, for the attempt's n-th effect call (counting from 0).\nThe TypeScript SDK draws the same way.",
+        "properties": {
+          "faults": {
+            "items": {
+              "$ref": "#/components/schemas/FaultSpec"
+            },
+            "maxItems": 16,
+            "minItems": 1,
+            "title": "Faults",
+            "type": "array"
+          },
+          "seed": {
+            "minimum": 0,
+            "title": "Seed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "seed",
+          "faults"
+        ],
+        "title": "EffectFaults",
+        "type": "object"
+      },
       "ErrorDetail": {
         "properties": {
           "code": {
@@ -89,6 +115,110 @@
           "error"
         ],
         "title": "ErrorResponse",
+        "type": "object"
+      },
+      "FaultSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "after_chunks": {
+            "default": 2,
+            "description": "stream_disconnect cut",
+            "maximum": 10000,
+            "minimum": 0,
+            "title": "After Chunks",
+            "type": "integer"
+          },
+          "apis": {
+            "anyOf": [
+              {
+                "items": {
+                  "enum": [
+                    "chat",
+                    "responses",
+                    "messages"
+                  ],
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Apis"
+          },
+          "effects": {
+            "anyOf": [
+              {
+                "items": {
+                  "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+                  "type": "string"
+                },
+                "maxItems": 32,
+                "minItems": 1,
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "response_lost: these effects",
+            "title": "Effects"
+          },
+          "kind": {
+            "enum": [
+              "rate_limit",
+              "server_error",
+              "timeout",
+              "slow_first_token",
+              "stream_disconnect",
+              "malformed_tool_call",
+              "unknown_tool",
+              "context_length",
+              "response_lost"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "probability": {
+            "maximum": 1,
+            "minimum": 0,
+            "title": "Probability",
+            "type": "number"
+          },
+          "retry_after": {
+            "default": 1,
+            "description": "rate_limit Retry-After",
+            "maximum": 600,
+            "minimum": 0,
+            "title": "Retry After",
+            "type": "integer"
+          },
+          "seconds": {
+            "default": 5,
+            "description": "timeout hold, or slow_first_token delay",
+            "maximum": 600,
+            "minimum": 0,
+            "title": "Seconds",
+            "type": "number"
+          },
+          "status": {
+            "default": 503,
+            "description": "server_error status",
+            "maximum": 599,
+            "minimum": 500,
+            "title": "Status",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "probability"
+        ],
+        "title": "FaultSpec",
         "type": "object"
       },
       "Manifest": {
@@ -172,6 +302,18 @@
             "title": "Deadline Ms",
             "type": "integer"
           },
+          "effect_faults": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EffectFaults"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Present when the run's fault profile injects effect faults: the SDK draws `response_lost` for each ctx.effect call from this seed (see EffectFaults)"
+          },
           "input": {
             "additionalProperties": true,
             "title": "Input",
@@ -246,6 +388,67 @@
             "minimum": 0,
             "title": "Duration Ms",
             "type": "number"
+          },
+          "effect": {
+            "anyOf": [
+              {
+                "pattern": "^[a-z][a-z0-9_.-]{0,63}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Effect"
+          },
+          "fault": {
+            "anyOf": [
+              {
+                "const": "response_lost",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Fault"
+          },
+          "kind": {
+            "default": "step",
+            "enum": [
+              "step",
+              "effect"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "operation": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Operation"
+          },
+          "resource": {
+            "anyOf": [
+              {
+                "pattern": "^[0-9a-f]{32}$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Resource"
           },
           "status": {
             "enum": [

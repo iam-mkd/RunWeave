@@ -27,6 +27,7 @@ from runweave.orchestration.durable import DurableScheduler
 from runweave.orchestration.registry import RunRegistry
 from runweave.orchestration.scheduler import Scheduler
 from runweave.proxy.bindings import ProxyBindings
+from runweave.proxy.config import fault_plan
 from runweave.proxy.upstream import Provider, Upstream
 from runweave.security import ContentPolicy
 from runweave.storage.engine import postgres_engine
@@ -272,7 +273,10 @@ async def open_runtime(
                 settings.http_agents if http_agents is None else http_agents,
                 limit=settings.http_agent_max_registered,
             )
-            proxy = ProxyBindings(settings.proxy_public_url)
+            proxy = ProxyBindings(
+                settings.proxy_public_url, faults=fault_plan(live_settings.current)
+            )
+            live_settings.subscribe(lambda current: setattr(proxy, "faults", fault_plan(current)))
             keys = ProviderKeys(
                 {
                     "openai": settings.proxy_openai_api_key,

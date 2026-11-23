@@ -114,6 +114,7 @@ One table per dataset (`.jsonl`, `.yaml` or `.yml`).
 | `soak_seconds` | number | `0` | ≥ 0, ≤ 3600 |
 | `max_failure_rate` | number | unset | ≥ 0, ≤ 1 |
 | `max_p95_latency_ms` | number | unset | > 0 |
+| `max_duplicate_writes` | integer | unset | ≥ 0 |
 
 ### `[shadow]`
 

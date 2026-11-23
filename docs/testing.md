@@ -93,9 +93,10 @@ One JSON object per line (`.jsonl`), or a YAML list:
 | `output_equals` | The output equals this value exactly |
 | `contains` | `{"path.to.field": "text"}`: the field contains the text |
 | `matches` | `{"path.to.field": "regex"}`: the field matches the regular expression |
-| `tool_called` | Each name is a timeline step title (record tool use with `ctx.step("lookup_weather")`) |
+| `tool_called` | Each name is a timeline step title (record tool use with `ctx.step("lookup_weather")`, or an effect name) |
 | `not_contains` | None of these strings (canaries) appear in the output or timeline |
 | `max_latency_ms`, `max_cost_usd`, `max_tokens`, `max_model_calls` | The run stays within the ceiling |
+| `exactly_once` | `true`, or a list of effect names: no retry after a lost response wrote twice (see [effects](agents.md#effects-and-exactly-once-writes)) |
 | `python` | `["checks:my_check"]`: your function `(case, result)` returns `True`, `(False, "why")`, or raises |
 | `pydantic_evals` | `[{"evaluator": "EqualsExpected"}]`: a Pydantic Evals evaluator (built-in name or `module:Class`, with `args`); needs `runweave[eval]` |
 

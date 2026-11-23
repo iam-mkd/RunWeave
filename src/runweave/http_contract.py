@@ -10,6 +10,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from runweave.proxy.faults import EFFECT_NAME, EffectFaults
+
 CONTRACT_VERSION: Final = "runweave.agent/v1"
 MANIFEST_PATH = "/runweave/v1/agents"
 NAME_PATTERN = r"^[a-z][a-z0-9-]{0,62}$"
@@ -69,6 +71,11 @@ class RunRequest(_Message):
         description="Where the agent requests approvals (POST, with the proxy token as a "
         "bearer token); present only in durable mode",
     )
+    effect_faults: EffectFaults | None = Field(
+        default=None,
+        description="Present when the run's fault profile injects effect faults: the SDK "
+        "draws `response_lost` for each ctx.effect call from this seed (see EffectFaults)",
+    )
 
 
 class StepRecord(_Message):
@@ -76,6 +83,21 @@ class StepRecord(_Message):
     detail: str | None = Field(default=None, max_length=1000)
     status: Literal["succeeded", "failed"]
     duration_ms: float = Field(ge=0, le=MAX_DEADLINE_MS)
+    # An effect (ctx.effect): its name and digests of its operation and resource.
+    kind: Literal["step", "effect"] = "step"
+    effect: str | None = Field(default=None, pattern=EFFECT_NAME)
+    operation: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    resource: str | None = Field(default=None, pattern=r"^[0-9a-f]{32}$")
+    fault: Literal["response_lost"] | None = None
+
+    def effect_fields(self) -> dict[str, str | None]:
+        """The fields RunWeave records for an effect step; none for a plain step."""
+        if self.kind != "effect" or self.effect is None:
+            return {}
+        return {
+            "kind": "effect", "effect": self.effect, "operation": self.operation,
+            "resource": self.resource, "fault": self.fault,
+        }  # fmt: skip
 
 
 class RunResponse(_Message):

@@ -34,12 +34,17 @@ def fault_profile(settings: Settings) -> FaultProfile | None:
     return profiles[name]
 
 
+def fault_plan(settings: Settings) -> FaultPlan:
+    """The active fault profile and seed, for model calls and for effects."""
+    return FaultPlan(fault_profile(settings), settings.proxy_fault_seed)
+
+
 def build_proxy_config(settings: Settings) -> ProxyConfig:
     """Raises ValueError for an unknown profile or invalid fixture or profile files."""
     return ProxyConfig(
         mode=settings.proxy_mode,
         mock=MockModel(load_fixtures(settings.proxy_mock_fixtures)),
-        faults=FaultPlan(fault_profile(settings), settings.proxy_fault_seed),
+        faults=fault_plan(settings),
         default_max_tokens=settings.proxy_default_max_tokens,
         models=frozenset(settings.proxy_models),
     )

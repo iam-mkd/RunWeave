@@ -24,6 +24,7 @@ from jsonschema.exceptions import SchemaError
 from pydantic import BaseModel, RootModel, ValidationError
 
 from runweave.action_approvals import ApprovalExpired
+from runweave.agent_effects import current_effect_faults
 from runweave.agents.catalog import TRIAGE_AGENT, AgentInfo, SchemaViolation
 from runweave.deadline import RUN_DEADLINE, DeadlineExceeded, check_budget, remaining_budget
 from runweave.http_contract import (
@@ -40,6 +41,7 @@ from runweave.http_contract import (
     cancel_path,
     run_path,
 )
+from runweave.proxy.faults import EffectFaults
 from runweave.sdk import (
     AgentError,
     AgentOutputInvalid,
@@ -62,6 +64,12 @@ __all__ = [
 TRANSIENT_STATUS = frozenset({429, 502, 503, 504})
 CANCEL_TIMEOUT_SECONDS = 1.0
 MAX_URL_LENGTH = 2048
+
+
+def _effect_faults() -> EffectFaults | None:
+    """The attempt's effect faults, sent so the agent's SDK draws them itself."""
+    faults = current_effect_faults()
+    return faults if isinstance(faults, EffectFaults) else None
 
 
 class AgentUrlNotAllowed(ValueError):
@@ -268,6 +276,7 @@ class HttpAgent:
             input=input.model_dump(mode="json"),
             deadline_ms=max(1, min(MAX_DEADLINE_MS, deadline_ms)),
             approvals_url=context.approvals_url,
+            effect_faults=_effect_faults(),
             proxy=None
             if context.proxy is None
             else ProxyBinding(
@@ -292,7 +301,8 @@ class HttpAgent:
         if len(response.steps) > self.info.max_steps:
             raise StepLimitExceeded()
         await context.add_finished_steps(
-            [(s.title, s.detail, s.status, s.duration_ms) for s in response.steps]
+            [(s.title, s.detail, s.status, s.duration_ms) for s in response.steps],
+            [s.effect_fields() for s in response.steps],
         )
         return JsonPayload(response.output)
 
