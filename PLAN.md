@@ -51,7 +51,8 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 24. UI polish and accessibility audit
 - [x] 25. Packaging and desktop app
 - [x] 26. Developer documentation and framework examples
-- [ ] 27. First public release (authorized 2026-11-20, in progress)
+- [x] 27. First public release
+- [ ] 28. Lost responses after a write, and exactly-once assertions (authorized 2026-11-23, in progress)
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -1894,7 +1895,7 @@ Implementation notes (2026-11-20), three pull requests:
 
 ## Milestone 27: first public release
 
-Authorized by the owner on 2026-11-20. Status: **in progress**. Goal: a developer installs
+Authorized by the owner on 2026-11-20. Status: **done** (2026-11-21). Goal: a developer installs
 RunWeave without cloning, `uv tool install runweave` (or `pipx` / `pip`), and gets a
 working `runweave` with the workspace UI built in, no Node needed. Version 0.1.0, a 0.x public
 alpha (see "Release v1.0" above).
@@ -1931,10 +1932,53 @@ alpha (see "Release v1.0" above).
   GHCR. `publish-npm` failed: `npm publish dist/x.tgz` parses as a GitHub shorthand, so
   the path now starts with `./` (regression test in `tests/test_packaging.py`). The owner
   chose to publish `runweave-agent` with the next release rather than cut v0.1.1 now.
+- **Release notes (2026-11-21):** `v0.1.1` was first tagged before the versions were
+  raised, so the build's tag check stopped it; the versions (including the desktop app,
+  whose installers are named after it, and the Python examples' pins) were raised in a
+  pull request and the tag replaced. It published `runweave` 0.1.1 to PyPI and the image.
+  Its npm publish failed with `EOTP`: the `NPM_TOKEN` lacked "Bypass two-factor
+  authentication". With a corrected token, re-running the job published `runweave-agent`
+  0.1.1. npm restricts such tokens from January 2027; the next step there is trusted
+  publishing (or staged publishing), as `docs/release.md` describes.
 - **Done when** the pull request is merged with CI green, the owner has pushed (or asked
   for) the `v0.1.0` tag, approved the `release` environment, and `uv tool install
-  runweave` from PyPI gives a working `runweave`. Checked off after the owner confirms the
-  published packages.
+  runweave` from PyPI gives a working `runweave`. **Done:** the owner confirmed the
+  published packages on 2026-11-21; a fresh `uv tool run --from runweave==0.1.1 runweave
+  init` and `eval` from PyPI passed.
+
+## Milestone 28: lost responses after a write, and exactly-once assertions
+
+Authorized by the owner on 2026-11-23. Status: **in progress**. Prompted by a reader of the
+launch posts: per-call fault injection never shows the failure where the downstream
+**processed the write but the response was lost**, so the agent retries and silently writes
+twice. Their assertion: after the retry, the resource exists exactly once.
+
+### 28. Lost responses after a write
+
+- **`ctx.effect(name, call, key=..., resource=...)`** in the Python SDK and the TypeScript
+  SDK (`runweave-agent`): the agent routes a side-effecting call through RunWeave, which runs
+  it and records an effect step (the name, SHA-256 digests of the operation and of the
+  resource; never the values).
+- **The `response_lost` fault** (built-in profile `lost-writes`; not added to `chaos`, so
+  chaos results stay comparable): the write commits, then the agent gets
+  `EffectResponseLost` (a `TimeoutError`). Effect faults are drawn from the seed on their own
+  counter, so model-call faults are unchanged; an optional `effects` filter names effects.
+- **Agents in their own process:** `runweave.agent/v1` gains two optional, additive fields:
+  `RunRequest.effect_faults` (sent only when the profile has effect faults) and effect fields
+  on `StepRecord`. Both SDKs draw the faults and digests identically (pinned by tests in both
+  languages and by the contract suite's new `contract-ticketing` fixture); older SDKs ignore
+  the fields.
+- **Checks:** the eval assertion `exactly_once` (true, or effect names) fails a case where one
+  operation produced two resources; `runweave bench` counts runs that wrote twice, and
+  `[bench] max_duplicate_writes` gates on it. The workspace labels effect steps and shows a
+  "Wrote twice" column.
+- **Example:** `examples/exactly-once`, a naive agent (no key; fails `exactly_once`, and its
+  bench shows "0/12 failed, 12 wrote twice") and a safe agent (one key per order; passes).
+  CI runs both and requires the naive one to fail for that reason.
+- **Not in scope:** the reader's other suggestions (asserting the agent noticed a fault,
+  cost per fault, tool-sequence assertions, a printed fault schedule), which are separate
+  milestones if wanted; a release, which waits for the owner's go.
+- **Done when** the pull request is merged with CI green.
 
 ## Benchmark acceptance plan
 These are initial targets to validate, not performance claims.

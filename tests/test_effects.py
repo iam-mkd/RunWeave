@@ -7,7 +7,11 @@ its response never arrived, so the agent retries and may write twice.
 import asyncio
 import hashlib
 import json
+import os
+import subprocess
+import sys
 from functools import partial
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -289,3 +293,26 @@ async def test_the_active_fault_profile_reaches_effects_in_a_run() -> None:
 
     calm = await run_once()
     assert [step["fault"] for step in calm["steps"] if step["kind"] == "effect"] == [None]
+
+
+# The worked example: examples/exactly-once
+
+
+EXAMPLE = Path(__file__).resolve().parents[1] / "examples" / "exactly-once"
+
+
+def _example(*args: str) -> subprocess.CompletedProcess[str]:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("RUNWEAVE_")}
+    env["PYTHONPATH"] = str(EXAMPLE.parents[1] / "src")
+    return subprocess.run(
+        [sys.executable, "-m", "runweave.cli", *args], cwd=EXAMPLE, env=env,
+        capture_output=True, text=True, timeout=180, check=False,
+    )  # fmt: skip
+
+
+def test_the_example_passes_with_a_key_and_catches_the_retry_without_one(tmp_path: Path) -> None:
+    safe = _example("eval", "--junit", str(tmp_path / "safe.xml"))
+    assert safe.returncode == 0, safe.stdout + safe.stderr
+    naive = _example("eval", "--config", "naive.toml", "--junit", str(tmp_path / "naive.xml"))
+    assert naive.returncode == 1, naive.stdout + naive.stderr
+    assert naive.stdout.count("exactly_once: wrote twice after a retry: create_ticket") == 3

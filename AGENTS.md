@@ -9,10 +9,11 @@ The next phase is an open-source (Apache-2.0) developer platform: developers
 install RunWeave and test their own agents for reliability under load, injected
 faults, and evaluation quality.
 
-Milestones 1 through 26 and the local React workspace are implemented. Milestone 27, the
-first public release (v0.1.0: `runweave` on PyPI, `runweave-agent` on npm), is authorized
-and in progress; see PLAN.md. Publishing and `v*` tags still wait for the owner's explicit
-go. Other new work needs the user's authorization and a plan entry first. Work in small,
+Milestones 1 through 27 and the local React workspace are implemented; RunWeave is
+published (`runweave` on PyPI, `runweave-agent` on npm, 0.1.1). Milestone 28 (lost
+responses after a write, `ctx.effect` and `exactly_once`) is authorized and in progress; see
+PLAN.md. Publishing and `v*` tags wait for the owner's explicit go. Other new work needs the
+user's authorization and a plan entry first. Work in small,
 reviewable milestones and follow the accepted scope and completion criteria in PLAN.md.
 
 ## Proposed stack

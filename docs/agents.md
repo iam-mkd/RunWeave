@@ -101,6 +101,45 @@ Event streams close after `RUNWEAVE_EVENT_STREAM_MAX_SECONDS` (default 60) with 
 `reconnect` event, send keep-alive comments while quiet, and are capped by
 `RUNWEAVE_EVENT_STREAM_MAX_SUBSCRIBERS` (503 `EVENT_STREAMS_BUSY` beyond it).
 
+## Effects and exactly-once writes
+
+Most fault injection fails a call *before* it does anything. The dangerous failure is the
+opposite: the downstream **processed the write**, then the response was lost. The agent
+sees a timeout, retries, and may create the ticket, charge the card or send the email
+twice. Route side-effecting calls through `ctx.effect` so RunWeave can test that:
+
+```python
+ticket = await ctx.effect(
+    "create_ticket",                                   # a name for the effect
+    lambda: tickets.create(title, idempotency_key=key),
+    key=key,                                           # the idempotency key you send
+    resource=lambda t: t["id"],                        # what identifies the result
+)
+```
+
+- **RunWeave runs the call,** so the write really happens, and records an **effect step** on
+  the timeline: the name, plus SHA-256 digests of the key and of the resource. It never
+  records the values.
+- **With the `lost-writes` fault profile** (or any profile with a
+  [`response_lost`](faults.md#faults) fault), RunWeave drops some responses *after* the
+  write committed. Your agent then gets `EffectResponseLost`, a `TimeoutError` subclass, as
+  it would from an HTTP client's read timeout. Faults are seeded: the same seed loses the
+  same calls, and effect faults never change which model calls fail.
+- **`exactly_once: true`** in an eval case fails it when one operation produced two different
+  resources: a retry wrote twice. An operation is one idempotency key; without a key, every
+  call of the effect is the same operation, so an agent that writes several things on
+  purpose passes a distinct key for each.
+- **`runweave bench`** counts the runs that wrote twice per fault profile and level, and
+  `[bench] max_duplicate_writes = 0` fails the sweep when any did. A run that wrote twice
+  usually still *succeeds*, so failure counts alone never show it.
+- **Outside a run** (a unit test, `RunContext.detached`), `ctx.effect` just runs the call.
+
+The fix is almost always an idempotency key that stays the same across retries of one write,
+honoured by the downstream API. [`examples/exactly-once`](../examples/exactly-once) shows an
+agent that writes twice and one that does not.
+
+TypeScript agents have the same `ctx.effect` (see [HTTP agents](http-agents.md)).
+
 ## Ask a person first
 
 `await ctx.request_approval(action, arguments, expires_in=...)` pauses the agent until

@@ -1,0 +1,26 @@
+# The naive agent: it retries without an idempotency key, so a lost response makes it write
+# twice. `runweave eval --config naive.toml` fails exactly_once; that is the point.
+[agent]
+name = "naive-ticketing"
+python = "tickets:naive_agent"
+
+[limits]
+run_timeout_seconds = 30
+concurrency = 2
+
+[proxy]
+mode = "mock"
+fault_profile = "lost-writes"   # commit the write, then lose the response
+fault_seed = 0                  # with seed 0, every run's first write loses its response
+
+[[datasets]]
+name = "orders"
+path = "datasets/orders.jsonl"
+
+[eval]
+min_pass_rate = 1.0
+
+[bench]
+concurrency = [1, 4]
+runs = 12
+max_duplicate_writes = 0        # any run that wrote twice fails the sweep

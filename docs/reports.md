@@ -62,6 +62,7 @@ word-count 0.1.0 (in-process)
 | Loop lag p99 ms | How late the event loop ran scheduled work. Tens of milliseconds means something is blocking it: often synchronous code in an agent |
 | Peak RSS MiB | The process's peak memory (in-process only) |
 | Failures | Failure categories, for example `FAILED:AGENT_UNAVAILABLE` or `TIMED_OUT` |
+| Duplicate writes | Runs where a retry after a lost response wrote twice (see [effects](agents.md#effects-and-exactly-once-writes)). These runs often *succeed*, so this column, not Failures, is where they show. The workspace calls it **Wrote twice** |
 | Tokens | Tokens through the proxy |
 
 Read across a profile's rows. Throughput that stops rising while latency and queue wait
