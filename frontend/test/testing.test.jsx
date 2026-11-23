@@ -109,7 +109,8 @@ const benchReport = {
       latency_ms: { p50: 12.4, p95: 25.8, p99: 28.9 }, queue_wait_ms: { p50: 3, p95: 11, p99: 12 },
       status_api_ms: { p50: 100, p95: 873.7, p99: 900 }, status_api_samples: 18, loop_lag_p99_bucket_ms: 50,
       memory: null, peak_active_runs: 16, outcomes: { SUCCEEDED: 120, FAILED: 8 },
-      failures: { [`FAILED:${hostile}`]: 8 }, tokens: 1200, cost_usd: '0.0012', model_calls: 128, admission_retries: 0 },
+      failures: { [`FAILED:${hostile}`]: 8 }, tokens: 1200, cost_usd: '0.0012', model_calls: 128, admission_retries: 0,
+      duplicate_writes: 3 },
   ],
   soak: null,
   gates: { passed: false, reasons: [`failure rate 6% at concurrency 16 ${hostile}`] },
@@ -127,6 +128,8 @@ describe('result views', () => {
     assert.match(html, /Gates failed/);
     assert.match(html, /16 logical CPUs/);
     assert.match(html, /Shared event loop\./);
+    assert.match(html, /Wrote twice/);
+    assert.match(html, />3</);
     assert.doesNotMatch(html, /<img/);
   });
 

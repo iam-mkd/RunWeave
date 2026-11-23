@@ -85,6 +85,16 @@ describe('model calls on the run', () => {
     assert.equal((html.match(/Injected fault/g) ?? []).length, 1);
   });
 
+  test('the timeline labels effects and a lost response', () => {
+    const effect = { index: 3, attempt: 1, title: 'create_ticket', kind: 'effect', fault: 'response_lost',
+      status: 'failed', detail: 'write committed · response lost', duration_ms: 4,
+      effect: 'create_ticket', operation: 'a'.repeat(32), resource: 'b'.repeat(32) };
+    const html = render(<RunTimeline steps={[...steps, effect]} />);
+    assert.match(html, /Effect · Injected fault: response_lost/);
+    assert.match(html, /write committed · response lost/);
+    assert.doesNotMatch(html, /aaaaaaaa/);
+  });
+
   test('the summary counts model calls and faults', () => {
     assert.deepEqual(runModelSummary(steps), { calls: 2, faults: 1, failed: 1 });
   });

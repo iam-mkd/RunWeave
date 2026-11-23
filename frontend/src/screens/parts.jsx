@@ -95,6 +95,7 @@ export function RunTimeline({ steps }) {
       label,
       duration: step.duration_ms === null || step.duration_ms === undefined ? undefined : duration(step.duration_ms),
       meta: [step.attempt > 1 ? `Attempt ${step.attempt}` : null,
+        step.kind === 'effect' ? 'Effect' : null,
         step.fault ? `Injected fault: ${step.fault}` : null].filter(Boolean).join(' · ') || undefined,
       detail: step.detail || undefined,
     };
