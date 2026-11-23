@@ -78,7 +78,10 @@ def operation_digest(name: str, key: str | None) -> str:
 
 def resource_digest(value: Any) -> str:
     try:
-        text = json.dumps(value, sort_keys=True, default=str, separators=(",", ":"))
+        # As the TypeScript SDK serialises: sorted keys, no spaces, Unicode kept.
+        text = json.dumps(
+            value, sort_keys=True, default=str, separators=(",", ":"), ensure_ascii=False
+        )
     except (TypeError, ValueError):
         text = repr(value)
     return _digest("resource", text)

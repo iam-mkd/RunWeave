@@ -1,4 +1,5 @@
 import { type ErrorLocation, type JsonObject, type JsonSchema, type ProxyBinding, type StepRecord } from './contract.js';
+import { type EffectFaults } from './effects.js';
 /** A classified failure whose code RunWeave may show in run snapshots. */
 export declare class AgentError extends Error {
     readonly code: string;
@@ -71,6 +72,18 @@ export interface RunContext {
     requestApproval(action: string, args: unknown, options?: {
         expiresIn?: number;
     }): Promise<Approval>;
+    /**
+     * Run a side-effecting call (a write) through RunWeave, as one timeline step. Pass the
+     * idempotency key you send downstream as `key`, and how to identify what the write produced
+     * as `resource` (default: the whole result); only digests are recorded. Under a fault
+     * profile with `response_lost`, RunWeave may drop the result after the write committed and
+     * throw EffectResponseLost; the `exactly_once` assertion then checks that your retry did
+     * not write twice.
+     */
+    effect<T>(name: string, fn: () => Promise<T> | T, options?: {
+        key?: string | null;
+        resource?: (result: T) => unknown;
+    }): Promise<T>;
 }
 export interface AgentOptions<I extends JsonObject, O extends JsonObject> {
     name: string;
@@ -120,6 +133,8 @@ export interface ContextParts {
     logger: (line: string) => void;
     proxy: ProxyBinding | null;
     approvalsUrl: string | null;
+    /** The run's effect faults from RunWeave, or null. */
+    effectFaults?: EffectFaults | null;
 }
 export declare function createContext(parts: ContextParts): {
     context: RunContext;

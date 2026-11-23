@@ -9,7 +9,7 @@ async def run(input: MyInput, ctx: RunContext) -> MyOutput: ...
 import inspect
 import logging
 import re
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from contextlib import AbstractAsyncContextManager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -245,18 +245,24 @@ class RunContext:
         return await current_gate().request(action, arguments, expires_in)
 
     async def add_finished_steps(
-        self, steps: Sequence[tuple[str, str | None, StepStatus, float]]
+        self,
+        steps: Sequence[tuple[str, str | None, StepStatus, float]],
+        effects: Sequence[Mapping[str, str | None]] | None = None,
     ) -> None:
-        """Record steps an agent ran elsewhere (title, detail, status, duration in ms)."""
+        """Record steps an agent ran elsewhere (title, detail, status, duration in ms).
+
+        `effects`, when given, holds each step's effect fields (empty for plain steps).
+        """
         if self._steps + len(steps) > self._max_steps:
             raise StepLimitExceeded()
-        for title, detail, status, duration_ms in steps:
+        for index, (title, detail, status, duration_ms) in enumerate(steps):
             self._steps += 1
             await record_finished_step(
                 clip(self._policy.redact(title), TITLE_LIMIT) or "Step",
                 clip(self._policy.redact(detail), DETAIL_LIMIT) if detail is not None else None,
                 status,
                 duration_ms,
+                **(effects[index] if effects is not None else {}),
             )
 
     def log(self, message: str) -> None:

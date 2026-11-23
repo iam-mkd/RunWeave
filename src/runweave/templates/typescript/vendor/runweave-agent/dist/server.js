@@ -207,7 +207,7 @@ class AgentServer {
         const { context, steps } = createContext({
             runId: envelope.run_id, agent: agent.name, attempt: envelope.attempt, maxSteps: agent.maxSteps,
             clock, signal: controller.signal, redactor: this.#redactor, logger: this.#logger,
-            proxy: envelope.proxy, approvalsUrl: envelope.approvals_url,
+            proxy: envelope.proxy, approvalsUrl: envelope.approvals_url, effectFaults: envelope.effect_faults,
         });
         // The run settles when the agent returns or the signal aborts, whichever is first. An agent
         // that ignores ctx.signal keeps running in the background, but its result is discarded.

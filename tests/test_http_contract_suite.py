@@ -229,3 +229,60 @@ async def test_approvals_need_durable_mode(agent_url: str) -> None:
         run = await wait(client, response.json()["status_url"])
     assert run["status"] == "FAILED"
     assert run["error"]["code"] == "DURABLE_APPROVAL_REQUIRED"
+
+
+def _seed_that_loses_the_first_write() -> int:
+    from runweave.proxy.faults import BUILT_IN_PROFILES, FaultPlan
+
+    for seed in range(100):
+        faults = FaultPlan(BUILT_IN_PROFILES["lost-writes"], seed).effect_faults()
+        if faults is not None and faults.lost(0, "create_ticket"):
+            return seed
+    raise AssertionError("no seed loses the first write")
+
+
+async def _ticket(agent_url: str, order: str, *, use_key: bool) -> dict[str, Any]:
+    seed = _seed_that_loses_the_first_write()
+    async with runweave(agent_url, proxy_fault_profile="lost-writes", proxy_fault_seed=seed) as c:
+        response = await c.post(
+            "/v1/runs",
+            json={"agent": "contract-ticketing", "input": {"order": order, "use_key": use_key}},
+        )
+        assert response.status_code == 202, response.text
+        return await wait(c, response.json()["status_url"])
+
+
+@pytest.mark.asyncio
+async def test_effect_faults_reach_the_agent_and_its_effect_steps_come_back(
+    agent_url: str,
+) -> None:
+    from runweave.agent_effects import duplicate_writes
+    from runweave.proxy.faults import BUILT_IN_PROFILES, FaultPlan
+
+    order = f"keyed-{agent_url.rsplit(':', 1)[1]}"
+    run = await _ticket(agent_url, order, use_key=True)
+    assert run["status"] == "SUCCEEDED", run
+    effects = [step for step in run["steps"] if step["kind"] == "effect"]
+    # Every SDK draws the same faults from the seed as RunWeave's own Python agents do.
+    faults = FaultPlan(
+        BUILT_IN_PROFILES["lost-writes"], _seed_that_loses_the_first_write()
+    ).effect_faults()
+    assert faults is not None
+    lost = [faults.lost(n, "create_ticket") for n in range(len(effects))]
+    assert [step["fault"] == "response_lost" for step in effects] == lost
+    assert lost[0] and run["result"]["tries"] == len(effects)
+    assert all(step["effect"] == "create_ticket" and step["resource"] for step in effects)
+    assert len({step["operation"] for step in effects}) == 1
+    assert duplicate_writes(run["steps"]) == []
+    assert len((await events(agent_url))["tickets"][order]) == 1
+
+
+@pytest.mark.asyncio
+async def test_a_retry_without_a_key_writes_twice_and_runweave_sees_it(agent_url: str) -> None:
+    from runweave.agent_effects import duplicate_writes
+
+    order = f"unkeyed-{agent_url.rsplit(':', 1)[1]}"
+    run = await _ticket(agent_url, order, use_key=False)
+    assert run["status"] == "SUCCEEDED", run
+    assert duplicate_writes(run["steps"]) == ["create_ticket"]
+    assert len((await events(agent_url))["tickets"][order]) > 1

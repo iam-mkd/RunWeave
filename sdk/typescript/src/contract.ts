@@ -1,5 +1,7 @@
 // The RunWeave HTTP agent contract, runweave.agent/v1 (contracts/agent-http-v1.openapi.json).
 
+import { parseEffectFaults, type EffectFaults } from './effects.js';
+
 export const CONTRACT_VERSION = 'runweave.agent/v1';
 export const MANIFEST_PATH = '/runweave/v1/agents';
 export const NAME_PATTERN = /^[a-z][a-z0-9-]{0,62}$/;
@@ -43,6 +45,8 @@ export interface RunRequest {
   proxy: ProxyBinding | null;
   /** Where to request approvals (durable RunWeave only). */
   approvals_url: string | null;
+  /** The run's effect faults, when its fault profile has any (see ctx.effect). */
+  effect_faults: EffectFaults | null;
 }
 
 const TOKEN_PATTERN = /^rwp_[A-Za-z0-9_-]{20,200}$/;
@@ -61,6 +65,12 @@ export interface StepRecord {
   detail: string | null;
   status: 'succeeded' | 'failed';
   duration_ms: number;
+  /** Effects (ctx.effect) only: the name, and digests of the operation and the resource. */
+  kind?: 'step' | 'effect';
+  effect?: string;
+  operation?: string;
+  resource?: string | null;
+  fault?: 'response_lost' | null;
 }
 
 export interface RunResponse {
@@ -92,9 +102,12 @@ export function parseRunRequest(value: unknown): RunRequest | null {
   if (proxy === undefined) return null;
   const approvals = value['approvals_url'];
   if (approvals !== undefined && approvals !== null && (typeof approvals !== 'string' || approvals.length > 2048)) return null;
+  const effectFaults = parseEffectFaults(value['effect_faults']);
+  if (effectFaults === undefined) return null;
   return {
     run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs, proxy,
     approvals_url: typeof approvals === 'string' ? approvals : null,
+    effect_faults: effectFaults,
   };
 }
 

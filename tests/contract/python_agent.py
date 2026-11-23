@@ -10,7 +10,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from runweave.sdk import RunContext, agent
+from runweave.sdk import EffectResponseLost, RunContext, agent
 from runweave.sdk_http import create_agent_app, serve_agents
 
 
@@ -24,7 +24,7 @@ class EchoOutput(BaseModel):
     attempt: int
 
 
-events: dict[str, Any] = {"cancelled": [], "requests": {}, "approvals": []}
+events: dict[str, Any] = {"cancelled": [], "requests": {}, "approvals": [], "tickets": {}}
 
 
 @agent(name="contract-echo", version="1.0.0", input=EchoInput, output=EchoOutput, max_steps=5)
@@ -69,6 +69,44 @@ async def approver(input: ApproveInput, ctx: RunContext) -> ApproveOutput:
         attempt=ctx.attempt,
         remaining_ms=ctx.remaining_seconds() * 1000,
     )
+
+
+class TicketInput(BaseModel):
+    order: str = Field(min_length=1, max_length=40)
+    use_key: bool = True
+
+
+class TicketOutput(BaseModel):
+    ticket: str
+    tries: int
+
+
+async def _create_ticket(order: str, key: str | None) -> dict[str, str]:
+    """A downstream that honours idempotency keys."""
+    tickets = events["tickets"].setdefault(order, [])
+    for ticket in tickets:
+        if key is not None and ticket["key"] == key:
+            return {"id": ticket["id"]}
+    ticket = {"id": f"{order}-{len(tickets) + 1}", "key": key}
+    tickets.append(ticket)
+    return {"id": ticket["id"]}
+
+
+@agent(name="contract-ticketing", version="1.0.0", input=TicketInput, output=TicketOutput)
+async def ticketing(input: TicketInput, ctx: RunContext) -> TicketOutput:
+    key = f"order-{input.order}" if input.use_key else None
+    for tries in range(1, 6):
+        try:
+            ticket = await ctx.effect(
+                "create_ticket",
+                lambda: _create_ticket(input.order, key),
+                key=key,
+                resource=lambda t: t["id"],
+            )
+            return TicketOutput(ticket=ticket["id"], tries=tries)
+        except EffectResponseLost:
+            continue
+    raise RuntimeError("no ticket after 5 tries")
 
 
 def _misbehaving(name: str) -> Any:
@@ -122,7 +160,9 @@ async def _respond(send: Send, status: int, headers: dict[str, str], body: bytes
     await send({"type": "http.response.body", "body": body})
 
 
-app = Fixture(create_agent_app(echo, crash, approver, *(_misbehaving(name) for name in RAW)))
+app = Fixture(
+    create_agent_app(echo, crash, approver, ticketing, *(_misbehaving(name) for name in RAW))
+)
 
 if __name__ == "__main__":
     asyncio.run(serve_agents(app, port=0))

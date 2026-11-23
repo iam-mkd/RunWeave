@@ -1,4 +1,5 @@
 // The RunWeave HTTP agent contract, runweave.agent/v1 (contracts/agent-http-v1.openapi.json).
+import { parseEffectFaults } from './effects.js';
 export const CONTRACT_VERSION = 'runweave.agent/v1';
 export const MANIFEST_PATH = '/runweave/v1/agents';
 export const NAME_PATTERN = /^[a-z][a-z0-9-]{0,62}$/;
@@ -43,9 +44,13 @@ export function parseRunRequest(value) {
     const approvals = value['approvals_url'];
     if (approvals !== undefined && approvals !== null && (typeof approvals !== 'string' || approvals.length > 2048))
         return null;
+    const effectFaults = parseEffectFaults(value['effect_faults']);
+    if (effectFaults === undefined)
+        return null;
     return {
         run_id: runId.toLowerCase(), attempt, input, deadline_ms: deadlineMs, proxy,
         approvals_url: typeof approvals === 'string' ? approvals : null,
+        effect_faults: effectFaults,
     };
 }
 export function isUuid(value) {

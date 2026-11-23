@@ -2,6 +2,9 @@ import {
   ACTION_PATTERN, DETAIL_LIMIT, NAME_PATTERN, STEP_EVENT_CAP, TITLE_LIMIT, VERSION_PATTERN, clip, isObject,
   type ErrorLocation, type JsonObject, type JsonSchema, type ProxyBinding, type StepRecord,
 } from './contract.js';
+import {
+  EFFECT_NAME_PATTERN, EffectResponseLost, effectLost, operationDigest, resourceDigest, type EffectFaults,
+} from './effects.js';
 
 /** A classified failure whose code RunWeave may show in run snapshots. */
 export class AgentError extends Error {
@@ -94,6 +97,15 @@ export interface RunContext {
    * idempotent is up to you. Needs a durable (PostgreSQL) RunWeave.
    */
   requestApproval(action: string, args: unknown, options?: { expiresIn?: number }): Promise<Approval>;
+  /**
+   * Run a side-effecting call (a write) through RunWeave, as one timeline step. Pass the
+   * idempotency key you send downstream as `key`, and how to identify what the write produced
+   * as `resource` (default: the whole result); only digests are recorded. Under a fault
+   * profile with `response_lost`, RunWeave may drop the result after the write committed and
+   * throw EffectResponseLost; the `exactly_once` assertion then checks that your retry did
+   * not write twice.
+   */
+  effect<T>(name: string, fn: () => Promise<T> | T, options?: { key?: string | null; resource?: (result: T) => unknown }): Promise<T>;
 }
 
 export interface AgentOptions<I extends JsonObject, O extends JsonObject> {
@@ -177,6 +189,8 @@ export interface ContextParts {
   logger: (line: string) => void;
   proxy: ProxyBinding | null;
   approvalsUrl: string | null;
+  /** The run's effect faults from RunWeave, or null. */
+  effectFaults?: EffectFaults | null;
 }
 
 const APPROVAL_WAIT_SECONDS = 20;
@@ -264,6 +278,7 @@ function modelProxy(binding: ProxyBinding | null): ModelProxy | null {
 export function createContext(parts: ContextParts): { context: RunContext; steps: StepRecord[] } {
   const steps: StepRecord[] = [];
   let started = 0;
+  let effects = 0;
   const remainingMs = () => parts.clock.remainingMs();
   const context: RunContext = {
     runId: parts.runId,
@@ -300,6 +315,44 @@ export function createContext(parts: ContextParts): { context: RunContext; steps
     },
     usage: () => null,
     requestApproval: (action, args, options = {}) => requestApproval(parts, action, args, options.expiresIn),
+    async effect<T>(
+      name: string, fn: () => Promise<T> | T,
+      options: { key?: string | null; resource?: (result: T) => unknown } = {},
+    ): Promise<T> {
+      if (typeof name !== 'string' || !EFFECT_NAME_PATTERN.test(name)) {
+        throw new TypeError(`Effect name ${JSON.stringify(name)} must be 1-64 lowercase letters, digits, '_', '.' or '-'`);
+      }
+      if (started >= parts.maxSteps) throw new StepLimitError();
+      started += 1;
+      const position = effects;
+      effects += 1;
+      const record: StepRecord = {
+        title: name, detail: null, status: 'failed', duration_ms: 0, kind: 'effect', effect: name,
+        operation: operationDigest(name, options.key ?? null), resource: null, fault: null,
+      };
+      if (steps.length < STEP_EVENT_CAP) steps.push(record);
+      const begin = performance.now();
+      try {
+        let result: T;
+        try {
+          result = await fn();
+        } catch (error) {
+          record.detail = `call failed: ${error instanceof Error ? error.name : 'Error'}`;
+          throw error;
+        }
+        record.resource = resourceDigest(options.resource ? options.resource(result) : result);
+        if (effectLost(parts.effectFaults ?? null, position, name)) {
+          record.detail = 'write committed · response lost';
+          record.fault = 'response_lost';
+          throw new EffectResponseLost(name);
+        }
+        record.detail = 'write committed';
+        record.status = 'succeeded';
+        return result;
+      } finally {
+        record.duration_ms = Math.max(0, performance.now() - begin);
+      }
+    },
   };
   return { context, steps };
 }
