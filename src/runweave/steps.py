@@ -25,8 +25,13 @@ class StepEvent(BaseModel):
     started_at: datetime
     finished_at: datetime | None = None
     duration_ms: float | None = Field(default=None, ge=0)
-    kind: Literal["step", "model_call"] = "step"
+    kind: Literal["step", "model_call", "effect"] = "step"
     fault: str | None = Field(default=None, max_length=40)
+    # Effects only: the name, and SHA-256 digests (never values) of the operation (its
+    # idempotency key, or the name) and of the resource the write produced.
+    effect: str | None = Field(default=None, max_length=64)
+    operation: str | None = Field(default=None, max_length=64)
+    resource: str | None = Field(default=None, max_length=64)
 
 
 class StepLog(Protocol):
@@ -67,9 +72,16 @@ def step_scope(log: StepLog | None) -> Iterator[None]:
 
 
 async def record_finished_step(
-    title: str, detail: str | None, status: StepStatus, duration_ms: float
+    title: str,
+    detail: str | None,
+    status: StepStatus,
+    duration_ms: float,
+    **extra: str | None,
 ) -> None:
-    """Add a step that already ran elsewhere, such as inside an HTTP agent."""
+    """Add a step that already ran elsewhere, such as inside an HTTP agent.
+
+    `extra` sets an effect step's fields: kind, effect, operation, resource and fault.
+    """
     log = _log.get()
     if log is None:
         return
@@ -78,8 +90,10 @@ async def record_finished_step(
         if event is not None:
             finished_at = datetime.now(UTC)
             await log.end(
-                event.model_copy(
-                    update={
+                StepEvent.model_validate(
+                    {
+                        **event.model_dump(),
+                        **{key: value for key, value in extra.items() if value is not None},
                         "status": status,
                         "started_at": finished_at - timedelta(milliseconds=duration_ms),
                         "finished_at": finished_at,
