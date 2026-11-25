@@ -19,6 +19,7 @@ import pytest
 from runweave.bench import (
     SHARD_SLOTS,
     Driver,
+    _gates,
     _sample,
     _totals,
     client_shards,
@@ -468,3 +469,33 @@ def test_bench_counts_runs_that_wrote_twice() -> None:
     ]
     assert [s.duplicate_writes for s in samples] == [1, 0, 0]
     assert _totals(samples)["duplicate_writes"] == 1
+
+
+def test_bench_gates_on_the_most_calls_of_a_tool_in_one_run(tmp_path: Path) -> None:
+    def snapshot(*operations: str) -> dict[str, Any]:
+        steps = [
+            {"title": "refund", "kind": "effect", "effect": "refund", "operation": o}
+            for o in operations
+        ]
+        return {"status": "SUCCEEDED", "steps": steps, "usage": {}}
+
+    samples = [_sample(snapshot("a", "b"), 0), _sample(snapshot("a", "a"), 0)]
+    totals = _totals(samples)
+    assert totals["max_tool_calls"] == {"refund": 2}
+    case = {**totals, "concurrency": 4, "fault_profile": "chaos"}
+
+    folder = new_project(tmp_path)
+    config = folder / "runweave.toml"
+
+    def verdict(limit: int) -> dict[str, Any]:
+        text = config.read_text(encoding="utf-8").split("[bench.max_tool_calls]")[0]
+        config.write_text(f"{text}\n[bench.max_tool_calls]\nrefund = {limit}\n", encoding="utf-8")
+        return _gates(load_project(config), [case])
+
+    assert verdict(2)["passed"] is True
+    failed = verdict(1)
+    assert failed["passed"] is False
+    assert failed["reasons"] == [
+        "refund was called 2 times in one run at concurrency 4, fault profile chaos; "
+        "the maximum is 1"
+    ]

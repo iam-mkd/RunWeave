@@ -219,3 +219,23 @@ def test_exactly_once_fails_a_retry_that_wrote_twice() -> None:
 def test_tool_called_sees_effects() -> None:
     steps = {"steps": [effect("create_ticket", "op", "r1")]}
     assert outcomes({"tool_called": ["create_ticket"]}, snapshot=steps)["tool_called"] is True
+
+
+def test_max_tool_calls_limits_each_named_tool() -> None:
+    steps = {"steps": [effect("refund", "op-1", "r1"), effect("refund", "op-2", "r2"),
+                       effect("send_email", "op", "r")]}  # fmt: skip
+    assert outcomes({"max_tool_calls": {"refund": 2}}, snapshot=steps)["max_tool_calls"] is True
+    assert outcomes({"max_tool_calls": {"absent": 0}}, snapshot=steps)["max_tool_calls"] is True
+    [failure] = [
+        a
+        for a in check(
+            {"max_tool_calls": {"refund": 1, "send_email": 1}}, result(snapshot=steps), input={}
+        )
+        if a.name == "max_tool_calls"
+    ]
+    assert not failure.passed and failure.message == "refund called 2 times, at most 1"
+
+
+def test_a_negative_call_limit_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        check({"max_tool_calls": {"refund": -1}}, result(), input={})
