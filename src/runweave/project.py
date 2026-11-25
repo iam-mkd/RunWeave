@@ -20,7 +20,7 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
@@ -104,6 +104,9 @@ class BenchSection(_Section):
     max_failure_rate: float | None = Field(default=None, ge=0, le=1)
     max_p95_latency_ms: float | None = Field(default=None, gt=0)
     max_duplicate_writes: int | None = Field(default=None, ge=0)
+    max_tool_calls: dict[str, Annotated[int, Field(ge=0)]] | None = Field(
+        default=None, max_length=50
+    )
 
     @field_validator("concurrency")
     @classmethod

@@ -19,7 +19,12 @@ import httpx
 import pytest
 from pydantic import BaseModel
 
-from runweave.agent_effects import EffectFaults, duplicate_writes, effect_faults_scope
+from runweave.agent_effects import (
+    EffectFaults,
+    call_counts,
+    duplicate_writes,
+    effect_faults_scope,
+)
 from runweave.agents.catalog import PythonAgent
 from runweave.app import create_app
 from runweave.core.settings import Settings
@@ -293,6 +298,44 @@ async def test_the_active_fault_profile_reaches_effects_in_a_run() -> None:
 
     calm = await run_once()
     assert [step["fault"] for step in calm["steps"] if step["kind"] == "effect"] == [None]
+
+
+# Calls per tool: what max_tool_calls counts
+
+
+def effect_step(name: str, operation: str, attempt: int = 1) -> dict[str, Any]:
+    return {"title": name, "kind": "effect", "effect": name, "operation": operation,
+            "status": "succeeded", "attempt": attempt}  # fmt: skip
+
+
+def test_effects_count_operations_so_a_keyed_retry_is_one_call() -> None:
+    retried = [effect_step("refund", "op-1"), effect_step("refund", "op-1")]
+    assert call_counts(retried) == {"refund": 1}
+    assert call_counts([*retried, effect_step("refund", "op-2")]) == {"refund": 2}
+
+
+def test_plain_steps_count_each_call_even_failed_ones_and_across_attempts() -> None:
+    steps: list[dict[str, Any]] = [
+        {"title": "lookup", "kind": "step", "detail": None, "status": "failed", "attempt": 1},
+        {"title": "lookup", "kind": "step", "detail": None, "status": "succeeded", "attempt": 2},
+        {"title": "Tool call", "kind": "step", "detail": "search", "status": "succeeded"},
+        {"title": "Model call", "kind": "model_call", "detail": "chat", "status": "succeeded"},
+    ]
+    counts = call_counts(steps)
+    assert counts["lookup"] == 2 and counts["search"] == 1
+    assert "Model call" not in counts and "Tool call" not in counts
+
+
+def test_an_effect_inside_a_step_of_the_same_name_is_not_counted_twice() -> None:
+    wrapper = {"title": "refund", "kind": "step", "detail": None, "status": "succeeded"}
+    assert call_counts([wrapper, effect_step("refund", "op-1")]) == {"refund": 1}
+
+
+async def test_a_keyed_retry_after_a_lost_response_is_one_call() -> None:
+    service, timeline = TicketService(), Timeline()
+    with step_scope(timeline), effect_faults_scope(always_lose_first()):
+        await retrying_agent(context(), service, key="order-17")
+    assert len(timeline.events) == 2 and call_counts(timeline.dumped()) == {"create_ticket": 1}
 
 
 # The worked example: examples/exactly-once

@@ -27,7 +27,7 @@ from typing import Any
 import httpx
 import psutil  # type: ignore[import-untyped]
 
-from runweave.agent_effects import duplicate_writes
+from runweave.agent_effects import call_counts, duplicate_writes
 from runweave.evals import report as reports
 from runweave.evals.cases import load_cases
 from runweave.evals.runner import TERMINAL, InProcessLimits, Target, environment, open_target
@@ -113,6 +113,7 @@ class Sample:
     admission_retries: int
     # 1 when a retry after a lost response wrote twice in this run (see ctx.effect).
     duplicate_writes: int = 0
+    tool_calls: dict[str, int] = field(default_factory=dict)
     observed_at: float = field(default_factory=time.monotonic)
 
     @property
@@ -142,6 +143,7 @@ def _sample(snapshot: dict[str, Any], retries: int) -> Sample:
         model_calls=sum(s.get("kind") == "model_call" for s in snapshot.get("steps") or []),
         admission_retries=retries,
         duplicate_writes=int(bool(duplicate_writes(snapshot.get("steps") or []))),
+        tool_calls=call_counts(snapshot.get("steps") or []),
     )
 
 
@@ -326,6 +328,15 @@ async def _metrics(client: httpx.AsyncClient) -> dict[str, float] | None:
     return parse_metrics(response.text) if response.status_code == 200 else None
 
 
+def _most_calls(samples: list[Sample]) -> dict[str, int]:
+    """The most calls of each tool in any one run."""
+    most: dict[str, int] = {}
+    for sample in samples:
+        for name, calls in sample.tool_calls.items():
+            most[name] = max(most.get(name, 0), calls)
+    return dict(sorted(most.items()))
+
+
 def _totals(samples: list[Sample]) -> dict[str, Any]:
     finished = [s for s in samples if s.submitted and s.finished]
     span = (
@@ -352,6 +363,7 @@ def _totals(samples: list[Sample]) -> dict[str, Any]:
         "cost_usd": str(sum((s.cost for s in samples), Decimal(0))),
         "model_calls": sum(s.model_calls for s in samples),
         "duplicate_writes": sum(s.duplicate_writes for s in samples),
+        "max_tool_calls": _most_calls(samples),
     }
 
 
@@ -480,6 +492,12 @@ def _gates(project: Project, measured: list[dict[str, Any]]) -> dict[str, Any]:
                     f"p95 latency {p95} ms at {where} is above the maximum "
                     f"{limits.max_p95_latency_ms} ms"
                 )
+        for name, limit in (limits.max_tool_calls or {}).items():
+            calls = case.get("max_tool_calls", {}).get(name, 0)
+            if calls > limit:
+                reasons.append(
+                    f"{name} was called {calls} times in one run at {where}; the maximum is {limit}"
+                )
     if limits.max_duplicate_writes is not None:
         for case in measured:
             doubled = case.get("duplicate_writes", 0)
@@ -495,6 +513,7 @@ def _gates(project: Project, measured: list[dict[str, Any]]) -> dict[str, Any]:
         "max_failure_rate": limits.max_failure_rate,
         "max_p95_latency_ms": limits.max_p95_latency_ms,
         "max_duplicate_writes": limits.max_duplicate_writes,
+        "max_tool_calls": limits.max_tool_calls,
         "passed": not reasons,
         "reasons": reasons,
     }

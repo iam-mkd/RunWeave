@@ -115,6 +115,7 @@ One table per dataset (`.jsonl`, `.yaml` or `.yml`).
 | `max_failure_rate` | number | unset | ≥ 0, ≤ 1 |
 | `max_p95_latency_ms` | number | unset | > 0 |
 | `max_duplicate_writes` | integer | unset | ≥ 0 |
+| `max_tool_calls` | object | unset | length ≤ 50 |
 
 ### `[shadow]`
 

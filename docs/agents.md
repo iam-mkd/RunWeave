@@ -132,6 +132,11 @@ ticket = await ctx.effect(
 - **`runweave bench`** counts the runs that wrote twice per fault profile and level, and
   `[bench] max_duplicate_writes = 0` fails the sweep when any did. A run that wrote twice
   usually still *succeeds*, so failure counts alone never show it.
+- **`max_tool_calls: {"refund": 1}`** in an eval case, or under `[bench.max_tool_calls]`, limits
+  how often a tool is called in a run. It catches what `exactly_once` cannot: the model asks
+  again and the agent uses a new key. A retry with the same key is one call. Without a key,
+  all calls of an effect count as one (`exactly_once` covers those). Tools not wrapped in
+  `ctx.effect` count each of their steps, so a durable re-run counts them again.
 - **Outside a run** (a unit test, `RunContext.detached`), `ctx.effect` just runs the call.
 
 The fix is almost always an idempotency key that stays the same across retries of one write,

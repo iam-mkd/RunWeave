@@ -1,4 +1,5 @@
 import asyncio
+import json
 import os
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -12,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
+from runweave.agent_effects import call_counts, duplicate_writes, operation_digest, resource_digest
 from runweave.agents.catalog import TRIAGE_AGENT, PythonAgent
 from runweave.app import create_app
 from runweave.core.settings import Settings
@@ -171,6 +173,103 @@ async def test_durable_python_agent_persists_steps_lists_runs_and_recovers(
                 await asyncio.sleep(0.05)
     assert recovered["result"] == {"text": "recovered", "attempt": 2}
     assert await store.get(response_id) is not None
+
+
+class Refund(BaseModel):
+    order: str
+    keyed: bool
+
+
+class Refunded(BaseModel):
+    refund: str
+    attempt: int
+
+
+REFUNDS: dict[str, list[str]] = {}
+
+
+async def issue_refund(order: str, key: str | None) -> str:
+    """A downstream that deduplicates by idempotency key; unkeyed calls always pay again."""
+    issued = REFUNDS.setdefault(order, [])
+    if key is None or not issued:
+        issued.append(f"{order}-{len(issued) + 1}")
+    return issued[-1] if key is None else issued[0]
+
+
+@agent(name="durable-refund", version="1.0.0", input=Refund, output=Refunded)
+async def durable_refund(input: Refund, ctx: RunContext) -> Refunded:
+    key = f"refund-{input.order}" if input.keyed else None
+    refund = await ctx.effect("refund", lambda: issue_refund(input.order, key), key=key)
+    return Refunded(refund=refund, attempt=ctx.attempt)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("keyed", [True, False])
+async def test_effects_are_checked_across_a_durable_re_run(
+    schema: tuple[str, str, AsyncEngine], monkeypatch: pytest.MonkeyPatch, keyed: bool
+) -> None:
+    dsn, name, engine = schema
+    await apply(engine)
+    monkeypatch.setattr(
+        "runweave.core.runtime.postgres_engine", lambda settings: engine_for(dsn, name)
+    )
+    settings = Settings(
+        database_url=SecretStr(dsn), worker_count=1, db_poll_seconds=0.05, lease_seconds=1
+    )
+    agents = [
+        PythonAgent.from_function(
+            durable_refund, target="tests.test_postgres_agents:durable_refund"
+        )
+    ]
+    order = f"order-{uuid4().hex[:8]}"
+    key = f"refund-{order}" if keyed else None
+    first = await issue_refund(order, key)  # attempt 1 committed this, then its worker died
+    step = {
+        "index": 0, "attempt": 1, "title": "refund", "status": "succeeded",
+        "detail": "write committed", "started_at": "2026-11-25T00:00:00Z",
+        "finished_at": "2026-11-25T00:00:01Z", "duration_ms": 1.0, "kind": "effect",
+        "effect": "refund", "operation": operation_digest("refund", key),
+        "resource": resource_digest(first),
+    }  # fmt: skip
+    app = create_app(settings, agents=agents)
+    async with (
+        app.router.lifespan_context(app),
+        httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        seed = await client.post(
+            "/v1/runs",
+            json={"agent": "durable-refund", "input": {"order": f"seed-{order}", "keyed": True}},
+        )
+        assert seed.status_code == 202, seed.text
+        run_id = uuid4()
+        async with engine.begin() as conn:
+            await conn.execute(
+                text("""
+                INSERT INTO runweave_runs (id, incident, agent, agent_version, status,
+                    submitted_at, available_at, deadline_at, max_attempts, attempt, started_at,
+                    lease_token, lease_until, principal, budget, steps)
+                SELECT :id, CAST(:input AS jsonb), 'durable-refund', '1.0.0', 'RUNNING', now(),
+                    now(), now() + interval '30 seconds', 3, 1, now(), gen_random_uuid(),
+                    now() - interval '1 second', principal, budget, CAST(:steps AS jsonb)
+                FROM runweave_runs LIMIT 1
+            """),
+                {
+                    "id": run_id,
+                    "input": json.dumps({"order": order, "keyed": keyed}),
+                    "steps": json.dumps([step]),
+                },
+            )
+        async with asyncio.timeout(10):
+            while True:
+                run = (await client.get(f"/v1/runs/{run_id}")).json()
+                if run["status"] in {"SUCCEEDED", "FAILED"}:
+                    break
+                await asyncio.sleep(0.05)
+    assert run["status"] == "SUCCEEDED" and run["result"]["attempt"] == 2, run
+    assert [(s["kind"], s["attempt"]) for s in run["steps"]] == [("effect", 1), ("effect", 2)]
+    assert call_counts(run["steps"]) == {"refund": 1}
+    assert duplicate_writes(run["steps"]) == ([] if keyed else ["refund"])
+    assert len(REFUNDS[order]) == (1 if keyed else 2)
 
 
 class Remote(BaseModel):
