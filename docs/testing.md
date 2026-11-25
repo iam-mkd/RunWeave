@@ -97,6 +97,7 @@ One JSON object per line (`.jsonl`), or a YAML list:
 | `not_contains` | None of these strings (canaries) appear in the output or timeline |
 | `max_latency_ms`, `max_cost_usd`, `max_tokens`, `max_model_calls` | The run stays within the ceiling |
 | `exactly_once` | `true`, or a list of effect names: no retry after a lost response wrote twice (see [effects](agents.md#effects-and-exactly-once-writes)) |
+| `max_tool_calls` | `{"refund": 1}`: each named tool was called at most that often in the run, over all attempts. A `ctx.effect` counts its distinct idempotency keys, so a retry with the same key is one call; any other tool counts its timeline steps |
 | `python` | `["checks:my_check"]`: your function `(case, result)` returns `True`, `(False, "why")`, or raises |
 | `pydantic_evals` | `[{"evaluator": "EqualsExpected"}]`: a Pydantic Evals evaluator (built-in name or `module:Class`, with `args`); needs `runweave[eval]` |
 

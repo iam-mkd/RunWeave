@@ -4,9 +4,9 @@ Built-in: status, error_code, schema (the agent's output schema, on by default f
 successful runs), output (subset), output_equals, contains / matches (dotted paths),
 tool_called (step titles, or the built-in agent's "Tool call" steps), not_contains
 (canaries anywhere in the output or timeline), max_latency_ms, max_cost_usd, max_tokens,
-max_model_calls and exactly_once (no duplicate write after a lost response). Also custom
-Python checks (`module:function`, called with the case and the result; return a bool or
-(bool, message), or raise) and Pydantic Evals evaluators.
+max_model_calls, exactly_once (no duplicate write after a lost response) and
+max_tool_calls. Also custom Python checks (`module:function`, called with the case and
+the result; return a bool or (bool, message), or raise) and Pydantic Evals evaluators.
 """
 
 import importlib
@@ -15,12 +15,12 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from jsonschema import Draft202012Validator
 from pydantic import BaseModel, ConfigDict, Field
 
-from runweave.agent_effects import duplicate_writes
+from runweave.agent_effects import call_counts, duplicate_writes
 
 # REJECTED: refused at admission (for example invalid input), so no run exists.
 Status = Literal["SUCCEEDED", "FAILED", "TIMED_OUT", "CANCELLED", "REJECTED"]
@@ -53,6 +53,10 @@ class Expectations(BaseModel):
     # No operation of these effects (True: of every effect) produced two resources in a run:
     # a retry after a lost response did not write twice. See ctx.effect.
     exactly_once: bool | list[str] | None = Field(default=None)
+    # The most calls of each named tool in a run (see call_counts).
+    max_tool_calls: dict[str, Annotated[int, Field(ge=0)]] | None = Field(
+        default=None, max_length=50
+    )
     python: list[str] | None = Field(default=None, max_length=20)
     pydantic_evals: list[EvaluatorSpec] | None = Field(default=None, max_length=20)
 
@@ -321,6 +325,14 @@ def check(
                 f"wrote twice after a retry: {', '.join(doubled)}" if doubled else "",
             )
         )
+    if e.max_tool_calls is not None:
+        counts = call_counts(result.steps)
+        over = [
+            f"{name} called {counts[name]} times, at most {limit}"
+            for name, limit in e.max_tool_calls.items()
+            if counts.get(name, 0) > limit
+        ]
+        out.append(Outcome("max_tool_calls", not over, "; ".join(over)))
     if e.max_model_calls is not None:
         calls = sum(s.get("kind") == "model_call" for s in result.steps)
         ok = calls <= e.max_model_calls

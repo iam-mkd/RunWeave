@@ -8,6 +8,9 @@ All notable changes to RunWeave are recorded here. The format follows
 
 ### Added
 
+- `max_tool_calls` (milestone 29): an eval assertion and a `[bench.max_tool_calls]` gate that
+  limit how often each named tool is called in a run. An effect counts its distinct
+  idempotency keys, so a safe retry is one call; other tools count their steps.
 - Effects and exactly-once writes (milestone 28):
   - **`ctx.effect(name, call, key=..., resource=...)`** in the Python SDK and in
     `runweave-agent` routes a side-effecting call through RunWeave as an effect step,

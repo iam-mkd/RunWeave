@@ -52,7 +52,8 @@ completion criteria have been verified, and record material scope changes here.
 - [x] 25. Packaging and desktop app
 - [x] 26. Developer documentation and framework examples
 - [x] 27. First public release
-- [ ] 28. Lost responses after a write, and exactly-once assertions (authorized 2026-11-23, in progress)
+- [x] 28. Lost responses after a write, and exactly-once assertions
+- [ ] 29. `max_tool_calls` (authorized 2026-11-25, in progress)
 
 ## Goal
 A FastAPI service that accepts agent jobs, executes at least 100 simultaneous
@@ -1948,7 +1949,8 @@ alpha (see "Release v1.0" above).
 
 ## Milestone 28: lost responses after a write, and exactly-once assertions
 
-Authorized by the owner on 2026-11-23. Status: **in progress**. Prompted by a reader of the
+Authorized by the owner on 2026-11-23. Status: **done** (pull request 33, merged 2026-11-23;
+not released). Prompted by a reader of the
 launch posts: per-call fault injection never shows the failure where the downstream
 **processed the write but the response was lost**, so the agent retries and silently writes
 twice. Their assertion: after the retry, the resource exists exactly once.
@@ -1978,6 +1980,26 @@ twice. Their assertion: after the retry, the resource exists exactly once.
 - **Not in scope:** the reader's other suggestions (asserting the agent noticed a fault,
   cost per fault, tool-sequence assertions, a printed fault schedule), which are separate
   milestones if wanted; a release, which waits for the owner's go.
+- **Done when** the pull request is merged with CI green.
+
+## Milestone 29: `max_tool_calls`
+
+Authorized by the owner on 2026-11-25. Status: **in progress**. `exactly_once` misses two
+cases a reader asked about: the model asks again and the agent uses a new idempotency key,
+and tools that are not wrapped in `ctx.effect`.
+
+### 29. Limit how often a tool is called
+
+- **Eval:** `max_tool_calls: {"refund": 1}` fails a case where a tool was called more often.
+- **Bench:** `[bench.max_tool_calls]` gates on the most calls of a tool in any one run. No new
+  report column; the gate reason names the tool, level and fault profile.
+- **What counts:** for effects, distinct operations, so a retry with the same key is one call
+  and unkeyed calls of an effect count as one. For any other tool, its timeline steps, failed
+  ones and earlier attempts included. Tools the agent never records are invisible.
+- **Durable re-runs:** a PostgreSQL test shows effect steps of both attempts are kept, a keyed
+  effect repeated by attempt 2 is one call and one write, and an unkeyed one fails
+  `exactly_once`.
+- **Not in scope:** contract, SDK, storage and UI changes; a release.
 - **Done when** the pull request is merged with CI green.
 
 ## Benchmark acceptance plan

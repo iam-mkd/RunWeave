@@ -315,7 +315,7 @@ def test_effects_count_operations_so_a_keyed_retry_is_one_call() -> None:
 
 
 def test_plain_steps_count_each_call_even_failed_ones_and_across_attempts() -> None:
-    steps = [
+    steps: list[dict[str, Any]] = [
         {"title": "lookup", "kind": "step", "detail": None, "status": "failed", "attempt": 1},
         {"title": "lookup", "kind": "step", "detail": None, "status": "succeeded", "attempt": 2},
         {"title": "Tool call", "kind": "step", "detail": "search", "status": "succeeded"},

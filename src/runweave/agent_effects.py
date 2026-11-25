@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import time
+from collections import Counter
 from collections.abc import Awaitable, Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -23,6 +24,7 @@ from runweave.steps import record_finished_step
 __all__ = [
     "EffectFaults",
     "EffectResponseLost",
+    "call_counts",
     "duplicate_writes",
     "effect_faults_scope",
     "operation_digest",
@@ -149,3 +151,23 @@ def duplicate_writes(
             continue
         produced.setdefault((name, str(step.get("operation"))), set()).add(resource)
     return sorted({name for (name, _), resources in produced.items() if len(resources) > 1})
+
+
+def call_counts(steps: Iterable[Mapping[str, Any]]) -> dict[str, int]:
+    """How often each tool was called in a run, over all attempts.
+
+    An effect counts its distinct operations, so a retry with the same idempotency key is one
+    call. Any other tool counts its steps (by title, or by detail for the built-in agent's
+    "Tool call" steps), unless it also has effect steps: those wrap the same call.
+    """
+    operations: dict[str, set[str]] = {}
+    plain: Counter[str] = Counter()
+    for step in steps:
+        if step.get("kind") == "effect" and step.get("effect"):
+            operations.setdefault(str(step["effect"]), set()).add(str(step.get("operation")))
+        elif step.get("kind") == "step":
+            title = step.get("title")
+            name = step.get("detail") if title == "Tool call" else title
+            if name:
+                plain[str(name)] += 1
+    return {**plain, **{name: len(found) for name, found in operations.items()}}
